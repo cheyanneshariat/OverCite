@@ -19,6 +19,20 @@ The current implementation is deterministic. It does not use an LLM. Its "contex
 
 This report describes how the current implementation works, what it handles well, where it is adaptive, and where it currently has limitations.
 
+## Browser Packaging
+
+OverCite now ships from a single source tree but generates browser-specific build folders:
+
+- `extension/dist/chrome/`
+- `extension/dist/firefox/`
+
+The code is shared, but the manifests differ slightly:
+
+- Chrome / Chromium uses a Manifest V3 `background.service_worker`
+- Firefox temporary add-ons use a manifest that also includes `background.scripts`
+
+This avoids Chrome MV3 manifest warnings while still allowing Firefox temporary add-on loading.
+
 ## End-to-End Flow
 
 At a high level, OverCite does the following:

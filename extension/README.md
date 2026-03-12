@@ -53,5 +53,6 @@ npm run build
 ## Test
 
 ```bash
+npm run build
 npm test
 ```

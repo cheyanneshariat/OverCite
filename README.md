@@ -4,7 +4,9 @@ OverCite is a browser extension for Overleaf that searches NASA ADS from inside 
 
 ## Repository layout
 
-- `extension/`: loadable browser extension source
+- `extension/`: browser extension source, tests, and generated browser-specific builds
+- `extension/dist/chrome/`: generated Chrome / Chromium extension folder
+- `extension/dist/firefox/`: generated Firefox extension folder
 - `docs/`: technical report, demo assets, and PDF overview
 
 ## Step 0: Get The Files
@@ -16,7 +18,8 @@ Option 1: Download from GitHub
 1. Click the green `Code` button on GitHub.
 2. Click `Download ZIP`.
 3. Unzip the downloaded folder somewhere convenient.
-4. Inside that folder, use the `extension/` directory for the browser install steps below.
+4. Inside that folder, go to `extension/` and run `npm run build`.
+5. Then use the generated `extension/dist/chrome/` or `extension/dist/firefox/` paths below.
 
 Option 2: Clone with git
 
@@ -32,7 +35,13 @@ cd OverCite
 1. Open `chrome://extensions`
 2. Turn on Developer mode
 3. Click `Load unpacked`
-4. Run `npm run build` inside `extension/`
+4. In Terminal, run:
+
+   ```bash
+   cd extension
+   npm run build
+   ```
+
 5. Select `extension/dist/chrome/`
 6. Open the OverCite options page
 7. Paste your NASA ADS API token*
@@ -43,7 +52,13 @@ cd OverCite
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
-3. Run `npm run build` inside `extension/`
+3. In Terminal, run:
+
+   ```bash
+   cd extension
+   npm run build
+   ```
+
 4. Select `extension/dist/firefox/manifest.json`
 5. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
 6. Paste your NASA ADS API token*
@@ -97,4 +112,5 @@ npm test
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
 - The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
+- Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extensions at `chrome://extensions/`.
