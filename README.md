@@ -7,7 +7,6 @@ OverCite is a Chromium extension for Overleaf that searches NASA ADS from inside
 - `extension/`: loadable Chrome extension source
 - `docs/`: technical report and PDF overview
 - `example_tex/`: example Overleaf-style project for testing
-- `features_to_add.txt`: future ideas
 
 ## Quick start
 
@@ -21,6 +20,20 @@ OverCite is a Chromium extension for Overleaf that searches NASA ADS from inside
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), go to Account --> Settings --> API Token
 
+## Settings
+
+OverCite keeps the UI simple and puts the main behavior controls in the extension settings page.
+
+![OverCite settings](docs/assets/example_settings.png)
+
+Current settings include:
+
+- ADS API token for NASA ADS search access
+- Theme selection
+- Citation key style, including keeping the typed key instead of adding an informative suffix
+- Local ranking memory, which learns from papers you select and uses that to improve future ranking
+- Project-specific bibliography file overrides when a project contains multiple `.bib` files
+
 ## Local testing
 
 ```bash
@@ -30,11 +43,10 @@ npm test
 
 ## Documentation
 
-- Technical report: [docs/OverCite_technical_report.md](/docs/OverCite_technical_report.md)
-- PDF report: [docs/OverCite_technical_report.pdf](/docs/OverCite_technical_report.pdf)
+- Technical report: [docs/OverCite_technical_report.md](docs/OverCite_technical_report.md)
+- PDF report: [docs/OverCite_technical_report.pdf](docs/OverCite_technical_report.pdf)
 
 ## Notes
 
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
 - The current implementation is deterministic and does not require an LLM.
-- The most fragile part remains Overleaf file switching, not ADS ranking or BibTeX generation.

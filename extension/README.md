@@ -25,7 +25,7 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 1. Open `chrome://extensions`
 2. Enable Developer mode
 3. Click `Load unpacked`
-4. Select `/Users/bijan1339/Desktop/Caltech/Notebooks/OverCite/extension`
+4. Select the local `extension/` folder from this repository
 5. Open the extension options page and paste your ADS API token
 
 ## Trigger inside Overleaf
