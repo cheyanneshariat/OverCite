@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OverCite Settings</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5efe4;
+        --panel: rgba(255, 252, 247, 0.96);
+        --ink: #1f2a36;
+        --muted: #637086;
+        --accent: #a43c27;
+        --accent-2: #214f7a;
+        --border: rgba(31, 42, 54, 0.16);
+        --shadow: 0 20px 60px rgba(31, 42, 54, 0.12);
+        --field-bg: rgba(255, 255, 255, 0.9);
+        --field-ink: #1f2a36;
+        --field-placeholder: #738097;
+        --field-focus: rgba(164, 60, 39, 0.22);
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #11161d;
+        --panel: rgba(26, 33, 43, 0.96);
+        --ink: #f2efe6;
+        --muted: #b5c0d0;
+        --accent: #f18a62;
+        --accent-2: #8cb7e2;
+        --border: rgba(226, 233, 241, 0.14);
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+        --field-bg: rgba(14, 19, 27, 0.92);
+        --field-ink: #eef3fa;
+        --field-placeholder: #98a6b8;
+        --field-focus: rgba(241, 138, 98, 0.28);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+        background:
+          radial-gradient(circle at top left, rgba(164, 60, 39, 0.11), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(33, 79, 122, 0.12), transparent 35%),
+          var(--bg);
+        color: var(--ink);
+      }
+
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(2rem, 5vw, 3.4rem);
+        line-height: 0.95;
+      }
+
+      .lede {
+        margin: 0 0 28px;
+        font-size: 1.05rem;
+        color: var(--muted);
+      }
+
+      form {
+        display: grid;
+        gap: 18px;
+        padding: 28px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        font-weight: 700;
+      }
+
+      .toggle-row {
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: 16px;
+      }
+
+      .toggle-copy {
+        display: grid;
+        gap: 6px;
+      }
+
+      .toggle-title {
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .toggle-row input[type="checkbox"] {
+        inline-size: 22px;
+        block-size: 22px;
+        width: 22px;
+        margin-top: 3px;
+        padding: 0;
+        accent-color: var(--accent);
+        appearance: auto;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .hint {
+        font-weight: 400;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      input:not([type="checkbox"]),
+      textarea,
+      select {
+        width: 100%;
+        padding: 12px 14px;
+        font: inherit;
+        color: var(--field-ink);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--field-bg);
+        appearance: none;
+      }
+
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--field-placeholder);
+      }
+
+      input:not([type="checkbox"]):focus,
+      textarea:focus,
+      select:focus {
+        outline: 2px solid var(--field-focus);
+        outline-offset: 2px;
+      }
+
+      select option {
+        color: var(--field-ink);
+        background: var(--field-bg);
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 700;
+        color: white;
+        background: linear-gradient(135deg, var(--accent), #cf7c4b);
+        cursor: pointer;
+      }
+
+      #status {
+        color: var(--accent-2);
+        font-weight: 700;
+        min-height: 1.4rem;
+      }
+
+      code {
+        font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+        font-size: 0.92em;
+        color: var(--field-ink);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>OverCite</h1>
+      <p class="lede">
+        Store your NASA ADS API token and project defaults here. OverCite uses these settings when you trigger it inside an Overleaf citation command.
+      </p>
+      <form id="settings-form">
+        <label>
+          ADS API Token
+          <span class="hint">Used for ADS search and BibTeX export requests.</span>
+          <input id="ads-api-token" name="adsApiToken" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <label>
+          Theme
+          <span class="hint">Choose how OverCite should look in both the settings page and the Overleaf overlay.</span>
+          <select id="theme-mode" name="themeMode">
+            <option value="auto">Auto</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label>
+          Citation Key Style
+          <span class="hint">Use <code>Informative</code> to generate keys like <code>Shariat25_10k</code>, or <code>Keep Typed Key</code> to preserve what you entered when possible.</span>
+          <select id="citation-key-mode" name="citationKeyMode">
+            <option value="informative">Informative</option>
+            <option value="typed">Keep Typed Key</option>
+          </select>
+        </label>
+        <label>
+          Bibliography Entry Order
+          <span class="hint">Choose whether new BibTeX entries are added at the end of the file or inserted alphabetically by citation key.</span>
+          <select id="bibliography-insert-mode" name="bibliographyInsertMode">
+            <option value="append">Append At End</option>
+            <option value="alphabetical">Insert Alphabetically</option>
+          </select>
+        </label>
+        <label>
+          Context Window Characters
+          <span class="hint">How many surrounding characters to use when reranking ADS matches. Recommended range: <code>400</code> to <code>600</code>.</span>
+          <input id="context-window-chars" name="contextWindowChars" type="number" min="200" max="1200" step="50">
+        </label>
+        <label>
+          Shortcut Help Text
+          <span class="hint">This is only shown in the overlay. Use Chrome's extension shortcuts page to remap the actual command if needed.</span>
+          <input id="shortcut-help-text" name="shortcutHelpText" type="text">
+        </label>
+        <label class="toggle-row">
+          <span class="toggle-copy">
+            <span class="toggle-title">Return to TeX File After Insert</span>
+            <span class="hint">Off is faster and keeps you on the bibliography tab when possible. On returns you to your original TeX tab after the insert finishes.</span>
+          </span>
+          <input id="return-to-source" name="returnToSourceAfterInsert" type="checkbox">
+        </label>
+        <label>
+          Project Bib File Overrides
+          <span class="hint">Optional JSON object keyed by Overleaf project id. Example: <code>{"abc123":"references.bib"}</code></span>
+          <textarea id="project-overrides" name="defaultProjectBibFileOverride" spellcheck="false"></textarea>
+        </label>
+        <div class="actions">
+          <button type="submit">Save Settings</button>
+          <div id="status" aria-live="polite"></div>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="src/options.js"></script>
+  </body>
+  </html>
