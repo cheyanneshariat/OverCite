@@ -1,5 +1,9 @@
 # OverCite
 
+<p align="center">
+  <img src="docs/assets/overcite-logo-512.png" alt="OverCite logo" width="160">
+</p>
+
 OverCite is a browser extension for Overleaf that searches NASA ADS from inside LaTeX citation commands, shows likely paper matches, and inserts BibTeX into the correct project bibliography file.
 
 ## Repository layout
