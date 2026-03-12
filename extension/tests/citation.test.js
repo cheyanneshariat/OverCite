@@ -22,6 +22,22 @@ test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   assert.equal(longYear.year, 2025);
 });
 
+test("parseCitationKeyHint treats surname-only tokens as author hints", () => {
+  const surnameOnly = parseCitationKeyHint("El-Badry");
+  assert.equal(surnameOnly.surname, "El-Badry");
+  assert.equal(surnameOnly.year, null);
+});
+
+test("findCitationAtCursor removes the active cite token from sentence and context text", () => {
+  const source = "People find that magnetic braking saturates \\citep{El-Badry}.";
+  const cursorIndex = source.indexOf("El-Badry") + 4;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+  assert.ok(result);
+  assert.equal(result.sentenceText, "People find that magnetic braking saturates .");
+  assert.ok(!result.sentenceText.includes("Badry"));
+  assert.ok(!result.contextText.includes("Badry"));
+});
+
 test("findCitationAtCursor returns null outside a cite command", () => {
   const source = "No citations here.";
   assert.equal(findCitationAtCursor(source, 5, 500), null);

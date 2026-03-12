@@ -33,10 +33,11 @@
     const compact = normalized.replace(/[{}\s]/g, "");
     const match = compact.match(/^([A-Za-z'`.-]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
     if (!match) {
+      const surnameOnlyMatch = compact.match(/^[A-Za-z'`.-]{3,}$/);
       return {
         raw: normalized,
         normalized: compact,
-        surname: null,
+        surname: surnameOnlyMatch ? compact.replace(/[^A-Za-z-]/g, "") || null : null,
         year: null,
         suffix: ""
       };
@@ -81,6 +82,10 @@
     return source.slice(start, end).replace(/\s+/g, " ").trim();
   }
 
+  function removeRange(source, start, end) {
+    return `${source.slice(0, start)} ${source.slice(end)}`;
+  }
+
   function findCitationAtCursor(source, cursorIndex, windowChars = 500) {
     const citeCommandRegex = /\\cite[a-zA-Z*]*\s*(?:\[[^[\]]*]\s*){0,2}\{/g;
     let match;
@@ -96,6 +101,7 @@
       }
       active = {
         command: match[0].slice(0, match[0].indexOf("{")).trim(),
+        matchStart: match.index,
         openBraceIndex,
         closeBraceIndex
       };
@@ -129,6 +135,8 @@
     const tokenStartAbsolute = active.openBraceIndex + 1 + tokenStart;
     const tokenEndAbsolute = active.openBraceIndex + 1 + tokenEnd;
     const tokens = inside.split(",").map((piece) => piece.trim()).filter(Boolean);
+    const sanitizedSource = removeRange(source, active.matchStart, active.closeBraceIndex + 1);
+    const sanitizedCursorIndex = active.matchStart;
 
     return {
       command: active.command,
@@ -136,8 +144,8 @@
       tokenStart: tokenStartAbsolute,
       tokenEnd: tokenEndAbsolute,
       cursorIndex,
-      contextText: extractContextWindow(source, cursorIndex, windowChars),
-      sentenceText: extractSentenceAroundCursor(source, cursorIndex),
+      contextText: extractContextWindow(sanitizedSource, sanitizedCursorIndex, windowChars),
+      sentenceText: extractSentenceAroundCursor(sanitizedSource, sanitizedCursorIndex),
       tokens,
       parsedKeyHint: parseCitationKeyHint(token)
     };
@@ -751,6 +759,13 @@
     }
 
     diagnostics.finish(`Finished in ${formatMs(performance.now() - diagnostics.startedAt)}`);
+    await callRuntime({
+      type: MESSAGE_TYPES.RECORD_SELECTION,
+      payload: {
+        citationContext: overlayState.citationContext,
+        candidate
+      }
+    });
     closeOverlay();
     toast(
       insertion.match

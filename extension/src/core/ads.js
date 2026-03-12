@@ -27,6 +27,11 @@ function escapeQueryValue(value) {
   return String(value ?? "").replace(/"/g, '\\"');
 }
 
+function isAuthorLikeToken(token) {
+  const normalized = String(token ?? "").trim().replace(/[{}\s]/g, "");
+  return /^[A-Za-z'`.-]{3,}$/.test(normalized);
+}
+
 function buildSurnameVariants(surname) {
   const raw = String(surname ?? "").trim();
   if (!raw) {
@@ -50,16 +55,51 @@ function buildSurnameVariants(surname) {
 
 function buildContextKeywordQuery(citationContext) {
   const sentenceKeywords = keywordList(citationContext?.sentenceText ?? "").slice(0, 3);
-  const contextKeywords = keywordList(citationContext?.contextText ?? "")
-    .filter((token) => !sentenceKeywords.includes(token))
-    .slice(0, 2);
-  const keywords = [...sentenceKeywords, ...contextKeywords];
+  const keywords = [...sentenceKeywords];
+  if (keywords.length < 2) {
+    const contextKeywords = keywordList(citationContext?.contextText ?? "")
+      .filter((token) => !sentenceKeywords.includes(token))
+      .slice(0, 2 - keywords.length);
+    keywords.push(...contextKeywords);
+  }
   if (keywords.length < 2) {
     return null;
   }
   return keywords
-    .map((token) => `(title:"${escapeQueryValue(token)}" OR abstract:"${escapeQueryValue(token)}")`)
+    .map((token) => `full:"${escapeQueryValue(token)}"`)
     .join(" AND ");
+}
+
+function buildSentencePhrase(citationContext) {
+  const tokens = keywordList(citationContext?.sentenceText ?? "");
+  if (tokens.length < 2) {
+    return null;
+  }
+  return tokens.slice(0, 6).join(" ");
+}
+
+function buildSentencePhraseQuery(citationContext) {
+  const phrase = buildSentencePhrase(citationContext);
+  if (!phrase) {
+    return null;
+  }
+  return `full:"${escapeQueryValue(phrase)}"`;
+}
+
+function buildAuthorContextQuery(surname, citationContext) {
+  const contextQuery = buildContextKeywordQuery(citationContext);
+  if (!surname || !contextQuery) {
+    return null;
+  }
+  return `author:"${escapeQueryValue(surname)}" AND ${contextQuery}`;
+}
+
+function buildAuthorSentencePhraseQuery(surname, citationContext) {
+  const phraseQuery = buildSentencePhraseQuery(citationContext);
+  if (!surname || !phraseQuery) {
+    return null;
+  }
+  return `author:"${escapeQueryValue(surname)}" AND ${phraseQuery}`;
 }
 
 export function buildAdsQuery(citationContext) {
@@ -68,33 +108,79 @@ export function buildAdsQuery(citationContext) {
     const escapedSurname = escapeQueryValue(hint.surname);
     return `author:"${escapedSurname}" year:${hint.year}`;
   }
+  if (hint?.surname) {
+    const escapedSurname = escapeQueryValue(hint.surname);
+    return `author:"${escapedSurname}"`;
+  }
 
   const token = String(citationContext?.token ?? "").trim();
   if (!token) {
     return "property:refereed";
   }
+  if (isAuthorLikeToken(token)) {
+    return `author:"${escapeQueryValue(token)}"`;
+  }
 
   const escaped = token.replace(/"/g, '\\"');
-  return `author:"${escaped}" OR title:"${escaped}" OR abstract:"${escaped}"`;
+  return `title:"${escaped}" OR abstract:"${escaped}"`;
 }
 
 export function buildAdsQueries(citationContext) {
   const queries = new Set();
   const hint = citationContext?.parsedKeyHint;
-  queries.add(buildAdsQuery(citationContext));
+  const primaryQuery = buildAdsQuery(citationContext);
+  const contextQuery = buildContextKeywordQuery(citationContext);
+  const sentencePhraseQuery = buildSentencePhraseQuery(citationContext);
+  const primaryAuthorContextQuery = hint?.surname
+    ? buildAuthorContextQuery(hint.surname, citationContext)
+    : null;
+  const primaryAuthorPhraseQuery = hint?.surname
+    ? buildAuthorSentencePhraseQuery(hint.surname, citationContext)
+    : null;
 
-  if (hint?.surname && hint?.year) {
+  if (hint?.surname && !hint?.year && primaryAuthorPhraseQuery) {
+    queries.add(primaryAuthorPhraseQuery);
+    if (sentencePhraseQuery) {
+      queries.add(sentencePhraseQuery);
+    }
+    if (primaryAuthorContextQuery) {
+      queries.add(primaryAuthorContextQuery);
+    }
+    queries.add(primaryQuery);
+  } else {
+    queries.add(primaryQuery);
+    if (sentencePhraseQuery) {
+      queries.add(sentencePhraseQuery);
+    }
+    if (contextQuery) {
+      queries.add(contextQuery);
+    }
+  }
+
+  if (hint?.surname) {
     const surnameVariants = buildSurnameVariants(hint.surname);
-    const years = [hint.year, hint.year - 1, hint.year + 1];
     for (const surname of surnameVariants) {
-      for (const year of years) {
-        queries.add(`author:"${escapeQueryValue(surname)}" year:${year}`);
+      const authorPhraseQuery = buildAuthorSentencePhraseQuery(surname, citationContext);
+      if (authorPhraseQuery) {
+        queries.add(authorPhraseQuery);
+      }
+      const authorContextQuery = buildAuthorContextQuery(surname, citationContext);
+      if (authorContextQuery) {
+        queries.add(authorContextQuery);
+      }
+      if (hint.year) {
+        const years = [hint.year, hint.year - 1, hint.year + 1];
+        for (const year of years) {
+          queries.add(`author:"${escapeQueryValue(surname)}" year:${year}`);
+        }
       }
       queries.add(`author:"${escapeQueryValue(surname)}"`);
     }
   }
 
-  const contextQuery = buildContextKeywordQuery(citationContext);
+  if (sentencePhraseQuery) {
+    queries.add(sentencePhraseQuery);
+  }
   if (contextQuery) {
     queries.add(contextQuery);
   }
