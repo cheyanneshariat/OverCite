@@ -94,6 +94,7 @@ test("applyBibInsertion can keep the typed key instead of adding a title slug", 
   });
   assert.equal(result.finalKey, "Shariat25");
   assert.match(result.updatedBibText, /@ARTICLE\{Shariat25,/);
+  assert.equal(result.cursorAnchor, result.updatedBibText.trimEnd().length);
 });
 
 test("insertBibtexEntryAlphabetically places a new entry before the next larger key", () => {
@@ -156,4 +157,5 @@ test("applyBibInsertion can insert new entries alphabetically by key", () => {
   assert.ok(elBadryIndex >= 0);
   assert.ok(goldbergIndex >= 0);
   assert.ok(elBadryIndex < goldbergIndex);
+  assert.equal(result.cursorAnchor, elBadryIndex + result.rewrittenBibtex.trim().length);
 });

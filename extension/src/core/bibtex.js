@@ -235,6 +235,20 @@ export function insertBibtexEntryAlphabetically(bibText, entryText, finalKey) {
   return `${before}\n\n${trimmedEntry}\n\n${after}\n`;
 }
 
+function computeInsertionResult(updatedBibText, rewrittenBibtex) {
+  const normalizedEntry = String(rewrittenBibtex ?? "").trim();
+  const start = updatedBibText.indexOf(normalizedEntry);
+  const cursorAnchor = start >= 0 ? start + normalizedEntry.length : updatedBibText.length;
+  return {
+    updatedBibText,
+    insertionRange: {
+      start: Math.max(0, start),
+      end: cursorAnchor
+    },
+    cursorAnchor
+  };
+}
+
 export function applyBibInsertion({ bibText, bibtex, candidate }) {
   const entries = parseBibEntries(bibText);
   const match = findBibMatch(entries, candidate);
@@ -243,7 +257,9 @@ export function applyBibInsertion({ bibText, bibtex, candidate }) {
       finalKey: match.key,
       match,
       updatedBibText: bibText,
-      rewrittenBibtex: null
+      rewrittenBibtex: null,
+      insertionRange: null,
+      cursorAnchor: null
     };
   }
 
@@ -257,10 +273,13 @@ export function applyBibInsertion({ bibText, bibtex, candidate }) {
   const updatedBibText = insertMode === "alphabetical"
     ? insertBibtexEntryAlphabetically(bibText, rewrittenBibtex, finalKey)
     : appendBibtexEntry(bibText, rewrittenBibtex);
+  const insertionResult = computeInsertionResult(updatedBibText, rewrittenBibtex);
   return {
     finalKey,
     match: null,
-    updatedBibText,
-    rewrittenBibtex
+    updatedBibText: insertionResult.updatedBibText,
+    rewrittenBibtex,
+    insertionRange: insertionResult.insertionRange,
+    cursorAnchor: insertionResult.cursorAnchor
   };
 }

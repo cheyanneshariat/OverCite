@@ -749,7 +749,13 @@
     if (insertion.updatedBibText !== bibEditorState.text) {
       diagnostics.step(`Writing ${bibTarget.target}...`);
       await timed(`replaceDocument:${bibTarget.target}`, () => pageRequest("replaceDocument", { text: insertion.updatedBibText }, 12000), diagnostics);
-      await timed(`focusDocumentEnd:${bibTarget.target}`, () => pageRequest("focusDocumentEnd", {}, 5000), diagnostics);
+      const focusAction = overlayState.settings.bibliographyInsertMode === "alphabetical"
+        ? () => pageRequest("focusDocumentAnchor", { anchor: insertion.cursorAnchor }, 5000)
+        : () => pageRequest("focusDocumentEnd", {}, 5000);
+      const focusLabel = overlayState.settings.bibliographyInsertMode === "alphabetical"
+        ? `focusDocumentAnchor:${bibTarget.target}`
+        : `focusDocumentEnd:${bibTarget.target}`;
+      await timed(focusLabel, focusAction, diagnostics);
     }
 
     const shouldReturnToSource = Boolean(overlayState.settings.returnToSourceAfterInsert) || insertion.finalKey !== optimisticKey;

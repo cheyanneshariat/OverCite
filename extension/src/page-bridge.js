@@ -91,6 +91,8 @@
         return replaceDocument(payload);
       case "focusDocumentEnd":
         return focusDocumentEnd();
+      case "focusDocumentAnchor":
+        return focusDocumentAnchor(payload);
       default:
         throw new Error(`Unknown page bridge action: ${action}`);
     }
@@ -155,6 +157,23 @@
     const end = view.state.doc.length;
     view.dispatch({
       selection: { anchor: end },
+      scrollIntoView: true
+    });
+    view.focus();
+    return true;
+  }
+
+  function focusDocumentAnchor(payload) {
+    const view = findActiveEditorView();
+    if (!view) {
+      throw new Error("Could not find the active Overleaf source editor.");
+    }
+    const requestedAnchor = Number(payload?.anchor);
+    const anchor = Number.isFinite(requestedAnchor)
+      ? Math.max(0, Math.min(view.state.doc.length, requestedAnchor))
+      : view.state.doc.length;
+    view.dispatch({
+      selection: { anchor },
       scrollIntoView: true
     });
     view.focus();

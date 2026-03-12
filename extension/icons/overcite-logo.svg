@@ -16,31 +16,31 @@
   <circle cx="256" cy="232" r="130" fill="url(#glow)"/>
 
   <text
-    x="164"
-    y="274"
+    x="178"
+    y="258"
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Georgia, 'Times New Roman', serif"
-    font-size="238"
+    font-size="222"
     font-weight="700"
     fill="#f4efe7">{</text>
 
   <text
-    x="348"
-    y="274"
+    x="334"
+    y="258"
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Georgia, 'Times New Roman', serif"
-    font-size="238"
+    font-size="222"
     font-weight="700"
     fill="#f4efe7">}</text>
 
   <polygon
-    points="256,132 281,207 360,207 296,252 321,328 256,281 191,328 216,252 152,207 231,207"
+    points="256,154 276,213 338,213 288,248 308,308 256,271 204,308 224,248 174,213 236,213"
     fill="#f18a62"
   />
   <polygon
-    points="256,167 272,214 322,214 281,243 297,291 256,262 215,291 231,243 190,214 240,214"
+    points="256,181 269,220 311,220 277,244 290,286 256,262 222,286 235,244 201,220 243,220"
     fill="#ffd39c"
   />
 </svg>
