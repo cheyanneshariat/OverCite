@@ -12,9 +12,6 @@
     "https://api.adsabs.harvard.edu/*"
   ],
   "background": {
-    "scripts": [
-      "src/background.js"
-    ],
     "service_worker": "src/background.js",
     "type": "module",
     "preferred_environment": [

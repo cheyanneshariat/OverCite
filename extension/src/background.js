@@ -20,24 +20,24 @@ extensionApi.runtime.onInstalled.addListener(async () => {
   await saveSettings({ ...DEFAULT_SETTINGS, ...settings });
 });
 
-extensionApi.commands.onCommand.addListener(async (command) => {
+extensionApi.commands.onCommand.addListener((command) => {
   console.log("[OverCite background] command", command);
   if (command !== "open-ezcite") {
     return;
   }
-  const [tab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url?.startsWith("https://www.overleaf.com/project/")) {
-    return;
-  }
-  await extensionApi.tabs.sendMessage(tab.id, { type: "ezcite:openOverlay" });
+  void openOverlayForActiveTab().catch((error) => {
+    console.error("[OverCite background] openOverlayForActiveTab failed", error);
+  });
 });
 
-extensionApi.action.onClicked.addListener(async (tab) => {
+extensionApi.action.onClicked.addListener((tab) => {
   console.log("[OverCite background] action click", { tabId: tab?.id, url: tab?.url });
   if (!tab?.id || !tab.url?.startsWith("https://www.overleaf.com/project/")) {
     return;
   }
-  await extensionApi.tabs.sendMessage(tab.id, { type: "ezcite:openOverlay" });
+  void safeSendMessageToTab(tab.id, { type: "ezcite:openOverlay" }).catch((error) => {
+    console.error("[OverCite background] toolbar sendMessage failed", error);
+  });
 });
 
 extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -206,4 +206,29 @@ async function fetchAdsDocs(query, adsApiToken) {
   const docs = payload?.response?.docs ?? [];
   adsQueryCache.set(cacheKey, docs);
   return docs;
+}
+
+async function openOverlayForActiveTab() {
+  const [tab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !tab.url?.startsWith("https://www.overleaf.com/project/")) {
+    return false;
+  }
+  return safeSendMessageToTab(tab.id, { type: "ezcite:openOverlay" });
+}
+
+async function safeSendMessageToTab(tabId, message) {
+  try {
+    await extensionApi.tabs.sendMessage(tabId, message);
+  } catch (error) {
+    const errorMessage = String(error?.message ?? error ?? "");
+    if (errorMessage.includes("Receiving end does not exist")) {
+      console.warn("[OverCite background] no content script receiver for tab", {
+        tabId,
+        messageType: message?.type ?? null
+      });
+      return false;
+    }
+    throw error;
+  }
+  return true;
 }
