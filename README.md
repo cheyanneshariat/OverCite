@@ -7,6 +7,24 @@ OverCite is a browser extension for Overleaf that searches NASA ADS from inside 
 - `extension/`: loadable browser extension source
 - `docs/`: technical report, demo assets, and PDF overview
 
+## Step 0: Get The Files
+
+Before loading OverCite in Chrome or Firefox, get a local copy of this repository.
+
+Option 1: Download from GitHub
+
+1. Click the green `Code` button on GitHub.
+2. Click `Download ZIP`.
+3. Unzip the downloaded folder somewhere convenient.
+4. Inside that folder, use the `extension/` directory for the browser install steps below.
+
+Option 2: Clone with git
+
+```bash
+git clone https://github.com/cheyanneshariat/OverCite.git
+cd OverCite
+```
+
 ## How To
 
 ### Chrome
@@ -38,7 +56,7 @@ OverCite is a browser extension for Overleaf that searches NASA ADS from inside 
 
 ## Citation Flow
 
-1. In Overleaf source mode, type a rough citation key such as `\citep{Shariat25}` or `\citep{El-Badry}`.
+1. In Overleaf source mode, type a rough citation key such as `\citep{Shariat25}` or `\citep{Shariat}`.
 2. Put the cursor inside the citation braces on the key you want OverCite to resolve.
 3. Press `Alt+Shift+E` or remap the shortcut in your browser's extension shortcut settings.
 4. Review the OverCite results popup, including the title and abstract snippet.
