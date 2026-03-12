@@ -2,13 +2,9 @@ import { mapAdsDocToCandidate, buildAdsQueries, rerankAdsCandidates } from "./co
 import { applyBibInsertion, generatePreferredKey } from "./core/bibtex.js";
 import { DEFAULT_SETTINGS, MESSAGE_TYPES } from "./core/constants.js";
 import { resolveBibTargetFromProjectState } from "./core/project.js";
-import { buildSearchCacheKey, shouldStopSearchEarly } from "./core/search-performance.js";
 import { getSettings, saveSettings } from "./core/settings.js";
 
 const extensionApi = globalThis.browser ?? globalThis.chrome;
-const adsQueryCache = new Map();
-const adsSearchResultCache = new Map();
-const bibtexExportCache = new Map();
 console.log("[OverCite background] boot", {
   hasBrowserApi: Boolean(globalThis.browser),
   hasChromeApi: Boolean(globalThis.chrome)
@@ -87,13 +83,6 @@ async function searchAds(citationContext) {
     throw new Error("No ADS API token is configured. Open OverCite settings and add one.");
   }
 
-  const searchCacheKey = buildSearchCacheKey(citationContext, settings);
-  const cachedSearchResults = adsSearchResultCache.get(searchCacheKey);
-  if (cachedSearchResults) {
-    console.log(`[OverCite background] searchAds: cache hit (${Math.round(performance.now() - startedAt)} ms)`);
-    return cachedSearchResults;
-  }
-
   const queries = buildAdsQueries(citationContext);
   console.log("[OverCite background] ADS queries:", queries);
   const mergedDocs = [];
@@ -114,12 +103,6 @@ async function searchAds(citationContext) {
     if (hasExplicitYear && index === 0 && mergedDocs.length >= 6) {
       break;
     }
-    if (hasExplicitYear) {
-      const rankedCandidates = rerankAdsCandidates(citationContext, mergedDocs.map(mapAdsDocToCandidate));
-      if (shouldStopSearchEarly(citationContext, rankedCandidates, index)) {
-        break;
-      }
-    }
     const isSurnameOnlyHint = Boolean(citationContext?.parsedKeyHint?.surname) && !hasExplicitYear;
     if (isSurnameOnlyHint && index < 2) {
       continue;
@@ -132,7 +115,7 @@ async function searchAds(citationContext) {
   const candidates = mergedDocs.map(mapAdsDocToCandidate);
   const finalCandidates = rerankAdsCandidates(citationContext, candidates);
   console.log(`[OverCite background] searchAds: ${Math.round(performance.now() - startedAt)} ms`);
-  const results = finalCandidates.map((candidate) => ({
+  return finalCandidates.map((candidate) => ({
     ...candidate,
     keyMode: settings.citationKeyMode,
     typedToken: citationContext?.token ?? "",
@@ -141,8 +124,6 @@ async function searchAds(citationContext) {
       typedToken: citationContext?.token ?? ""
     })
   }));
-  adsSearchResultCache.set(searchCacheKey, results);
-  return results;
 }
 
 async function exportBibtex(bibcode) {
@@ -153,12 +134,6 @@ async function exportBibtex(bibcode) {
   }
   if (!bibcode) {
     throw new Error("Missing ADS bibcode.");
-  }
-
-  const cachedBibtex = bibtexExportCache.get(bibcode);
-  if (cachedBibtex) {
-    console.log(`[OverCite background] exportBibtex: cache hit (${Math.round(performance.now() - startedAt)} ms)`);
-    return cachedBibtex;
   }
 
   const response = await fetch("https://api.adsabs.harvard.edu/v1/export/bibtex", {
@@ -175,18 +150,11 @@ async function exportBibtex(bibcode) {
   }
 
   const payload = await response.json();
-  const exportedBibtex = payload.export?.trim?.() ?? "";
-  bibtexExportCache.set(bibcode, exportedBibtex);
   console.log(`[OverCite background] exportBibtex: ${Math.round(performance.now() - startedAt)} ms`);
-  return exportedBibtex;
+  return payload.export?.trim?.() ?? "";
 }
 
 async function fetchAdsDocs(query, adsApiToken) {
-  const cacheKey = `${adsApiToken}:${query}`;
-  const cachedDocs = adsQueryCache.get(cacheKey);
-  if (cachedDocs) {
-    return cachedDocs;
-  }
   const url = new URL("https://api.adsabs.harvard.edu/v1/search/query");
   url.searchParams.set("q", query);
   url.searchParams.set("rows", "12");
@@ -203,9 +171,7 @@ async function fetchAdsDocs(query, adsApiToken) {
   }
 
   const payload = await response.json();
-  const docs = payload?.response?.docs ?? [];
-  adsQueryCache.set(cacheKey, docs);
-  return docs;
+  return payload?.response?.docs ?? [];
 }
 
 async function openOverlayForActiveTab() {
