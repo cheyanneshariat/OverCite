@@ -17,9 +17,29 @@ test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   const shortYear = parseCitationKeyHint("Shariat25");
   const longYear = parseCitationKeyHint("MacLeod2025");
   assert.equal(shortYear.surname, "Shariat");
+  assert.equal(shortYear.firstInitial, null);
   assert.equal(shortYear.year, 2025);
   assert.equal(longYear.surname, "MacLeod");
+  assert.equal(longYear.firstInitial, null);
   assert.equal(longYear.year, 2025);
+});
+
+test("parseCitationKeyHint can extract an optional first initial before or after the surname", () => {
+  const beforeSurname = parseCitationKeyHint("JSmith05");
+  const afterSurname = parseCitationKeyHint("SmithJ05");
+  const shortSurname = parseCitationKeyHint("LiW25");
+
+  assert.equal(beforeSurname.surname, "Smith");
+  assert.equal(beforeSurname.firstInitial, "J");
+  assert.equal(beforeSurname.year, 2005);
+
+  assert.equal(afterSurname.surname, "Smith");
+  assert.equal(afterSurname.firstInitial, "J");
+  assert.equal(afterSurname.year, 2005);
+
+  assert.equal(shortSurname.surname, "Li");
+  assert.equal(shortSurname.firstInitial, "W");
+  assert.equal(shortSurname.year, 2025);
 });
 
 test("parseCitationKeyHint treats surname-only tokens as author hints", () => {

@@ -11,7 +11,7 @@ test("buildAdsQuery prefers fielded author/year search from parsed key hints", (
       year: 2025
     }
   });
-  assert.equal(query, 'author:"Shariat" year:2025');
+  assert.equal(query, 'first_author:"Shariat" year:2025');
 });
 
 test("rerankAdsCandidates prefers matching author and year", () => {
@@ -56,10 +56,54 @@ test("buildAdsQueries adds cautious fallbacks for surname variants and nearby ye
     }
   });
 
-  assert.ok(queries.includes('author:"ElBadry" year:2025'));
-  assert.ok(queries.includes('author:"El-Badry" year:2025'));
+  assert.ok(queries.includes('first_author:"ElBadry" year:2025'));
+  assert.ok(queries.includes('first_author:"El-Badry" year:2025'));
   assert.ok(queries.includes('author:"ElBadry" year:2024'));
   assert.ok(queries.some((query) => query.includes('full:"gaia"')));
+});
+
+test("explicit author-year queries lead with first-author year and sentence phrase", () => {
+  const queries = buildAdsQueries({
+    token: "Li25",
+    sentenceText: "There are also other works on gamma ray burst afterglows",
+    contextText: "There are also other works on gamma ray burst afterglows",
+    parsedKeyHint: {
+      surname: "Li",
+      year: 2025
+    }
+  });
+
+  assert.equal(
+    queries[0],
+    'first_author:"Li" year:2025 AND (title:"gamma ray burst afterglows" OR abstract:"gamma ray burst afterglows")'
+  );
+  assert.equal(
+    queries[1],
+    'first_author:"Li" year:2025 AND full:"gamma ray burst afterglows"'
+  );
+  assert.equal(
+    queries[2],
+    'first_author:"Li" year:2025'
+  );
+});
+
+test("explicit author-year queries can use an optional first initial for common surnames", () => {
+  const queries = buildAdsQueries({
+    token: "LiW25",
+    sentenceText: "gamma ray burst afterglows",
+    contextText: "gamma ray burst afterglows",
+    parsedKeyHint: {
+      surname: "Li",
+      firstInitial: "W",
+      year: 2025
+    }
+  });
+
+  assert.equal(
+    queries[0],
+    'first_author:"Li, W*" year:2025 AND (title:"gamma ray burst afterglows" OR abstract:"gamma ray burst afterglows")'
+  );
+  assert.ok(queries.includes('first_author:"Li, W*" year:2025'));
 });
 
 test("buildAdsQueries prioritizes immediate sentence keywords over broader context", () => {
@@ -217,4 +261,97 @@ test("rerankAdsCandidates can prioritize the right author paper from sentence me
   assert.equal(candidates[0].bibcode, "good");
   assert.ok(candidates[0].score > candidates[1].score);
   assert.ok(candidates[0].score > candidates[2].score);
+});
+
+test("rerankAdsCandidates penalizes collaboration papers for explicit surname-year hints", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      contextText: "gamma ray burst afterglows",
+      sentenceText: "gamma ray burst afterglows",
+      parsedKeyHint: { surname: "Li", year: 2025, suffix: "" }
+    },
+    [
+      {
+        bibcode: "good",
+        title: "Gamma-ray burst afterglows in structured media",
+        authors: ["Li, Wei", "Someone Else"],
+        year: 2025,
+        abstract: "Gamma ray burst afterglows in structured media.",
+        doi: null
+      },
+      {
+        bibcode: "bad",
+        title: "Euclid: Overview of the Euclid mission",
+        authors: ["Euclid Collaboration", "Li, Y."],
+        year: 2025,
+        abstract: "Mission overview.",
+        doi: null
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "good");
+  assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("rerankAdsCandidates strongly prefers exact sentence phrase matches in titles", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      contextText: "gamma ray burst afterglows",
+      sentenceText: "gamma ray burst afterglows",
+      parsedKeyHint: { surname: "Li", year: 2025, suffix: "" }
+    },
+    [
+      {
+        bibcode: "good",
+        title: "Gamma Ray Burst Afterglows from Structured Jets",
+        authors: ["Li, Wei"],
+        year: 2025,
+        abstract: "A study of afterglow behavior.",
+        doi: null
+      },
+      {
+        bibcode: "bad",
+        title: "Discovery of Ha Emission from a Protoplanet Candidate around the Young Star 2MASS",
+        authors: ["Li, Wei"],
+        year: 2025,
+        abstract: "Young star spectroscopy.",
+        doi: null
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "good");
+  assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("rerankAdsCandidates boosts matching first-author initials when provided", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      contextText: "gamma ray burst afterglows",
+      sentenceText: "gamma ray burst afterglows",
+      parsedKeyHint: { surname: "Li", firstInitial: "W", year: 2025, suffix: "" }
+    },
+    [
+      {
+        bibcode: "good",
+        title: "Gamma Ray Burst Afterglows from Structured Jets",
+        authors: ["Li, Wei"],
+        year: 2025,
+        abstract: "A study of afterglow behavior.",
+        doi: null
+      },
+      {
+        bibcode: "bad",
+        title: "Gamma Ray Burst Afterglows from Structured Jets",
+        authors: ["Li, Jun"],
+        year: 2025,
+        abstract: "A study of afterglow behavior.",
+        doi: null
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "good");
+  assert.ok(candidates[0].score > candidates[1].score);
 });

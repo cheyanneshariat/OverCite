@@ -39,17 +39,53 @@
         raw: normalized,
         normalized: compact,
         surname: surnameOnlyMatch ? compact.replace(/[^A-Za-z-]/g, "") || null : null,
+        firstInitial: null,
         year: null,
         suffix: ""
       };
     }
     const [, rawSurname, yearText, suffix = ""] = match;
+    const parsedAuthorHint = parseAuthorHint(rawSurname);
     return {
       raw: normalized,
       normalized: compact,
-      surname: rawSurname.replace(/[^A-Za-z-]/g, "") || null,
+      surname: parsedAuthorHint.surname,
+      firstInitial: parsedAuthorHint.firstInitial,
       year: inferYear(yearText),
       suffix
+    };
+  }
+
+  function parseAuthorHint(rawSurnameToken) {
+    const cleaned = String(rawSurnameToken ?? "").replace(/[^A-Za-z-]/g, "");
+    if (!cleaned) {
+      return { surname: null, firstInitial: null };
+    }
+
+    if (/^[A-Z][A-Z][a-z-]{2,}$/.test(cleaned)) {
+      return {
+        surname: cleaned.slice(1) || cleaned,
+        firstInitial: cleaned[0]
+      };
+    }
+
+    if (/^[A-Z][a-z-]{2,}[A-Z]$/.test(cleaned)) {
+      return {
+        surname: cleaned.slice(0, -1) || cleaned,
+        firstInitial: cleaned.slice(-1)
+      };
+    }
+
+    if (/^[A-Z][a-z]?[A-Z]$/.test(cleaned)) {
+      return {
+        surname: cleaned.slice(0, -1) || cleaned,
+        firstInitial: cleaned.slice(-1)
+      };
+    }
+
+    return {
+      surname: cleaned,
+      firstInitial: null
     };
   }
 

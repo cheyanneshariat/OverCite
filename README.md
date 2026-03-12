@@ -76,3 +76,4 @@ npm test
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
 - The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
+- If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extensions at `chrome://extensions/`.

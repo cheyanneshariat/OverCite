@@ -68,8 +68,13 @@ export const CONTEXT_STOPWORDS = new Set([
   "these",
   "this",
   "those",
+  "there",
   "via",
   "was",
   "were",
-  "which"
+  "which",
+  "work",
+  "works",
+  "other",
+  "also"
 ]);
