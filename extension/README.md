@@ -22,12 +22,6 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 
 ## Load the extension
 
-Build the browser-specific extension folders first:
-
-```bash
-npm run build
-```
-
 ### Chrome / Chromium
 
 1. Open `chrome://extensions`

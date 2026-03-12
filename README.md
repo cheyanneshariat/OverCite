@@ -18,8 +18,7 @@ Option 1: Download from GitHub
 1. Click the green `Code` button on GitHub.
 2. Click `Download ZIP`.
 3. Unzip the downloaded folder somewhere convenient.
-4. Inside that folder, go to `extension/` and run `npm run build`.
-5. Then use the generated `extension/dist/chrome/` or `extension/dist/firefox/` paths below.
+4. Then use the committed `extension/dist/chrome/` or `extension/dist/firefox/` paths below.
 
 Option 2: Clone with git
 
@@ -33,37 +32,23 @@ cd OverCite
 ### Chrome
 
 1. Open `chrome://extensions`
-2. Turn on Developer mode
+2. Turn on Developer mode (top right)
 3. Click `Load unpacked`
-4. In Terminal, run:
-
-   ```bash
-   cd extension
-   npm run build
-   ```
-
-5. Select `extension/dist/chrome/`
-6. Open the OverCite options page
-7. Paste your NASA ADS API token*
-8. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-9. Put the cursor inside the citation key and press `Alt+Shift+E`
+4. Select `extension/dist/chrome/`
+5. Open the OverCite options page
+6. Paste your NASA ADS API token*
+7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+8. Put the cursor inside the citation key and press `Alt+Shift+E`
 
 ### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
-3. In Terminal, run:
-
-   ```bash
-   cd extension
-   npm run build
-   ```
-
-4. Select `extension/dist/firefox/manifest.json`
-5. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
-6. Paste your NASA ADS API token*
-7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-8. Put the cursor inside the citation key and press `Alt+Shift+E`
+3. Select `extension/dist/firefox/manifest.json`
+4. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
+5. Paste your NASA ADS API token*
+6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+7. Put the cursor inside the citation key and press `Alt+Shift+E`
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), go to Account --> Settings --> API Token
 
@@ -113,4 +98,5 @@ npm test
 - The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
+- Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
 - If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extensions at `chrome://extensions/`.

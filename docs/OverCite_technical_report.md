@@ -33,6 +33,8 @@ The code is shared, but the manifests differ slightly:
 
 This avoids Chrome MV3 manifest warnings while still allowing Firefox temporary add-on loading.
 
+For public use, these generated `dist/` folders are committed and meant to be loaded directly. End users should not need to run the build step themselves.
+
 ## End-to-End Flow
 
 At a high level, OverCite does the following:
