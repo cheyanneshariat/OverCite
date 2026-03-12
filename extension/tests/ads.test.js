@@ -133,13 +133,19 @@ test("surname-only queries lead with author+phrase, then phrase-only, before aut
     }
   });
 
-  assert.ok(queries[0].startsWith('author:"El-Badry" AND '));
-  assert.ok(queries[0].includes('magnetic braking saturates'));
+  assert.equal(
+    queries[0],
+    'author:"El-Badry" AND (title:"magnetic braking saturates" OR abstract:"magnetic braking saturates")'
+  );
   assert.equal(
     queries[1],
-    'full:"magnetic braking saturates"'
+    'title:"magnetic braking saturates" OR abstract:"magnetic braking saturates"'
   );
-  assert.equal(queries[3], 'author:"El-Badry"');
+  assert.equal(
+    queries[2],
+    'author:"El-Badry" AND full:"magnetic braking saturates"'
+  );
+  assert.equal(queries[5], 'author:"El-Badry"');
 });
 
 test("surname-only queries lead with author plus sentence phrase", () => {
@@ -154,9 +160,38 @@ test("surname-only queries lead with author plus sentence phrase", () => {
   });
 
   assert.equal(
-    queries[0],
+    queries[2],
     'author:"El-Badry" AND full:"magnetic braking saturates"'
   );
+});
+
+test("common-surname surname-only queries strip filler words and prioritize title phrase matching", () => {
+  const queries = buildAdsQueries({
+    token: "Li",
+    sentenceText: "There are also others who work on optical afterglows of gamma ray bursts",
+    contextText: "There are also others who work on optical afterglows of gamma ray bursts",
+    parsedKeyHint: {
+      surname: "Li",
+      firstInitial: null,
+      year: null,
+      suffix: ""
+    }
+  });
+
+  assert.equal(
+    queries[0],
+    'author:"Li" AND (title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts")'
+  );
+  assert.equal(
+    queries[1],
+    'title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"'
+  );
+  assert.equal(
+    queries[2],
+    'author:"Li" AND full:"optical afterglows gamma ray bursts"'
+  );
+  assert.ok(!queries.some((query) => query.includes("others")));
+  assert.ok(!queries.some((query) => query.includes("who")));
 });
 
 test("buildAdsQuery prioritizes author-only search for surname-only keys", () => {

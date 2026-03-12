@@ -48,6 +48,13 @@ test("parseCitationKeyHint treats surname-only tokens as author hints", () => {
   assert.equal(surnameOnly.year, null);
 });
 
+test("parseCitationKeyHint treats short common surnames as author hints", () => {
+  const surnameOnly = parseCitationKeyHint("Li");
+  assert.equal(surnameOnly.surname, "Li");
+  assert.equal(surnameOnly.firstInitial, null);
+  assert.equal(surnameOnly.year, null);
+});
+
 test("findCitationAtCursor removes the active cite token from sentence and context text", () => {
   const source = "People find that magnetic braking saturates \\citep{El-Badry}.";
   const cursorIndex = source.indexOf("El-Badry") + 4;

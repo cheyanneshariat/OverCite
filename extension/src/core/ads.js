@@ -289,6 +289,12 @@ export function buildAdsQueries(citationContext) {
       queries.add(contextQuery);
     }
   } else if (hint?.surname && !hint?.year && primaryAuthorPhraseQuery) {
+    if (primaryAuthorTitleAbstractPhraseQuery) {
+      queries.add(primaryAuthorTitleAbstractPhraseQuery);
+    }
+    if (sentenceTitleAbstractPhraseQuery) {
+      queries.add(sentenceTitleAbstractPhraseQuery);
+    }
     queries.add(primaryAuthorPhraseQuery);
     if (sentencePhraseQuery) {
       queries.add(sentencePhraseQuery);
@@ -310,13 +316,13 @@ export function buildAdsQueries(citationContext) {
   if (hint?.surname) {
     const surnameVariants = buildSurnameVariants(hint.surname);
     for (const surname of surnameVariants) {
-      const authorPhraseQuery = buildAuthorSentencePhraseQuery(surname, citationContext);
-      if (authorPhraseQuery) {
-        queries.add(authorPhraseQuery);
-      }
       const authorTitleAbstractPhraseQuery = buildAuthorTitleAbstractPhraseQuery(surname, citationContext);
       if (authorTitleAbstractPhraseQuery) {
         queries.add(authorTitleAbstractPhraseQuery);
+      }
+      const authorPhraseQuery = buildAuthorSentencePhraseQuery(surname, citationContext);
+      if (authorPhraseQuery) {
+        queries.add(authorPhraseQuery);
       }
       const authorContextQuery = buildAuthorContextQuery(surname, citationContext);
       if (authorContextQuery) {

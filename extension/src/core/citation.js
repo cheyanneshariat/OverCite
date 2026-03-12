@@ -22,7 +22,7 @@ export function parseCitationKeyHint(rawToken) {
   const compact = normalized.replace(/[{}\s]/g, "");
   const match = compact.match(/^([A-Za-z'`.-]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
   if (!match) {
-    const surnameOnlyMatch = compact.match(/^[A-Za-z'`.-]{3,}$/);
+    const surnameOnlyMatch = compact.match(/^[A-Za-z'`.-]{2,}$/);
     return {
       raw: normalized,
       normalized: compact,
