@@ -20,8 +20,3 @@ test("normalizeSettings accepts valid citation key modes and defaults invalid on
   assert.equal(normalizeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");
   assert.equal(normalizeSettings({ citationKeyMode: "other" }).citationKeyMode, "informative");
 });
-
-test("normalizeSettings enables local ranking memory by default", () => {
-  assert.equal(normalizeSettings({}).useSelectionMemory, true);
-  assert.equal(normalizeSettings({ useSelectionMemory: false }).useSelectionMemory, false);
-});

@@ -10,7 +10,6 @@ const citationKeyModeInput = document.querySelector("#citation-key-mode");
 const contextInput = document.querySelector("#context-window-chars");
 const shortcutInput = document.querySelector("#shortcut-help-text");
 const returnToSourceInput = document.querySelector("#return-to-source");
-const selectionMemoryInput = document.querySelector("#use-selection-memory");
 const overridesInput = document.querySelector("#project-overrides");
 
 async function callRuntime(message) {
@@ -29,7 +28,6 @@ async function loadSettings() {
   contextInput.value = String(settings.contextWindowChars ?? 500);
   shortcutInput.value = settings.shortcutHelpText ?? "";
   returnToSourceInput.checked = Boolean(settings.returnToSourceAfterInsert);
-  selectionMemoryInput.checked = Boolean(settings.useSelectionMemory);
   overridesInput.value = JSON.stringify(settings.defaultProjectBibFileOverride ?? {}, null, 2);
   applyTheme(settings.themeMode ?? "auto");
 }
@@ -51,7 +49,6 @@ form.addEventListener("submit", async (event) => {
       contextWindowChars: contextInput.value,
       shortcutHelpText: shortcutInput.value,
       returnToSourceAfterInsert: returnToSourceInput.checked,
-      useSelectionMemory: selectionMemoryInput.checked,
       defaultProjectBibFileOverride: overrides
     });
 

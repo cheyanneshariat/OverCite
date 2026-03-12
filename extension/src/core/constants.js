@@ -4,8 +4,7 @@ export const MESSAGE_TYPES = Object.freeze({
   SEARCH_ADS: "searchAds",
   EXPORT_BIBTEX: "exportBibtex",
   RESOLVE_BIB_TARGET: "resolveBibTarget",
-  APPLY_INSERTION: "applyInsertion",
-  RECORD_SELECTION: "recordSelection"
+  APPLY_INSERTION: "applyInsertion"
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -15,8 +14,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   shortcutHelpText: "Alt+Shift+E",
   themeMode: "auto",
   returnToSourceAfterInsert: false,
-  citationKeyMode: "informative",
-  useSelectionMemory: true
+  citationKeyMode: "informative"
 });
 
 export const TITLE_STOPWORDS = new Set([

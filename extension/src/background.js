@@ -1,11 +1,8 @@
 import { mapAdsDocToCandidate, buildAdsQueries, rerankAdsCandidates } from "./core/ads.js";
 import { applyBibInsertion, generatePreferredKey } from "./core/bibtex.js";
 import { DEFAULT_SETTINGS, MESSAGE_TYPES } from "./core/constants.js";
-import { applySelectionMemoryBoost, buildSelectionMemoryEntry, recordSelection } from "./core/memory.js";
 import { resolveBibTargetFromProjectState } from "./core/project.js";
 import { getSettings, saveSettings } from "./core/settings.js";
-
-const SELECTION_MEMORY_KEY = "selectionMemory";
 
 chrome.runtime.onInstalled.addListener(async () => {
   const settings = await getSettings();
@@ -56,8 +53,6 @@ async function handleMessage(message) {
     }
     case MESSAGE_TYPES.APPLY_INSERTION:
       return applyBibInsertion(message.payload);
-    case MESSAGE_TYPES.RECORD_SELECTION:
-      return persistSelection(message.payload);
     default:
       throw new Error(`Unknown OverCite message type: ${message?.type ?? "undefined"}`);
   }
@@ -100,10 +95,7 @@ async function searchAds(citationContext) {
   }
 
   const candidates = mergedDocs.map(mapAdsDocToCandidate);
-  const reranked = rerankAdsCandidates(citationContext, candidates);
-  const finalCandidates = settings.useSelectionMemory
-    ? applySelectionMemoryBoost(citationContext, reranked, await getSelectionMemory())
-    : reranked;
+  const finalCandidates = rerankAdsCandidates(citationContext, candidates);
   console.log(`[OverCite background] searchAds: ${Math.round(performance.now() - startedAt)} ms`);
   return finalCandidates.map((candidate) => ({
     ...candidate,
@@ -162,26 +154,4 @@ async function fetchAdsDocs(query, adsApiToken) {
 
   const payload = await response.json();
   return payload?.response?.docs ?? [];
-}
-
-async function getSelectionMemory() {
-  if (!chrome.storage?.local) {
-    return [];
-  }
-  const stored = await chrome.storage.local.get(SELECTION_MEMORY_KEY);
-  return Array.isArray(stored?.[SELECTION_MEMORY_KEY]) ? stored[SELECTION_MEMORY_KEY] : [];
-}
-
-async function persistSelection(payload = {}) {
-  if (!chrome.storage?.local) {
-    return false;
-  }
-  const entry = buildSelectionMemoryEntry(payload);
-  if (!entry.bibcode) {
-    return false;
-  }
-  const current = await getSelectionMemory();
-  const updated = recordSelection(current, entry);
-  await chrome.storage.local.set({ [SELECTION_MEMORY_KEY]: updated });
-  return true;
 }

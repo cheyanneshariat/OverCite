@@ -759,13 +759,6 @@
     }
 
     diagnostics.finish(`Finished in ${formatMs(performance.now() - diagnostics.startedAt)}`);
-    await callRuntime({
-      type: MESSAGE_TYPES.RECORD_SELECTION,
-      payload: {
-        citationContext: overlayState.citationContext,
-        candidate
-      }
-    });
     closeOverlay();
     toast(
       insertion.match

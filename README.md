@@ -27,10 +27,10 @@ OverCite is a Chromium extension for Overleaf that searches NASA ADS from inside
 
 1. In Overleaf source mode, type a rough citation key such as `\citep{Shariat25}` or `\citep{El-Badry}`.
 2. Put the cursor inside the citation braces on the key you want OverCite to resolve.
-3. Press `Alt+Shift+E` or remap the shortcut in `chrome://extensions/shortcuts`.
+3. Press `Alt+Shift+E` (or remap the shortcut in `chrome://extensions/shortcuts`).
 4. Review the OverCite results popup, including the title and abstract snippet.
 5. Click the paper you want.
-6. OverCite will update the active citation key and insert the BibTeX entry into the resolved project bibliography file.
+6. OverCite will update the active citation key and insert the BibTeX entry into the project bibliography file.
 
 ## Settings
 
@@ -43,7 +43,6 @@ Current settings include:
 - ADS API token for NASA ADS search access
 - Theme selection
 - Citation key style, including keeping the typed key instead of adding an informative suffix
-- Local ranking memory, which learns from papers you select and uses that to improve future ranking
 - Project-specific bibliography file overrides when a project contains multiple `.bib` files
 
 ## Local testing

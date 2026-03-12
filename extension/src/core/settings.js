@@ -47,8 +47,7 @@ export function normalizeSettings(rawSettings = {}) {
     shortcutHelpText: String(rawSettings.shortcutHelpText ?? DEFAULT_SETTINGS.shortcutHelpText).trim() || DEFAULT_SETTINGS.shortcutHelpText,
     themeMode,
     returnToSourceAfterInsert: Boolean(rawSettings.returnToSourceAfterInsert ?? DEFAULT_SETTINGS.returnToSourceAfterInsert),
-    citationKeyMode,
-    useSelectionMemory: Boolean(rawSettings.useSelectionMemory ?? DEFAULT_SETTINGS.useSelectionMemory)
+    citationKeyMode
   };
 }
 

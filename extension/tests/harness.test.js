@@ -1,21 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { findCitationAtCursor } from "../src/core/citation.js";
 import { applyBibInsertion } from "../src/core/bibtex.js";
 import { resolveBibTargetFromProjectState } from "../src/core/project.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = path.resolve(__dirname, "..", "..");
-const mainTexPath = path.join(workspaceRoot, "example_tex", "LSPs_ruwe", "main.tex");
-const bibPath = path.join(workspaceRoot, "example_tex", "LSPs_ruwe", "references.bib");
-
 test("example TeX harness resolves references.bib and generates the expected Shariat key", async () => {
-  const mainText = await readFile(mainTexPath, "utf8");
-  const bibText = await readFile(bibPath, "utf8");
+  const mainText = String.raw`\documentclass{article}
+\begin{document}
+Triples are common in the Galaxy, as shown by Gaia.
+\bibliography{references}
+\end{document}`;
+  const bibText = String.raw`@ARTICLE{Joyce20,
+  author = {{Joyce}, Meredith and {Leung}, Shing-Chi},
+  title = "{Standing on the Shoulders of Giants}",
+  year = 2020,
+  doi = {10.1234/example}
+}`;
 
   const syntheticSource = `${mainText}\nHere is my sentence \\citep{Shariat25}.`;
   const cursorIndex = syntheticSource.indexOf("Shariat25") + "Shariat25".length;
