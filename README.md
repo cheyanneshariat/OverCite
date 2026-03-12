@@ -25,7 +25,7 @@ OverCite is a browser extension for Overleaf that searches NASA ADS from inside 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
 3. Select `extension/manifest.json`
-4. Open the OverCite options page (go to "about:addons", find OverCite, click "...", click "Preferences")
+4. Open the OverCite options page (go to `about:addons`, find OverCite, click `...`, click `Preferences`)
 5. Paste your NASA ADS API token*
 6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 7. Put the cursor inside the citation key and press `Alt+Shift+E`
