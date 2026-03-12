@@ -4,30 +4,44 @@ import { DEFAULT_SETTINGS, MESSAGE_TYPES } from "./core/constants.js";
 import { resolveBibTargetFromProjectState } from "./core/project.js";
 import { getSettings, saveSettings } from "./core/settings.js";
 
-chrome.runtime.onInstalled.addListener(async () => {
+const extensionApi = globalThis.browser ?? globalThis.chrome;
+console.log("[OverCite background] boot", {
+  hasBrowserApi: Boolean(globalThis.browser),
+  hasChromeApi: Boolean(globalThis.chrome)
+});
+
+extensionApi.runtime.onInstalled.addListener(async () => {
+  console.log("[OverCite background] onInstalled");
   const settings = await getSettings();
   await saveSettings({ ...DEFAULT_SETTINGS, ...settings });
 });
 
-chrome.commands.onCommand.addListener(async (command) => {
+extensionApi.commands.onCommand.addListener(async (command) => {
+  console.log("[OverCite background] command", command);
   if (command !== "open-ezcite") {
     return;
   }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url?.startsWith("https://www.overleaf.com/project/")) {
     return;
   }
-  await chrome.tabs.sendMessage(tab.id, { type: "ezcite:openOverlay" });
+  await extensionApi.tabs.sendMessage(tab.id, { type: "ezcite:openOverlay" });
 });
 
-chrome.action.onClicked.addListener(async (tab) => {
+extensionApi.action.onClicked.addListener(async (tab) => {
+  console.log("[OverCite background] action click", { tabId: tab?.id, url: tab?.url });
   if (!tab?.id || !tab.url?.startsWith("https://www.overleaf.com/project/")) {
     return;
   }
-  await chrome.tabs.sendMessage(tab.id, { type: "ezcite:openOverlay" });
+  await extensionApi.tabs.sendMessage(tab.id, { type: "ezcite:openOverlay" });
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("[OverCite background] message", {
+    type: message?.type ?? null,
+    senderTabId: sender?.tab?.id ?? null,
+    senderUrl: sender?.url ?? sender?.tab?.url ?? null
+  });
   handleMessage(message, sender)
     .then((result) => sendResponse({ ok: true, result }))
     .catch((error) => sendResponse({ ok: false, error: error.message }));
@@ -61,6 +75,10 @@ async function handleMessage(message) {
 async function searchAds(citationContext) {
   const startedAt = performance.now();
   const settings = await getSettings();
+  console.log("[OverCite background] searchAds:start", {
+    token: citationContext?.token ?? null,
+    sentenceText: citationContext?.sentenceText ?? null
+  });
   if (!settings.adsApiToken) {
     throw new Error("No ADS API token is configured. Open OverCite settings and add one.");
   }

@@ -2,13 +2,25 @@
   const RESPONSE_EVENT = "EZCITE_PAGE_RESPONSE";
   const REQUEST_EVENT = "EZCITE_PAGE_REQUEST";
   let codeMirrorApi = null;
+  window.__OVERCITE_PAGE_BRIDGE_READY__ = true;
+  console.log("[OverCite page] page bridge boot");
 
   window.addEventListener("UNSTABLE_editor:extensions", (event) => {
     codeMirrorApi = event.detail?.CodeMirror ?? null;
+    console.log("[OverCite page] UNSTABLE_editor:extensions", {
+      hasCodeMirror: Boolean(codeMirrorApi),
+      hasEditorView: Boolean(codeMirrorApi?.EditorView)
+    });
   });
 
   window.addEventListener(REQUEST_EVENT, (event) => {
     const { requestId, action, payload } = event.detail || {};
+    console.log("[OverCite page] request", {
+      requestId,
+      action,
+      hasCodeMirror: Boolean(codeMirrorApi),
+      activeElementClass: document.activeElement?.className ?? null
+    });
     Promise.resolve()
       .then(() => handleAction(action, payload))
       .then((result) => emitResponse(requestId, { ok: true, result }))
@@ -26,6 +38,7 @@
   function findActiveEditorView() {
     const EditorView = codeMirrorApi?.EditorView;
     if (!EditorView?.findFromDOM) {
+      console.warn("[OverCite page] missing CodeMirror EditorView");
       return null;
     }
     const candidates = [
@@ -44,6 +57,7 @@
         continue;
       }
     }
+    console.warn("[OverCite page] no active .cm-editor view found");
     return null;
   }
 
