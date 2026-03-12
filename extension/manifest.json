@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "OverCite",
+  "version": "0.1.0",
+  "description": "Search NASA ADS from Overleaf and insert BibTeX entries directly into your project.",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.overleaf.com/*",
+    "https://api.adsabs.harvard.edu/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "OverCite"
+  },
+  "commands": {
+    "open-ezcite": {
+      "suggested_key": {
+        "default": "Alt+Shift+E",
+        "mac": "Alt+Shift+E"
+      },
+      "description": "Open OverCite inside the active Overleaf project"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.overleaf.com/*"
+      ],
+      "js": [
+        "src/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/page-bridge.js"
+      ],
+      "matches": [
+        "https://www.overleaf.com/*"
+      ]
+    }
+  ]
+}

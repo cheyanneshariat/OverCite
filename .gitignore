@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+extension/.DS_Store
+example_tex/.DS_Store
+*.log
+*.aux
+*.out
+*.fdb_latexmk
+*.fls
