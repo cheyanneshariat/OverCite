@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build-browser-dists.mjs",
     "test": "node --test"
   }
 }

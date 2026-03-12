@@ -260,40 +260,68 @@ These will be treated literally.
 
 OverCite has a primary query path plus a cautious hidden fallback strategy.
 
-### 1. Structured author-year query
+### 1. Structured first-author year query
 
 If it successfully parses both surname and year, it builds:
 
 ```text
-author:"SURNAME" year:YEAR
+first_author:"SURNAME" year:YEAR
 ```
 
 Examples:
 
 | Token | ADS query |
 | --- | --- |
-| `Shariat25` | `author:"Shariat" year:2025` |
-| `MacLeod2025` | `author:"MacLeod" year:2025` |
-| `El-Badry25` | `author:"El-Badry" year:2025` |
+| `Shariat25` | `first_author:"Shariat" year:2025` |
+| `MacLeod2025` | `first_author:"MacLeod" year:2025` |
+| `El-Badry25` | `first_author:"El-Badry" year:2025` |
 
-This is the preferred path and is the strongest query mode.
+This is the preferred path and is the strongest query mode. For explicit author-year keys, OverCite also prefers combining that structured hint with the immediate sentence phrase in `title` / `abstract` first, then in ADS `full:` text.
 
-### 2. Fallback token query
+### 2. Surname-only author query
 
-If no structured surname-year hint is available, OverCite falls back to:
+If a token looks author-like but has no year, OverCite keeps it on the author side and does not search the author name in title or abstract.
+
+Examples:
+
+| Token | Primary author query |
+| --- | --- |
+| `Shariat` | `author:"Shariat"` |
+| `El-Badry` | `author:"El-Badry"` |
+| `Li` | `author:"Li"` |
+
+For surname-only cases, the query builder then combines that author hint with the local sentence phrase. For example:
+
+```tex
+There are also others who work on optical afterglows of gamma ray bursts \citep{Li}.
+```
+
+leads with queries shaped like:
 
 ```text
-author:"TOKEN" OR title:"TOKEN" OR abstract:"TOKEN"
+author:"Li" AND (title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts")
+title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"
+author:"Li" AND full:"optical afterglows gamma ray bursts"
+```
+
+This matters especially for common surnames.
+
+### 3. Descriptive token query
+
+If no author-like hint is available, OverCite falls back to title / abstract search:
+
+```text
+title:"TOKEN" OR abstract:"TOKEN"
 ```
 
 Examples:
 
 | Token | ADS query |
 | --- | --- |
-| `Shariat` | `author:"Shariat" OR title:"Shariat" OR abstract:"Shariat"` |
-| `triples` | `author:"triples" OR title:"triples" OR abstract:"triples"` |
+| `triples` | `title:"triples" OR abstract:"triples"` |
+| `magnetic_braking` | `title:"magnetic_braking" OR abstract:"magnetic_braking"` |
 
-### 3. Hidden fallback query expansion
+### 4. Hidden fallback query expansion
 
 To improve robustness without changing the UI, OverCite now tries a small set of additional ADS queries when needed.
 
@@ -301,14 +329,17 @@ For parsed author-year keys, these can include:
 
 - surname variants,
 - adjacent years,
-- author-only fallback,
-- a context-keyword query built from the current sentence and local context.
+- first-author fallback,
+- optional first-initial narrowing for common surnames,
+- title / abstract sentence-phrase queries,
+- `full:` sentence-phrase queries,
+- and context-keyword fallback queries when needed.
 
 Examples for a token like `ElBadry25`:
 
 ```text
-author:"ElBadry" year:2025
-author:"El-Badry" year:2025
+first_author:"ElBadry" year:2025
+first_author:"El-Badry" year:2025
 author:"ElBadry" year:2024
 author:"ElBadry" year:2026
 author:"ElBadry"
@@ -317,7 +348,7 @@ author:"ElBadry"
 If the local sentence contains words like `Gaia`, `resolved`, and `triples`, OverCite may also generate a context query of the form:
 
 ```text
-(title:"gaia" OR abstract:"gaia") AND (title:"resolved" OR abstract:"resolved") AND (title:"triples" OR abstract:"triples")
+full:"gaia" AND full:"resolved" AND full:"triples"
 ```
 
 This is still deterministic and lexical. It is intended as a safety net, not a replacement for typing a reasonable author-year hint.
@@ -349,11 +380,27 @@ Each candidate receives points from several sources.
 
 - first-author match with parsed surname: `+80`
 - any-author match with parsed surname: `+40`
+- matching first-author initial when supplied: additional boost
 
 #### Year match
 
 - exact year match: `+60`
 - weak two-digit ending match: `+20`
+
+#### Phrase match
+
+The immediate sentence phrase is more important than the wider context window.
+
+- exact sentence phrase in title: strong boost
+- exact sentence phrase in abstract: smaller boost
+
+This is why a sentence like:
+
+```tex
+People find that magnetic braking saturates \citep{El-Badry}.
+```
+
+can rank the intended paper even without an explicit year.
 
 #### Parsed suffix overlap
 
@@ -383,6 +430,10 @@ For each non-trivial keyword from the immediate sentence:
 
 This makes the sentence around the citation more influential than the general surrounding paragraph.
 
+#### Collaboration penalty
+
+For explicit surname-year hints, OverCite penalizes collaboration-style author lists and candidates where the parsed surname is not actually present in first-author position. This helps keep common-surname cases from drifting toward irrelevant collaboration papers.
+
 ### Context normalization
 
 Before matching, text is normalized by:
@@ -402,8 +453,13 @@ Stopwords are removed using a fixed stopword list such as:
 - `results`
 - `paper`
 - `shows`
+- `who`
+- `others`
+- `also`
+- `work`
+- `works`
 
-Only tokens of length at least 3 are kept.
+For keyword extraction, only tokens of length at least 3 are kept. For citation-key parsing, short author surnames such as `Li` are still accepted and treated as author hints.
 
 ### Practical interpretation
 
@@ -433,7 +489,7 @@ Expected parse:
 ADS query:
 
 ```text
-author:"Shariat" year:2025
+first_author:"Shariat" year:2025
 ```
 
 Context keywords likely include:
@@ -478,7 +534,7 @@ Parse:
 ADS query:
 
 ```text
-author:"MacLeod" year:2025
+first_author:"MacLeod" year:2025
 ```
 
 This is handled cleanly.
@@ -499,7 +555,7 @@ Parse:
 ADS query:
 
 ```text
-author:"El-Badry" year:2025
+first_author:"El-Badry" year:2025
 ```
 
 This is a good case for the current parser.
@@ -520,12 +576,35 @@ Parse:
 ADS query:
 
 ```text
-author:"ElBadry" year:2025
+first_author:"ElBadry" year:2025
 ```
 
 This may still work if ADS search is forgiving. The current version also tries a hyphen-restored fallback query, so this case is better supported than before, but it is still weaker than typing the hyphenated surname directly.
 
-### Example 6: vague or incomplete token
+### Example 6: common surname without a year
+
+Input:
+
+```tex
+\citep{Li}
+```
+
+Parse:
+
+- surname: `Li`
+- year: `null`
+
+Leading ADS queries:
+
+```text
+author:"Li" AND (title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts")
+title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"
+author:"Li" AND full:"optical afterglows gamma ray bursts"
+```
+
+This is still harder than a surname-year key, but it is substantially better than searching `Li` in title / abstract directly.
+
+### Example 7: vague descriptive token
 
 Input:
 
@@ -541,14 +620,40 @@ Parse:
 ADS query:
 
 ```text
-author:"triples" OR title:"triples" OR abstract:"triples"
+title:"triples" OR abstract:"triples"
 ```
 
-This is much weaker and relies more heavily on the local sentence context.
+This is the weaker generic path and relies much more heavily on the local sentence context.
 
 ## Citation Key Generation
 
 OverCite now supports two citation-key styles.
+
+## Optional First-Initial Narrowing
+
+For common surnames, OverCite supports an optional first initial in the cite key.
+
+Examples:
+
+- `JSmith05`
+- `SmithJ05`
+- `LiW25`
+
+This does not change the normal simple workflow. It is only a narrowing hint when the token pattern is unambiguous.
+
+For example, `LiW25` is interpreted approximately as:
+
+- surname: `Li`
+- first initial: `W`
+- year: `2025`
+
+and can generate first-author ADS queries such as:
+
+```text
+first_author:"Li, W*" year:2025
+```
+
+This helps with high-ambiguity surnames without adding any extra UI.
 
 ### 1. Informative mode
 

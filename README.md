@@ -32,21 +32,23 @@ cd OverCite
 1. Open `chrome://extensions`
 2. Turn on Developer mode
 3. Click `Load unpacked`
-4. Select `extension/`
-5. Open the OverCite options page
-6. Paste your NASA ADS API token*
-7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-8. Put the cursor inside the citation key and press `Alt+Shift+E`
+4. Run `npm run build` inside `extension/`
+5. Select `extension/dist/chrome/`
+6. Open the OverCite options page
+7. Paste your NASA ADS API token*
+8. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+9. Put the cursor inside the citation key and press `Alt+Shift+E`
 
 ### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
-3. Select `extension/manifest.json`
-4. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
-5. Paste your NASA ADS API token*
-6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-7. Put the cursor inside the citation key and press `Alt+Shift+E`
+3. Run `npm run build` inside `extension/`
+4. Select `extension/dist/firefox/manifest.json`
+5. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
+6. Paste your NASA ADS API token*
+7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+8. Put the cursor inside the citation key and press `Alt+Shift+E`
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), go to Account --> Settings --> API Token
 
@@ -81,6 +83,7 @@ Current settings include:
 
 ```bash
 cd extension
+npm run build
 npm test
 ```
 
