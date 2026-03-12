@@ -30,8 +30,8 @@ npm test
 
 ## Documentation
 
-- Technical report: [docs/OverCite_technical_report.md](/Users/bijan1339/Desktop/Caltech/Notebooks/OverCite/docs/OverCite_technical_report.md)
-- PDF report: [docs/OverCite_technical_report.pdf](/Users/bijan1339/Desktop/Caltech/Notebooks/OverCite/docs/OverCite_technical_report.pdf)
+- Technical report: [docs/OverCite_technical_report.md](/docs/OverCite_technical_report.md)
+- PDF report: [docs/OverCite_technical_report.pdf](/docs/OverCite_technical_report.pdf)
 
 ## Notes
 
