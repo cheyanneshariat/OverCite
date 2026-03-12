@@ -16,10 +16,10 @@ OverCite is a Chromium extension for Overleaf that searches NASA ADS from inside
 3. Click `Load unpacked`
 4. Select `extension/`
 5. Open the OverCite options page
-6. Paste your NASA ADS API token
+6. Paste your NASA ADS API token*
 7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 
-To get your NASA ADS API token, sign in to NASA ADS and go to:
+*To get your NASA ADS API token, sign in to NASA ADS and go to:
 Account --> API Token
 
 ## Local testing
