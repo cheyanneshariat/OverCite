@@ -1,8 +1,10 @@
 import { DEFAULT_SETTINGS } from "./constants.js";
 
+const extensionApi = globalThis.browser ?? globalThis.chrome;
+
 function getStorageArea() {
-  if (typeof chrome !== "undefined" && chrome.storage?.sync) {
-    return chrome.storage.sync;
+  if (extensionApi?.storage?.sync) {
+    return extensionApi.storage.sync;
   }
   return null;
 }
@@ -40,6 +42,7 @@ export function normalizeSettings(rawSettings = {}) {
   const contextWindowChars = Number(rawSettings.contextWindowChars ?? DEFAULT_SETTINGS.contextWindowChars);
   const themeMode = normalizeThemeMode(rawSettings.themeMode);
   const citationKeyMode = normalizeCitationKeyMode(rawSettings.citationKeyMode);
+  const bibliographyInsertMode = normalizeBibliographyInsertMode(rawSettings.bibliographyInsertMode);
   return {
     adsApiToken: String(rawSettings.adsApiToken ?? DEFAULT_SETTINGS.adsApiToken).trim(),
     defaultProjectBibFileOverride: overrides,
@@ -47,7 +50,8 @@ export function normalizeSettings(rawSettings = {}) {
     shortcutHelpText: String(rawSettings.shortcutHelpText ?? DEFAULT_SETTINGS.shortcutHelpText).trim() || DEFAULT_SETTINGS.shortcutHelpText,
     themeMode,
     returnToSourceAfterInsert: Boolean(rawSettings.returnToSourceAfterInsert ?? DEFAULT_SETTINGS.returnToSourceAfterInsert),
-    citationKeyMode
+    citationKeyMode,
+    bibliographyInsertMode
   };
 }
 
@@ -65,4 +69,12 @@ function normalizeCitationKeyMode(citationKeyMode) {
     return normalized;
   }
   return DEFAULT_SETTINGS.citationKeyMode;
+}
+
+function normalizeBibliographyInsertMode(bibliographyInsertMode) {
+  const normalized = String(bibliographyInsertMode ?? DEFAULT_SETTINGS.bibliographyInsertMode).trim().toLowerCase();
+  if (normalized === "append" || normalized === "alphabetical") {
+    return normalized;
+  }
+  return DEFAULT_SETTINGS.bibliographyInsertMode;
 }

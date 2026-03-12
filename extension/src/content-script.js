@@ -8,6 +8,7 @@
     APPLY_INSERTION: "applyInsertion"
   });
   const THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
 
   function findBraceClose(source, openIndex) {
     let depth = 0;
@@ -155,6 +156,11 @@
   const RESPONSE_EVENT = "EZCITE_PAGE_RESPONSE";
   let overlay = null;
   let overlayState = null;
+  console.log("[OverCite content] boot", {
+    hasBrowserApi: Boolean(globalThis.browser),
+    hasChromeApi: Boolean(globalThis.chrome),
+    url: window.location.href
+  });
   injectPageBridge();
   installStyles();
   installRuntimeHooks();
@@ -165,14 +171,20 @@
       return;
     }
     const script = document.createElement("script");
-    script.src = chrome.runtime.getURL("src/page-bridge.js");
+    script.src = extensionApi.runtime.getURL("src/page-bridge.js");
     script.dataset.ezcitePageBridge = "true";
-    script.onload = () => script.remove();
+    script.onload = () => {
+      console.log("[OverCite content] page bridge loaded");
+      script.remove();
+    };
+    script.onerror = () => {
+      console.error("[OverCite content] page bridge failed to load");
+    };
     (document.head || document.documentElement).appendChild(script);
   }
 
   function installRuntimeHooks() {
-    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    extensionApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type !== "ezcite:openOverlay") {
         return false;
       }
@@ -728,7 +740,8 @@
         candidate: {
           ...candidate,
           keyMode: overlayState.settings.citationKeyMode,
-          typedToken: overlayState.citationContext.token
+          typedToken: overlayState.citationContext.token,
+          bibliographyInsertMode: overlayState.settings.bibliographyInsertMode
         }
       }
     }), diagnostics);
@@ -1104,7 +1117,7 @@
 
   async function callRuntime(message) {
     const response = await withTimeout(
-      chrome.runtime.sendMessage(message),
+      extensionApi.runtime.sendMessage(message),
       15000,
       "Timed out waiting for the OverCite background worker."
     );
@@ -1119,7 +1132,13 @@
     return new Promise((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         window.removeEventListener(RESPONSE_EVENT, listener);
-        reject(new Error(`Timed out waiting for page action: ${action}`));
+        const bridgeReady = Boolean(window.__OVERCITE_PAGE_BRIDGE_READY__);
+        console.error("[OverCite content] page action timeout", {
+          action,
+          requestId,
+          bridgeReady
+        });
+        reject(new Error(`Timed out waiting for page action: ${action}${bridgeReady ? "" : " (page bridge not ready)"}`));
       }, timeoutMs);
       const listener = (event) => {
         if (event.detail?.requestId !== requestId) {
@@ -1134,12 +1153,24 @@
         }
       };
       window.addEventListener(RESPONSE_EVENT, listener);
+      const detail = createPageBridgeDetail({ requestId, action, payload });
       window.dispatchEvent(
         new CustomEvent(REQUEST_EVENT, {
-          detail: { requestId, action, payload }
+          detail
         })
       );
     });
+  }
+
+  function createPageBridgeDetail(detail) {
+    if (typeof cloneInto === "function") {
+      try {
+        return cloneInto(detail, window);
+      } catch (error) {
+        console.warn("[OverCite content] cloneInto failed, falling back to raw detail", error);
+      }
+    }
+    return detail;
   }
 
   async function getEditorStateWithRetry(attempts = 5, delayMs = 150) {

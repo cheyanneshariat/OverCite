@@ -7,6 +7,7 @@ import {
   findBibMatch,
   generateInformativeKey,
   generatePreferredKey,
+  insertBibtexEntryAlphabetically,
   parseBibEntries
 } from "../src/core/bibtex.js";
 
@@ -93,4 +94,66 @@ test("applyBibInsertion can keep the typed key instead of adding a title slug", 
   });
   assert.equal(result.finalKey, "Shariat25");
   assert.match(result.updatedBibText, /@ARTICLE\{Shariat25,/);
+});
+
+test("insertBibtexEntryAlphabetically places a new entry before the next larger key", () => {
+  const bibText = `
+@ARTICLE{Goldberg24,
+  title = {A Buddy for Betelgeuse},
+  doi = {10.1111/example1}
+}
+
+@ARTICLE{Joyce20,
+  title = {Standing on the Shoulders of Giants},
+  doi = {10.1111/example2}
+}
+`;
+  const updated = insertBibtexEntryAlphabetically(
+    bibText,
+    `@ARTICLE{ElBadry22,
+  title = {Magnetic Braking Saturates},
+  doi = {10.1111/example3}
+}`,
+    "ElBadry22"
+  );
+  const elBadryIndex = updated.indexOf("@ARTICLE{ElBadry22,");
+  const goldbergIndex = updated.indexOf("@ARTICLE{Goldberg24,");
+  assert.ok(elBadryIndex >= 0);
+  assert.ok(goldbergIndex >= 0);
+  assert.ok(elBadryIndex < goldbergIndex);
+});
+
+test("applyBibInsertion can insert new entries alphabetically by key", () => {
+  const bibText = `
+@ARTICLE{Goldberg24,
+  title = {A Buddy for Betelgeuse},
+  doi = {10.1111/example1}
+}
+
+@ARTICLE{Joyce20,
+  title = {Standing on the Shoulders of Giants},
+  doi = {10.1111/example2}
+}
+`;
+  const result = applyBibInsertion({
+    bibText,
+    bibtex: `@ARTICLE{2022ApJ...000..000E,
+  title = {Magnetic Braking Saturates},
+  doi = {10.1111/example3}
+}`,
+    candidate: {
+      title: "Magnetic Braking Saturates",
+      doi: "10.1111/example3",
+      authors: ["El-Badry, Kareem"],
+      year: 2022,
+      keyMode: "typed",
+      typedToken: "ElBadry22",
+      bibliographyInsertMode: "alphabetical"
+    }
+  });
+  const elBadryIndex = result.updatedBibText.indexOf("@ARTICLE{ElBadry22,");
+  const goldbergIndex = result.updatedBibText.indexOf("@ARTICLE{Goldberg24,");
+  assert.ok(elBadryIndex >= 0);
+  assert.ok(goldbergIndex >= 0);
+  assert.ok(elBadryIndex < goldbergIndex);
 });

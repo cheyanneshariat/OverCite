@@ -14,7 +14,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   shortcutHelpText: "Alt+Shift+E",
   themeMode: "auto",
   returnToSourceAfterInsert: false,
-  citationKeyMode: "informative"
+  citationKeyMode: "informative",
+  bibliographyInsertMode: "append"
 });
 
 export const TITLE_STOPWORDS = new Set([

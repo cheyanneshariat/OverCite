@@ -217,6 +217,14 @@
           </select>
         </label>
         <label>
+          Bibliography Entry Order
+          <span class="hint">Choose whether new BibTeX entries are added at the end of the file or inserted alphabetically by citation key.</span>
+          <select id="bibliography-insert-mode" name="bibliographyInsertMode">
+            <option value="append">Append At End</option>
+            <option value="alphabetical">Insert Alphabetically</option>
+          </select>
+        </label>
+        <label>
           Context Window Characters
           <span class="hint">How many surrounding characters to use when reranking ADS matches. Recommended range: <code>400</code> to <code>600</code>.</span>
           <input id="context-window-chars" name="contextWindowChars" type="number" min="200" max="1200" step="50">

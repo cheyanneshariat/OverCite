@@ -1,19 +1,21 @@
 import { MESSAGE_TYPES } from "./core/constants.js";
 import { normalizeSettings } from "./core/settings.js";
 
+const extensionApi = globalThis.browser ?? globalThis.chrome;
 const form = document.querySelector("#settings-form");
 const status = document.querySelector("#status");
 
 const tokenInput = document.querySelector("#ads-api-token");
 const themeInput = document.querySelector("#theme-mode");
 const citationKeyModeInput = document.querySelector("#citation-key-mode");
+const bibliographyInsertModeInput = document.querySelector("#bibliography-insert-mode");
 const contextInput = document.querySelector("#context-window-chars");
 const shortcutInput = document.querySelector("#shortcut-help-text");
 const returnToSourceInput = document.querySelector("#return-to-source");
 const overridesInput = document.querySelector("#project-overrides");
 
 async function callRuntime(message) {
-  const response = await chrome.runtime.sendMessage(message);
+  const response = await extensionApi.runtime.sendMessage(message);
   if (!response?.ok) {
     throw new Error(response?.error ?? "Unknown OverCite error");
   }
@@ -25,6 +27,7 @@ async function loadSettings() {
   tokenInput.value = settings.adsApiToken ?? "";
   themeInput.value = settings.themeMode ?? "auto";
   citationKeyModeInput.value = settings.citationKeyMode ?? "informative";
+  bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "append";
   contextInput.value = String(settings.contextWindowChars ?? 500);
   shortcutInput.value = settings.shortcutHelpText ?? "";
   returnToSourceInput.checked = Boolean(settings.returnToSourceAfterInsert);
@@ -46,6 +49,7 @@ form.addEventListener("submit", async (event) => {
       adsApiToken: tokenInput.value,
       themeMode: themeInput.value,
       citationKeyMode: citationKeyModeInput.value,
+      bibliographyInsertMode: bibliographyInsertModeInput.value,
       contextWindowChars: contextInput.value,
       shortcutHelpText: shortcutInput.value,
       returnToSourceAfterInsert: returnToSourceInput.checked,

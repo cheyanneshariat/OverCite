@@ -156,6 +156,8 @@ export function parseBibEntries(bibText) {
       type,
       key,
       raw,
+      start: entryStart,
+      end: cursor,
       doi: normalizeLooseText(parseFieldValue(raw, "doi")),
       title: normalizeLooseText(parseFieldValue(raw, "title")),
       adsurl: parseFieldValue(raw, "adsurl"),
@@ -208,6 +210,31 @@ export function appendBibtexEntry(bibText, entryText) {
   return `${trimmedText}\n\n${trimmedEntry}\n`;
 }
 
+function compareKeys(left, right) {
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, { sensitivity: "base" });
+}
+
+export function insertBibtexEntryAlphabetically(bibText, entryText, finalKey) {
+  const entries = parseBibEntries(bibText);
+  if (!entries.length) {
+    return appendBibtexEntry(bibText, entryText);
+  }
+
+  const insertBefore = entries.find((entry) => compareKeys(finalKey, entry.key) < 0);
+  if (!insertBefore) {
+    return appendBibtexEntry(bibText, entryText);
+  }
+
+  const trimmedEntry = entryText.trim();
+  const before = bibText.slice(0, insertBefore.start).trimEnd();
+  const after = bibText.slice(insertBefore.start).trimStart();
+
+  if (!before) {
+    return `${trimmedEntry}\n\n${after}\n`;
+  }
+  return `${before}\n\n${trimmedEntry}\n\n${after}\n`;
+}
+
 export function applyBibInsertion({ bibText, bibtex, candidate }) {
   const entries = parseBibEntries(bibText);
   const match = findBibMatch(entries, candidate);
@@ -226,10 +253,14 @@ export function applyBibInsertion({ bibText, bibtex, candidate }) {
     typedToken: candidate?.typedToken
   });
   const rewrittenBibtex = rewriteBibtexKey(bibtex, finalKey);
+  const insertMode = String(candidate?.bibliographyInsertMode ?? "append").toLowerCase();
+  const updatedBibText = insertMode === "alphabetical"
+    ? insertBibtexEntryAlphabetically(bibText, rewrittenBibtex, finalKey)
+    : appendBibtexEntry(bibText, rewrittenBibtex);
   return {
     finalKey,
     match: null,
-    updatedBibText: appendBibtexEntry(bibText, rewrittenBibtex),
+    updatedBibText,
     rewrittenBibtex
   };
 }

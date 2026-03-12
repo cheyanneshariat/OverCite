@@ -20,3 +20,9 @@ test("normalizeSettings accepts valid citation key modes and defaults invalid on
   assert.equal(normalizeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");
   assert.equal(normalizeSettings({ citationKeyMode: "other" }).citationKeyMode, "informative");
 });
+
+test("normalizeSettings accepts valid bibliography insert modes and defaults invalid ones to append", () => {
+  assert.equal(normalizeSettings({ bibliographyInsertMode: "alphabetical" }).bibliographyInsertMode, "alphabetical");
+  assert.equal(normalizeSettings({ bibliographyInsertMode: "append" }).bibliographyInsertMode, "append");
+  assert.equal(normalizeSettings({ bibliographyInsertMode: "other" }).bibliographyInsertMode, "append");
+});
