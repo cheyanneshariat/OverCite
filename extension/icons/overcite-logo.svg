@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OverCite logo</title>
+  <desc id="desc">Curly braces around a star, inspired by BibTeX and astronomy.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#132033"/>
+      <stop offset="100%" stop-color="#1f2f47"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#f6d9ae" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#f6d9ae" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="232" r="130" fill="url(#glow)"/>
+
+  <text
+    x="164"
+    y="274"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="238"
+    font-weight="700"
+    fill="#f4efe7">{</text>
+
+  <text
+    x="348"
+    y="274"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="238"
+    font-weight="700"
+    fill="#f4efe7">}</text>
+
+  <polygon
+    points="256,132 281,207 360,207 296,252 321,328 256,281 191,328 216,252 152,207 231,207"
+    fill="#f18a62"
+  />
+  <polygon
+    points="256,167 272,214 322,214 281,243 297,291 256,262 215,291 231,243 190,214 240,214"
+    fill="#ffd39c"
+  />
+</svg>
