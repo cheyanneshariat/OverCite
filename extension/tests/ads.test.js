@@ -79,10 +79,14 @@ test("explicit author-year queries lead with first-author year and sentence phra
   );
   assert.equal(
     queries[1],
-    'first_author:"Li" year:2025 AND full:"gamma ray burst afterglows"'
+    'first_author:"Li" year:2025 AND (title:"gamma" OR abstract:"gamma") AND (title:"ray" OR abstract:"ray") AND (title:"burst" OR abstract:"burst") AND (title:"afterglows" OR abstract:"afterglows")'
   );
   assert.equal(
     queries[2],
+    'first_author:"Li" year:2025 AND full:"gamma ray burst afterglows"'
+  );
+  assert.equal(
+    queries[3],
     'first_author:"Li" year:2025'
   );
 });
@@ -139,13 +143,17 @@ test("surname-only queries lead with author+phrase, then phrase-only, before aut
   );
   assert.equal(
     queries[1],
-    'title:"magnetic braking saturates" OR abstract:"magnetic braking saturates"'
+    'author:"El-Badry" AND (title:"magnetic" OR abstract:"magnetic") AND (title:"braking" OR abstract:"braking") AND (title:"saturates" OR abstract:"saturates")'
   );
   assert.equal(
     queries[2],
+    'title:"magnetic braking saturates" OR abstract:"magnetic braking saturates"'
+  );
+  assert.equal(
+    queries[4],
     'author:"El-Badry" AND full:"magnetic braking saturates"'
   );
-  assert.equal(queries[5], 'author:"El-Badry"');
+  assert.equal(queries[7], 'author:"El-Badry"');
 });
 
 test("surname-only queries lead with author plus sentence phrase", () => {
@@ -160,7 +168,7 @@ test("surname-only queries lead with author plus sentence phrase", () => {
   });
 
   assert.equal(
-    queries[2],
+    queries[4],
     'author:"El-Badry" AND full:"magnetic braking saturates"'
   );
 });
@@ -184,14 +192,42 @@ test("common-surname surname-only queries strip filler words and prioritize titl
   );
   assert.equal(
     queries[1],
-    'title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"'
+    'author:"Li" AND (title:"optical" OR abstract:"optical") AND (title:"afterglows" OR abstract:"afterglows") AND (title:"gamma" OR abstract:"gamma") AND (title:"ray" OR abstract:"ray")'
   );
   assert.equal(
     queries[2],
+    'title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"'
+  );
+  assert.equal(
+    queries[4],
     'author:"Li" AND full:"optical afterglows gamma ray bursts"'
   );
   assert.ok(!queries.some((query) => query.includes("others")));
   assert.ok(!queries.some((query) => query.includes("who")));
+});
+
+test("author-year queries strip generic sentence filler and add title/abstract keyword conjunctions", () => {
+  const queries = buildAdsQueries({
+    token: "Cheng25",
+    sentenceText: "There have been recent studies on galaxy mergers using lensing",
+    contextText: "There have been recent studies on galaxy mergers using lensing",
+    parsedKeyHint: {
+      surname: "Cheng",
+      year: 2025
+    }
+  });
+
+  assert.equal(
+    queries[0],
+    'first_author:"Cheng" year:2025 AND (title:"galaxy mergers lensing" OR abstract:"galaxy mergers lensing")'
+  );
+  assert.equal(
+    queries[1],
+    'first_author:"Cheng" year:2025 AND (title:"galaxy" OR abstract:"galaxy") AND (title:"mergers" OR abstract:"mergers") AND (title:"lensing" OR abstract:"lensing")'
+  );
+  assert.ok(!queries.some((query) => query.includes("recent")));
+  assert.ok(!queries.some((query) => query.includes("studies")));
+  assert.ok(!queries.some((query) => query.includes("have")));
 });
 
 test("buildAdsQuery prioritizes author-only search for surname-only keys", () => {

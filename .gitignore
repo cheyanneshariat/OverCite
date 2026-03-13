@@ -7,3 +7,8 @@ example_tex/.DS_Store
 *.out
 *.fdb_latexmk
 *.fls
+local_testing/
+playwright-report/
+test-results/
+/package.json
+/package-lock.json

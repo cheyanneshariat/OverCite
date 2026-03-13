@@ -54,12 +54,12 @@ function buildSurnameVariants(surname) {
 }
 
 function buildContextKeywordQuery(citationContext) {
-  const sentenceKeywords = keywordList(citationContext?.sentenceText ?? "").slice(0, 3);
+  const sentenceKeywords = keywordList(citationContext?.sentenceText ?? "").slice(0, 4);
   const keywords = [...sentenceKeywords];
   if (keywords.length < 2) {
     const contextKeywords = keywordList(citationContext?.contextText ?? "")
       .filter((token) => !sentenceKeywords.includes(token))
-      .slice(0, 2 - keywords.length);
+      .slice(0, 3 - keywords.length);
     keywords.push(...contextKeywords);
   }
   if (keywords.length < 2) {
@@ -67,6 +67,23 @@ function buildContextKeywordQuery(citationContext) {
   }
   return keywords
     .map((token) => `full:"${escapeQueryValue(token)}"`)
+    .join(" AND ");
+}
+
+function buildTitleAbstractKeywordQuery(citationContext) {
+  const sentenceKeywords = keywordList(citationContext?.sentenceText ?? "").slice(0, 4);
+  const keywords = [...sentenceKeywords];
+  if (keywords.length < 2) {
+    const contextKeywords = keywordList(citationContext?.contextText ?? "")
+      .filter((token) => !sentenceKeywords.includes(token))
+      .slice(0, 3 - keywords.length);
+    keywords.push(...contextKeywords);
+  }
+  if (keywords.length < 2) {
+    return null;
+  }
+  return keywords
+    .map((token) => `(title:"${escapeQueryValue(token)}" OR abstract:"${escapeQueryValue(token)}")`)
     .join(" AND ");
 }
 
@@ -95,12 +112,36 @@ function buildSentenceTitleAbstractPhraseQuery(citationContext) {
   return `title:"${escapedPhrase}" OR abstract:"${escapedPhrase}"`;
 }
 
+function buildFirstAuthorYearTitleAbstractKeywordQuery(surname, year, citationContext) {
+  const keywordQuery = buildTitleAbstractKeywordQuery(citationContext);
+  if (!surname || !year || !keywordQuery) {
+    return null;
+  }
+  return `first_author:"${escapeQueryValue(surname)}" year:${year} AND ${keywordQuery}`;
+}
+
+function buildFirstAuthorYearInitialTitleAbstractKeywordQuery(surname, firstInitial, year, citationContext) {
+  const keywordQuery = buildTitleAbstractKeywordQuery(citationContext);
+  if (!surname || !firstInitial || !year || !keywordQuery) {
+    return null;
+  }
+  return `first_author:"${escapeQueryValue(`${surname}, ${firstInitial}*`)}" year:${year} AND ${keywordQuery}`;
+}
+
 function buildAuthorContextQuery(surname, citationContext) {
   const contextQuery = buildContextKeywordQuery(citationContext);
   if (!surname || !contextQuery) {
     return null;
   }
   return `author:"${escapeQueryValue(surname)}" AND ${contextQuery}`;
+}
+
+function buildAuthorTitleAbstractKeywordQuery(surname, citationContext) {
+  const keywordQuery = buildTitleAbstractKeywordQuery(citationContext);
+  if (!surname || !keywordQuery) {
+    return null;
+  }
+  return `author:"${escapeQueryValue(surname)}" AND ${keywordQuery}`;
 }
 
 function buildAuthorSentencePhraseQuery(surname, citationContext) {
@@ -243,6 +284,16 @@ export function buildAdsQueries(citationContext) {
   const primaryFirstAuthorYearInitialContextQuery = hint?.surname && hint?.firstInitial && hint?.year
     ? buildFirstAuthorYearInitialContextQuery(hint.surname, hint.firstInitial, hint.year, citationContext)
     : null;
+  const primaryFirstAuthorYearTitleAbstractKeywordQuery = hint?.surname && hint?.year
+    ? buildFirstAuthorYearTitleAbstractKeywordQuery(hint.surname, hint.year, citationContext)
+    : null;
+  const primaryFirstAuthorYearInitialTitleAbstractKeywordQuery = hint?.surname && hint?.firstInitial && hint?.year
+    ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(hint.surname, hint.firstInitial, hint.year, citationContext)
+    : null;
+  const primaryAuthorTitleAbstractKeywordQuery = hint?.surname
+    ? buildAuthorTitleAbstractKeywordQuery(hint.surname, citationContext)
+    : null;
+  const titleAbstractKeywordQuery = buildTitleAbstractKeywordQuery(citationContext);
 
   if (hint?.surname && hint?.year) {
     if (primaryFirstAuthorYearInitialTitleAbstractPhraseQuery) {
@@ -250,6 +301,12 @@ export function buildAdsQueries(citationContext) {
     }
     if (primaryFirstAuthorYearTitleAbstractPhraseQuery) {
       queries.add(primaryFirstAuthorYearTitleAbstractPhraseQuery);
+    }
+    if (primaryFirstAuthorYearInitialTitleAbstractKeywordQuery) {
+      queries.add(primaryFirstAuthorYearInitialTitleAbstractKeywordQuery);
+    }
+    if (primaryFirstAuthorYearTitleAbstractKeywordQuery) {
+      queries.add(primaryFirstAuthorYearTitleAbstractKeywordQuery);
     }
     if (primaryFirstAuthorYearInitialPhraseQuery) {
       queries.add(primaryFirstAuthorYearInitialPhraseQuery);
@@ -273,6 +330,9 @@ export function buildAdsQueries(citationContext) {
     if (primaryAuthorTitleAbstractPhraseQuery) {
       queries.add(primaryAuthorTitleAbstractPhraseQuery);
     }
+    if (primaryAuthorTitleAbstractKeywordQuery) {
+      queries.add(primaryAuthorTitleAbstractKeywordQuery);
+    }
     if (primaryAuthorPhraseQuery) {
       queries.add(primaryAuthorPhraseQuery);
     }
@@ -292,8 +352,14 @@ export function buildAdsQueries(citationContext) {
     if (primaryAuthorTitleAbstractPhraseQuery) {
       queries.add(primaryAuthorTitleAbstractPhraseQuery);
     }
+    if (primaryAuthorTitleAbstractKeywordQuery) {
+      queries.add(primaryAuthorTitleAbstractKeywordQuery);
+    }
     if (sentenceTitleAbstractPhraseQuery) {
       queries.add(sentenceTitleAbstractPhraseQuery);
+    }
+    if (titleAbstractKeywordQuery) {
+      queries.add(titleAbstractKeywordQuery);
     }
     queries.add(primaryAuthorPhraseQuery);
     if (sentencePhraseQuery) {
@@ -374,6 +440,9 @@ export function buildAdsQueries(citationContext) {
 
   if (sentenceTitleAbstractPhraseQuery) {
     queries.add(sentenceTitleAbstractPhraseQuery);
+  }
+  if (titleAbstractKeywordQuery) {
+    queries.add(titleAbstractKeywordQuery);
   }
   if (sentencePhraseQuery) {
     queries.add(sentencePhraseQuery);
