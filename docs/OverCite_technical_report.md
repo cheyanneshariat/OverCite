@@ -19,6 +19,29 @@ The current implementation is deterministic. It does not use an LLM. Its "contex
 
 This report describes how the current implementation works, what it handles well, where it is adaptive, and where it currently has limitations.
 
+## Logic Diagram
+
+```mermaid
+flowchart TD
+  A["Cursor inside active \\cite token"] --> B["Parse citation hint"]
+  B --> C["Surname / year / optional initial / suffix"]
+  A --> D["Extract immediate sentence"]
+  A --> E["Extract wider context window"]
+  D --> F["Build phrase and keyword concepts"]
+  E --> F
+  C --> G["Generate ADS query ladder"]
+  F --> G
+  G --> H["Fetch ADS candidates across fallbacks"]
+  H --> I["Merge unique bibcodes"]
+  I --> J["Rerank by first author, year, title phrase, abstract phrase, keyword overlap"]
+  J --> K["Show popup results"]
+  K --> L["User selects paper"]
+  L --> M["Export ADS BibTeX"]
+  M --> N["Resolve target bibliography file"]
+  N --> O["Deduplicate or insert BibTeX"]
+  O --> P["Rewrite cite key in TeX"]
+```
+
 ## Browser Packaging
 
 OverCite now ships from a single source tree but generates browser-specific build folders:
@@ -136,6 +159,7 @@ OverCite tries to parse the current citation token into:
 
 - `surname`
 - `year`
+- `firstInitial`
 - `suffix`
 
 The key parser expects patterns of the form:
@@ -144,7 +168,7 @@ The key parser expects patterns of the form:
 [author-ish text][2 to 4 digits][optional suffix]
 ```
 
-Its matching rule is effectively:
+For compact author-year keys, its matching rule is effectively:
 
 ```text
 ^([A-Za-z'`.-]+?)(\d{2,4})([A-Za-z0-9_-]*)$
@@ -158,6 +182,8 @@ Its matching rule is effectively:
 | `MacLeod2025` | `MacLeod` | `2025` | `""` |
 | `Shariat25_10k` | `Shariat` | `2025` | `_10k` |
 | `El-Badry25` | `El-Badry` | `2025` | `""` |
+| `LiW25` | `Li` | `2025` | `""` |
+| `SmithJ05` | `Smith` | `2005` | `""` |
 
 ### Two-digit year handling
 
@@ -171,6 +197,18 @@ As of March 12, 2026:
 - a value too far into the future rolls back by 100 years
 
 This is a heuristic, not a bibliography standard.
+
+### Surname-only parsing
+
+If the token has no year but still looks author-like, OverCite preserves it as an author hint.
+
+Examples:
+
+| Input token | Parsed surname | Parsed year |
+| --- | --- | --- |
+| `El-Badry` | `El-Badry` | `null` |
+| `Li` | `Li` | `null` |
+| `Perez Paolino` | `Perez Paolino` | `null` |
 
 ### What happens if the token does not parse
 
@@ -190,7 +228,7 @@ Examples:
 
 | Input token | Parsed surname | Parsed year | Effect |
 | --- | --- | --- | --- |
-| `Shariat` | `null` | `null` | Generic ADS query |
+| `Shariat` | `Shariat` | `null` | Author-only / surname-only ADS query |
 | `2025Shariat` | `null` | `null` | Generic ADS query |
 | `triplepaper` | `null` | `null` | Generic ADS query |
 
@@ -252,11 +290,102 @@ It also weakens reranking, because candidate author strings are normalized diffe
 
 Those do not match as well as the hyphenated form.
 
-### Important limitation: spaces inside surnames
+### Multi-word surnames
 
-The parser only accepts surname text before the numeric year using letters plus punctuation. It does not explicitly support surname keys with spaces.
+The current parser supports multi-word surnames both with and without a year.
 
-That means styles like:
+Examples:
+
+| Input token | Parsed surname | Parsed year |
+| --- | --- | --- |
+| `Perez Paolino` | `Perez Paolino` | `null` |
+| `Perez Paolino25` | `Perez Paolino` | `2025` |
+| `Van den Bosch25` | `Van den Bosch` | `2025` |
+
+These are turned into ADS author queries that preserve the spaces, for example:
+
+```text
+author:"Perez Paolino"
+first_author:"Perez Paolino" year:2025
+```
+
+### Remaining limitation: arbitrary spelling mistakes
+
+OverCite now handles some structured variation well:
+
+- omitted hyphens such as `ElBadry` via surname-variant fallbacks
+- singular/plural variation such as `binaries` / `binary`
+- some `-ing` / base-form pairs such as `lensing` / `lens`
+
+It is still not a general typo corrector. Arbitrary misspellings or heavily altered surnames may still require the user to type a better author hint.
+
+## Query Strategy
+
+OverCite does not rely on one ADS query. It builds a cautious query ladder and merges unique returned bibcodes before reranking.
+
+The exact ladder depends on the parsed key.
+
+### Author-year keys
+
+For a key such as `Cheng25`, OverCite now tends to lead with:
+
+1. `first_author + year + title/abstract phrase`
+2. `first_author + year + title/abstract keyword conjunction`
+3. `first_author + year + full phrase`
+4. `first_author + year`
+5. broader `author + year` fallbacks
+
+This helps cases where the paper title uses the right scientific concepts but not always the same exact word order.
+
+### Surname-only keys
+
+For a key such as `El-Badry`, `Li`, or `Perez Paolino`, OverCite now prefers `first_author` before broader `author` queries.
+
+For example, for:
+
+```tex
+Young stellar objects are important for studying stellar populations \citep{Perez Paolino}.
+```
+
+the top of the query ladder is closer to:
+
+```text
+first_author:"Perez Paolino" AND (title:"young stellar objects" OR abstract:"young stellar objects")
+```
+
+before broader full-sentence or all-author fallbacks.
+
+This is important because many surname-only lookups should strongly prefer the first author when the user has typed a plausible author name.
+
+## Local Sentence Priority
+
+Even when the wider context window is large, OverCite intentionally prioritizes the immediate sentence.
+
+It does this by:
+
+- building sentence phrases before wider-context fallbacks
+- using a short leading phrase such as `young stellar objects`
+- using title/abstract keyword conjunctions derived from the sentence
+- only falling back to broader context if the sentence is too sparse
+
+This design is intended to keep the lookup focused on the scientific meaning of the citation sentence rather than whatever happened to appear in the surrounding paragraph.
+
+## Morphology Handling
+
+OverCite now expands a narrow set of conservative morphology variants for retrieval and reranking.
+
+Examples:
+
+- `mergers -> merger`
+- `binaries -> binary`
+- `afterglows -> afterglow`
+- `lensing -> lens`
+- `studying -> study`
+- `saturates -> saturate`
+
+This is used only in query expansion and keyword-based reranking. Exact sentence-phrase matches are still preferred when they work.
+
+The expansion is intentionally conservative. The goal is to improve recall for nearby scientific wording without turning the system into a general stemmer that produces nonsense tokens.
 
 - `Van der Marel25`
 - `de Mink25`

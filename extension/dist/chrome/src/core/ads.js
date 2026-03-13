@@ -534,6 +534,32 @@ export function buildAdsQueries(citationContext) {
   if (hint?.surname) {
     const surnameVariants = buildSurnameVariants(hint.surname);
     for (const surname of surnameVariants) {
+      if (!hint.year) {
+        const firstAuthorLeadingTitleAbstractPhraseQuery = buildFirstAuthorLeadingTitleAbstractPhraseQuery(surname, citationContext);
+        if (firstAuthorLeadingTitleAbstractPhraseQuery) {
+          queries.add(firstAuthorLeadingTitleAbstractPhraseQuery);
+        }
+        const firstAuthorTitleAbstractPhraseQuery = buildFirstAuthorTitleAbstractPhraseQuery(surname, citationContext);
+        if (firstAuthorTitleAbstractPhraseQuery) {
+          queries.add(firstAuthorTitleAbstractPhraseQuery);
+        }
+        const firstAuthorTitleAbstractKeywordQuery = buildFirstAuthorTitleAbstractKeywordQuery(surname, citationContext);
+        if (firstAuthorTitleAbstractKeywordQuery) {
+          queries.add(firstAuthorTitleAbstractKeywordQuery);
+        }
+        const firstAuthorPhraseQuery = buildFirstAuthorSentencePhraseQuery(surname, citationContext);
+        if (firstAuthorPhraseQuery) {
+          queries.add(firstAuthorPhraseQuery);
+        }
+        const firstAuthorContextQuery = buildFirstAuthorContextQuery(surname, citationContext);
+        if (firstAuthorContextQuery) {
+          queries.add(firstAuthorContextQuery);
+        }
+        const firstAuthorQuery = buildFirstAuthorQuery(surname);
+        if (firstAuthorQuery) {
+          queries.add(firstAuthorQuery);
+        }
+      }
       const authorTitleAbstractPhraseQuery = buildAuthorTitleAbstractPhraseQuery(surname, citationContext);
       if (authorTitleAbstractPhraseQuery) {
         queries.add(authorTitleAbstractPhraseQuery);
