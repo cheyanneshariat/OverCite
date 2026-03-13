@@ -1,0 +1,89 @@
+<svg width="1200" height="1320" viewBox="0 0 1200 1320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .bg { fill: #f6f3ee; }
+      .panel { fill: #fffdf9; stroke: #d8cfc2; stroke-width: 2; rx: 18; }
+      .box { fill: #ffffff; stroke: #203447; stroke-width: 2; rx: 16; }
+      .accent { fill: #f3e0d3; stroke: #a45b35; stroke-width: 2; rx: 16; }
+      .text { fill: #1f2a33; font-family: Arial, sans-serif; font-size: 22px; font-weight: 700; }
+      .subtext { fill: #465361; font-family: Arial, sans-serif; font-size: 17px; font-weight: 600; }
+      .subtext-small { fill: #465361; font-family: Arial, sans-serif; font-size: 15px; font-weight: 600; }
+      .arrow { stroke: #6d7680; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .title { fill: #18212a; font-family: Arial, sans-serif; font-size: 34px; font-weight: 800; }
+      .kicker { fill: #8e4f31; font-family: Arial, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: 2px; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10" fill="#6d7680"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="1320"/>
+  <rect class="panel" x="24" y="24" width="1152" height="1272" rx="24"/>
+
+  <text class="kicker" x="60" y="72">OVERCITE</text>
+  <text class="title" x="60" y="116">Candidate Ranking Flow</text>
+
+  <rect class="box" x="390" y="150" width="420" height="88" rx="16"/>
+  <text class="text" x="600" y="192" text-anchor="middle">ADS Candidate Enters Pool</text>
+  <text class="subtext" x="600" y="220" text-anchor="middle">title, abstract, authors, year, bibcode</text>
+
+  <rect class="box" x="390" y="280" width="420" height="88" rx="16"/>
+  <text class="text" x="600" y="322" text-anchor="middle">Start Base Score</text>
+  <text class="subtext" x="600" y="350" text-anchor="middle">initialize score before weighting signals</text>
+
+  <rect class="accent" x="78" y="430" width="354" height="120" rx="16"/>
+  <text class="text" x="255" y="472" text-anchor="middle">Author Match</text>
+  <text class="subtext" x="255" y="500" text-anchor="middle">surname or multi-word surname</text>
+  <text class="subtext-small" x="255" y="522" text-anchor="middle">optional first-initial support</text>
+  <text class="subtext-small" x="255" y="542" text-anchor="middle">for common names</text>
+
+  <rect class="accent" x="435" y="430" width="330" height="112" rx="16"/>
+  <text class="text" x="600" y="472" text-anchor="middle">First-Author Boost</text>
+  <text class="subtext" x="600" y="500" text-anchor="middle">preferred over later-author matches</text>
+  <text class="subtext-small" x="600" y="524" text-anchor="middle">especially important for common surnames</text>
+
+  <rect class="accent" x="780" y="430" width="330" height="112" rx="16"/>
+  <text class="text" x="945" y="472" text-anchor="middle">Year Match</text>
+  <text class="subtext" x="945" y="500" text-anchor="middle">explicit cite-year strongly preferred</text>
+  <text class="subtext-small" x="945" y="524" text-anchor="middle">nearby-year fallbacks are weaker</text>
+
+  <rect class="box" x="120" y="620" width="300" height="116" rx="16"/>
+  <text class="text" x="270" y="662" text-anchor="middle">Immediate Sentence</text>
+  <text class="subtext" x="270" y="690" text-anchor="middle">title phrase overlap and</text>
+  <text class="subtext" x="270" y="714" text-anchor="middle">keyword overlap weighted highest</text>
+
+  <rect class="box" x="420" y="620" width="360" height="122" rx="16"/>
+  <text class="text" x="600" y="662" text-anchor="middle">Broader Context</text>
+  <text class="subtext" x="600" y="690" text-anchor="middle">useful when the sentence is sparse,</text>
+  <text class="subtext" x="600" y="714" text-anchor="middle">but weighted below sentence meaning</text>
+
+  <rect class="box" x="780" y="620" width="300" height="116" rx="16"/>
+  <text class="text" x="930" y="662" text-anchor="middle">Morphology Variants</text>
+  <text class="subtext" x="930" y="690" text-anchor="middle">mergers→merger, binaries→binary,</text>
+  <text class="subtext" x="930" y="714" text-anchor="middle">afterglows→afterglow, lensing→lens</text>
+
+  <rect class="accent" x="150" y="814" width="900" height="140" rx="18"/>
+  <text class="text" x="600" y="862" text-anchor="middle">Combine Positive and Negative Signals</text>
+  <text class="subtext-small" x="600" y="892" text-anchor="middle">author structure, year, title/abstract overlap, sentence priority, morphology support</text>
+  <text class="subtext-small" x="600" y="916" text-anchor="middle">and collaboration/noise penalties in explicit author-year cases</text>
+
+  <rect class="box" x="330" y="1028" width="540" height="104" rx="16"/>
+  <text class="text" x="600" y="1070" text-anchor="middle">Compute Final Score</text>
+  <text class="subtext" x="600" y="1098" text-anchor="middle">sort candidates from most likely to least likely</text>
+
+  <rect class="accent" x="270" y="1180" width="660" height="76" rx="16"/>
+  <text class="text" x="600" y="1222" text-anchor="middle">Show Ranked Results in the OverCite Popup</text>
+
+  <path class="arrow" d="M600 238V268" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M520 368L320 418" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 368V418" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M680 368L880 418" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M270 540V606" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 540V606" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M930 540V606" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M270 736L470 808" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 736V808" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M930 736L730 808" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 952V1016" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 1132V1168" marker-end="url(#arrow)"/>
+</svg>
