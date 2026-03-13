@@ -131,14 +131,16 @@ test("surname-only queries lead with author+phrase, then phrase-only, before aut
 
   assert.equal(
     queries[0],
-    'author:"El-Badry" AND (title:"magnetic braking saturates" OR abstract:"magnetic braking saturates")'
+    'first_author:"El-Badry" AND (title:"magnetic braking saturates" OR abstract:"magnetic braking saturates")'
   );
-  assert.match(queries[1], /author:"El-Badry"/);
+  assert.match(queries[1], /first_author:"El-Badry"/);
   assert.match(queries[1], /braking/);
-  assert.match(queries[1], /saturate/);
+  assert.match(queries[1], /brake/);
+  assert.match(queries[2], /first_author:"El-Badry"/);
   assert.ok(queries.includes('title:"magnetic braking saturates" OR abstract:"magnetic braking saturates"'));
   assert.ok(queries.includes('author:"El-Badry" AND full:"magnetic braking saturates"'));
   assert.ok(queries.includes('author:"El-Badry"'));
+  assert.ok(!queries.some((query) => /\bbrak\b/.test(query)));
 });
 
 test("surname-only queries lead with author plus sentence phrase", () => {
@@ -170,14 +172,39 @@ test("common-surname surname-only queries strip filler words and prioritize titl
 
   assert.equal(
     queries[0],
-    'author:"Li" AND (title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts")'
+    'first_author:"Li" AND (title:"optical afterglows gamma" OR abstract:"optical afterglows gamma")'
   );
-  assert.match(queries[1], /author:"Li"/);
+  assert.match(queries[1], /first_author:"Li"/);
   assert.match(queries[1], /afterglow/);
   assert.ok(queries.includes('title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"'));
   assert.ok(queries.includes('author:"Li" AND full:"optical afterglows gamma ray bursts"'));
   assert.ok(!queries.some((query) => query.includes("others")));
   assert.ok(!queries.some((query) => query.includes("who")));
+});
+
+test("multi-word surname-only queries prioritize first-author and the leading scientific phrase", () => {
+  const queries = buildAdsQueries({
+    token: "Perez Paolino",
+    sentenceText: "Young stellar objects are important for studying stellar populations",
+    contextText: "Young stellar objects are important for studying stellar populations",
+    parsedKeyHint: {
+      surname: "Perez Paolino",
+      year: null,
+      firstInitial: null,
+      suffix: ""
+    }
+  });
+
+  assert.equal(
+    queries[0],
+    'first_author:"Perez Paolino" AND (title:"young stellar objects" OR abstract:"young stellar objects")'
+  );
+  assert.equal(
+    queries[1],
+    'first_author:"Perez Paolino" AND (title:"young stellar objects populations" OR abstract:"young stellar objects populations")'
+  );
+  assert.ok(queries.some((query) => query === 'first_author:"Perez Paolino"'));
+  assert.ok(queries.some((query) => query === 'author:"Perez Paolino"'));
 });
 
 test("author-year queries strip generic sentence filler and add title/abstract keyword conjunctions", () => {
