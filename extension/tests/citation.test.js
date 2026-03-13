@@ -55,6 +55,19 @@ test("parseCitationKeyHint treats short common surnames as author hints", () => 
   assert.equal(surnameOnly.year, null);
 });
 
+test("parseCitationKeyHint supports multi-word surnames with and without a year", () => {
+  const surnameOnly = parseCitationKeyHint("Perez Paolino");
+  const withYear = parseCitationKeyHint("Perez Paolino25");
+
+  assert.equal(surnameOnly.surname, "Perez Paolino");
+  assert.equal(surnameOnly.firstInitial, null);
+  assert.equal(surnameOnly.year, null);
+
+  assert.equal(withYear.surname, "Perez Paolino");
+  assert.equal(withYear.firstInitial, null);
+  assert.equal(withYear.year, 2025);
+});
+
 test("findCitationAtCursor removes the active cite token from sentence and context text", () => {
   const source = "People find that magnetic braking saturates \\citep{El-Badry}.";
   const cursorIndex = source.indexOf("El-Badry") + 4;

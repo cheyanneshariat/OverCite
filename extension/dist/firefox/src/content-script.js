@@ -32,13 +32,14 @@
       return null;
     }
     const compact = normalized.replace(/[{}\s]/g, "");
-    const match = compact.match(/^([A-Za-z'`.-]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
+    const spaced = normalized.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+    const match = spaced.match(/^([A-Za-z'`.\-\s]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
     if (!match) {
-      const surnameOnlyMatch = compact.match(/^[A-Za-z'`.-]{2,}$/);
+      const surnameOnlyMatch = spaced.match(/^[A-Za-z'`.\-\s]{2,}$/);
       return {
         raw: normalized,
         normalized: compact,
-        surname: surnameOnlyMatch ? compact.replace(/[^A-Za-z-]/g, "") || null : null,
+        surname: surnameOnlyMatch ? parseAuthorHint(spaced).surname : null,
         firstInitial: null,
         year: null,
         suffix: ""
@@ -57,7 +58,22 @@
   }
 
   function parseAuthorHint(rawSurnameToken) {
-    const cleaned = String(rawSurnameToken ?? "").replace(/[^A-Za-z-]/g, "");
+    const preserved = String(rawSurnameToken ?? "")
+      .replace(/[^A-Za-z\-'\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!preserved) {
+      return { surname: null, firstInitial: null };
+    }
+
+    if (preserved.includes(" ")) {
+      return {
+        surname: preserved,
+        firstInitial: null
+      };
+    }
+
+    const cleaned = preserved.replace(/[^A-Za-z-]/g, "");
     if (!cleaned) {
       return { surname: null, firstInitial: null };
     }
