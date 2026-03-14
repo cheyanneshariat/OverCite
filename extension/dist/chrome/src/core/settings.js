@@ -43,6 +43,7 @@ export function normalizeSettings(rawSettings = {}) {
   const themeMode = normalizeThemeMode(rawSettings.themeMode);
   const citationKeyMode = normalizeCitationKeyMode(rawSettings.citationKeyMode);
   const bibliographyInsertMode = normalizeBibliographyInsertMode(rawSettings.bibliographyInsertMode);
+  const defaultSearchMode = normalizeDefaultSearchMode(rawSettings.defaultSearchMode);
   return {
     adsApiToken: String(rawSettings.adsApiToken ?? DEFAULT_SETTINGS.adsApiToken).trim(),
     defaultProjectBibFileOverride: overrides,
@@ -51,7 +52,8 @@ export function normalizeSettings(rawSettings = {}) {
     themeMode,
     returnToSourceAfterInsert: Boolean(rawSettings.returnToSourceAfterInsert ?? DEFAULT_SETTINGS.returnToSourceAfterInsert),
     citationKeyMode,
-    bibliographyInsertMode
+    bibliographyInsertMode,
+    defaultSearchMode
   };
 }
 
@@ -77,4 +79,12 @@ function normalizeBibliographyInsertMode(bibliographyInsertMode) {
     return normalized;
   }
   return DEFAULT_SETTINGS.bibliographyInsertMode;
+}
+
+function normalizeDefaultSearchMode(defaultSearchMode) {
+  const normalized = String(defaultSearchMode ?? DEFAULT_SETTINGS.defaultSearchMode).trim().toLowerCase();
+  if (normalized === "contextual" || normalized === "simple") {
+    return normalized;
+  }
+  return DEFAULT_SETTINGS.defaultSearchMode;
 }

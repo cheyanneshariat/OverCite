@@ -285,7 +285,7 @@
         position: fixed;
         inset: auto 20px 20px auto;
         z-index: 2147483647;
-        width: min(540px, calc(100vw - 24px));
+        width: min(470px, calc(100vw - 24px));
         border-radius: 22px;
         border: 1px solid var(--ez-border);
         box-shadow: 0 24px 90px rgba(4, 9, 15, 0.28);
@@ -329,16 +329,16 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
-        padding: 18px 20px 14px;
+        padding: 15px 16px 11px;
         border-bottom: 1px solid var(--ez-panel-border);
         background: linear-gradient(180deg, var(--ez-soft-panel), transparent);
       }
 
       .ezcite-kicker {
         margin: 0 0 8px;
-        font-size: 0.72rem;
+        font-size: 1.45rem;
         font-weight: 800;
-        letter-spacing: 0.18em;
+        letter-spacing: 0.02em;
         color: var(--ez-muted);
       }
 
@@ -377,9 +377,9 @@
       }
 
       .ezcite-body {
-        padding: 14px;
+        padding: 10px;
         display: grid;
-        gap: 12px;
+        gap: 9px;
         max-height: 75vh;
         overflow: auto;
       }
@@ -414,6 +414,7 @@
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
+        justify-content: flex-end;
       }
 
       .ezcite-action {
@@ -425,6 +426,22 @@
         font-weight: 700;
         color: var(--ez-ink);
         background: var(--ez-card-bg);
+      }
+
+      .ezcite-action-tertiary {
+        padding: 6px 10px;
+        font-size: 0.77rem;
+        font-weight: 700;
+        color: var(--ez-muted);
+        background: var(--ez-soft-panel);
+        border-color: var(--ez-panel-border);
+      }
+
+      .ezcite-action-tertiary:hover,
+      .ezcite-action-tertiary:focus-visible {
+        background: var(--ez-soft-panel);
+        color: var(--ez-ink);
+        outline: none;
       }
 
       .ezcite-action-primary {
@@ -522,7 +539,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 12px 20px 16px;
+        padding: 9px 16px 12px;
         border-top: 1px solid var(--ez-panel-border);
         background: linear-gradient(180deg, transparent, var(--ez-soft-panel));
         color: var(--ez-muted);
@@ -650,8 +667,9 @@
     footer.innerHTML = `<span>Pick a paper to rewrite the cite key and update your bibliography.</span><span><strong>Trigger:</strong> ${escapeHtml(shortcutText)}</span>`;
   }
 
-  async function startLookup() {
+  async function startLookup(searchMode = "contextual") {
     const settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
+    const resolvedSearchMode = normalizeSearchMode(searchMode, settings.defaultSearchMode);
     const editorState = await getEditorStateWithRetry();
     const citationContext = findCitationAtCursor(editorState.text, editorState.from, settings.contextWindowChars);
     if (!citationContext) {
@@ -660,7 +678,8 @@
 
     overlayState = {
       settings,
-      citationContext,
+      citationContext: { ...citationContext, searchMode: resolvedSearchMode },
+      searchMode: resolvedSearchMode,
       originalFileName: editorState.fileName || readActiveFileName(),
       originalEditorState: editorState,
       projectState: {
@@ -673,23 +692,27 @@
 
     renderOverlay({
       subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
-      status: "Searching NASA ADS...",
-      shortcutText: settings.shortcutHelpText
+      status: resolvedSearchMode === "simple" ? "Running simple ADS search..." : "Searching NASA ADS...",
+      shortcutText: settings.shortcutHelpText,
+      actions: buildSearchModeActions(citationContext, resolvedSearchMode)
     });
     applyOverlayTheme(settings.themeMode ?? "auto");
 
     const results = await callRuntime({
       type: MESSAGE_TYPES.SEARCH_ADS,
-      citationContext
+      citationContext: { ...citationContext, searchMode: resolvedSearchMode }
     });
 
     overlayState.results = results;
     if (!results.length) {
       renderOverlay({
         subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
-        status: "No ADS records matched the current citation token and context.",
+        status: resolvedSearchMode === "simple"
+          ? "No ADS records matched the simple token-only search."
+          : "No ADS records matched the current citation token and context.",
         shortcutText: settings.shortcutHelpText,
-        error: true
+        error: true,
+        actions: buildSearchModeActions(citationContext, resolvedSearchMode)
       });
       return;
     }
@@ -697,8 +720,41 @@
     renderOverlay({
       subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
       results,
-      shortcutText: settings.shortcutHelpText
+      shortcutText: settings.shortcutHelpText,
+      actions: buildSearchModeActions(citationContext, resolvedSearchMode)
     });
+  }
+
+  function normalizeSearchMode(...candidates) {
+    for (const candidate of candidates) {
+      const normalized = String(candidate ?? "").trim().toLowerCase();
+      if (normalized === "contextual" || normalized === "simple") {
+        return normalized;
+      }
+    }
+    return "contextual";
+  }
+
+  function buildSearchModeActions(citationContext, searchMode) {
+    if (!citationContext?.token?.trim()) {
+      return [];
+    }
+    if (searchMode === "simple") {
+      return [
+        {
+          label: "Back to contextual",
+          kind: "tertiary",
+          onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
+        }
+      ];
+    }
+    return [
+      {
+        label: "Simple search",
+        kind: "tertiary",
+        onClick: () => startLookup("simple").catch((error) => toast(error.message, "error"))
+      }
+    ];
   }
 
   async function selectCandidate(candidate) {

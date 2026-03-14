@@ -225,6 +225,14 @@
           </select>
         </label>
         <label>
+          Default Search Mode
+          <span class="hint">Choose which mode opens first when you trigger OverCite. Contextual uses the local sentence by default. Simple search is still available as a small toggle in the popup.</span>
+          <select id="default-search-mode" name="defaultSearchMode">
+            <option value="contextual">Contextual</option>
+            <option value="simple">Simple Search</option>
+          </select>
+        </label>
+        <label>
           Context Window Characters
           <span class="hint">How many surrounding characters to use when reranking ADS matches. Recommended range: <code>400</code> to <code>600</code>.</span>
           <input id="context-window-chars" name="contextWindowChars" type="number" min="200" max="1200" step="50">

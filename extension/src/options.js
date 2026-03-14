@@ -9,6 +9,7 @@ const tokenInput = document.querySelector("#ads-api-token");
 const themeInput = document.querySelector("#theme-mode");
 const citationKeyModeInput = document.querySelector("#citation-key-mode");
 const bibliographyInsertModeInput = document.querySelector("#bibliography-insert-mode");
+const defaultSearchModeInput = document.querySelector("#default-search-mode");
 const contextInput = document.querySelector("#context-window-chars");
 const shortcutInput = document.querySelector("#shortcut-help-text");
 const returnToSourceInput = document.querySelector("#return-to-source");
@@ -28,6 +29,7 @@ async function loadSettings() {
   themeInput.value = settings.themeMode ?? "auto";
   citationKeyModeInput.value = settings.citationKeyMode ?? "informative";
   bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "append";
+  defaultSearchModeInput.value = settings.defaultSearchMode ?? "contextual";
   contextInput.value = String(settings.contextWindowChars ?? 500);
   shortcutInput.value = settings.shortcutHelpText ?? "";
   returnToSourceInput.checked = Boolean(settings.returnToSourceAfterInsert);
@@ -50,6 +52,7 @@ form.addEventListener("submit", async (event) => {
       themeMode: themeInput.value,
       citationKeyMode: citationKeyModeInput.value,
       bibliographyInsertMode: bibliographyInsertModeInput.value,
+      defaultSearchMode: defaultSearchModeInput.value,
       contextWindowChars: contextInput.value,
       shortcutHelpText: shortcutInput.value,
       returnToSourceAfterInsert: returnToSourceInput.checked,

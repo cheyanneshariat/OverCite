@@ -15,7 +15,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   themeMode: "auto",
   returnToSourceAfterInsert: false,
   citationKeyMode: "informative",
-  bibliographyInsertMode: "append"
+  bibliographyInsertMode: "append",
+  defaultSearchMode: "contextual"
 });
 
 export const TITLE_STOPWORDS = new Set([
@@ -73,6 +74,7 @@ export const CONTEXT_STOPWORDS = new Set([
   "studying",
   "that",
   "their",
+  "they",
   "these",
   "this",
   "those",
@@ -84,6 +86,7 @@ export const CONTEXT_STOPWORDS = new Set([
   "who",
   "work",
   "works",
+  "found",
   "other",
   "others",
   "also"

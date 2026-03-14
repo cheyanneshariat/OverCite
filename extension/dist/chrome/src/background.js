@@ -137,7 +137,7 @@ async function fetchAdsDocs(query, adsApiToken) {
   const url = new URL("https://api.adsabs.harvard.edu/v1/search/query");
   url.searchParams.set("q", query);
   url.searchParams.set("rows", "12");
-  url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi");
+  url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,citation_count");
 
   const response = await fetch(url, {
     headers: {
