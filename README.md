@@ -3,7 +3,12 @@
 OverCite is a browser extension for Overleaf that searches NASA ADS from inside LaTeX citation commands, shows likely paper matches, and inserts BibTeX into the correct project bibliography file. 
 It can also be used as a VSCode extension for those using local TeX installations.
 
-## Repository layout
+It supports two search modes:
+
+- `Contextual` uses the local sentence plus the typed cite key
+- `Simple search` is a fallback for non-empty keys that ignores sentence context and ranks matching author/year results by citation count
+
+## Repository
 
 - `extension/`: browser extension source, tests, and generated browser-specific builds
 - `extension/dist/chrome/`: generated Chrome / Chromium extension folder
@@ -11,7 +16,7 @@ It can also be used as a VSCode extension for those using local TeX installation
 - `vscode-extension/`: separate VS Code extension package for local LaTeX workflows
 - `docs/`: technical report, demo assets, and PDF overview
 
-## Step 0: Get The Files
+## Get The Files
 
 Before loading OverCite in Chrome or Firefox, get a local copy of this repository.
 
@@ -29,7 +34,7 @@ git clone https://github.com/cheyanneshariat/OverCite.git
 cd OverCite
 ```
 
-## How To
+## Install
 
 ### Chrome
 
@@ -73,7 +78,7 @@ cd OverCite
 
 - Short tech demo video: [docs/assets/OverCite_demo.mov](docs/assets/OverCite_demo.mov)
 
-## Citation Flow
+## Use OverCite
 
 1. In Overleaf source mode, type a rough citation key such as `\citep{Shariat25}` or `\citep{Shariat}`.
 2. Put the cursor inside the citation braces on the key you want OverCite to resolve.
@@ -90,6 +95,8 @@ Recommended citation patterns, from strongest to weakest:
 - `\citep{Shariat2025}`: also supported if you prefer a four-digit year
 - `\citep{Shariat}`: useful when you know the author but not the year
 - `\citep{}`: last resort, where OverCite searches from the local sentence context alone
+
+If the contextual result list looks wrong for a non-empty key, use the small `Simple search` toggle in the popup, or set `Default Search Mode` in the extension settings.
 
 ## Settings
 
@@ -108,7 +115,7 @@ Current settings include:
 
 The popup also includes a small `Simple search` fallback for non-empty citation keys. It ignores local sentence context and reruns the lookup from the typed author/year hint alone, then orders the matching results by citation count.
 
-## Local testing
+## Development
 
 ```bash
 cd extension
@@ -133,7 +140,7 @@ The repo also keeps a local-only running benchmark suite in `local_testing/bench
 - Privacy: [PRIVACY.md](PRIVACY.md)
 - Security: [SECURITY.md](SECURITY.md)
 
-## Updating OverCite
+## Update
 
 If you download a newer version of the repository later, the update step depends on where you use OverCite.
 
