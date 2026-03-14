@@ -1,4 +1,4 @@
-# OverCite {*}
+# OverCite
 
 OverCite is a browser extension for Overleaf that searches NASA ADS from inside LaTeX citation commands, shows likely paper matches, and inserts BibTeX into the correct project bibliography file. 
 It can also be used as a VSCode extension for those using local TeX installations.
