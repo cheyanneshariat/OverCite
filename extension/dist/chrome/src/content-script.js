@@ -584,8 +584,8 @@
     overlay.innerHTML = `
       <div class="ezcite-header">
         <div>
-          <p class="ezcite-kicker">NASA ADS Lookup</p>
-          <h2 class="ezcite-title">OverCite</h2>
+          <p class="ezcite-kicker">OverCite</p>
+          <h2 class="ezcite-title">NASA ADS Lookup</h2>
           <p class="ezcite-subtitle"></p>
         </div>
         <button type="button" class="ezcite-close" aria-label="Close OverCite">×</button>
