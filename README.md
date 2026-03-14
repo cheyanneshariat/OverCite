@@ -18,7 +18,7 @@ It supports two search modes:
 
 ## Get The Files
 
-Before loading OverCite in Chrome or Firefox, get a local copy of this repository.
+Before loading OverCite in Chrome, Firefox, or VSCode, get a local copy of this repository.
 
 Option 1: Download from GitHub
 
