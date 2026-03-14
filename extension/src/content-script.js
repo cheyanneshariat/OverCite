@@ -667,7 +667,7 @@
     footer.innerHTML = `<span>Pick a paper to rewrite the cite key and update your bibliography.</span><span><strong>Trigger:</strong> ${escapeHtml(shortcutText)}</span>`;
   }
 
-  async function startLookup(searchMode = "contextual") {
+  async function startLookup(searchMode) {
     const settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
     const resolvedSearchMode = normalizeSearchMode(searchMode, settings.defaultSearchMode);
     const editorState = await getEditorStateWithRetry();
