@@ -5,8 +5,8 @@ It can also be used as a VSCode extension for those using local TeX installation
 
 It supports two search modes:
 
-- `Contextual` uses the local sentence plus the typed cite key
-- `Simple search` is a fallback for non-empty keys that ignores sentence context and ranks matching author/year results by citation count
+- `Contextual` uses the local sentence + typed cite key
+- `Simple search` simply searches author/year and sorts by citation count (no context used)
 
 ## Repository
 
