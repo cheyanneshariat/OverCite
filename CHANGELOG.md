@@ -3,6 +3,9 @@
 ## Unreleased
 
 - Keep release notes short and move the full technical detail into the docs and tests.
+- Added `Simple search` as an explicit fallback mode.
+- Browser/Overleaf version: small popup toggle plus a default search-mode setting.
+- VS Code version: dedicated `Resolve Citation (Simple Search)` command, optional default search-mode setting, and `Alt+Shift+S` shortcut.
 
 ## 0.1.1
 
