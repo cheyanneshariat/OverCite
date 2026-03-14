@@ -7,6 +7,7 @@ OverCite is a browser extension for Overleaf that searches NASA ADS from inside 
 - `extension/`: browser extension source, tests, and generated browser-specific builds
 - `extension/dist/chrome/`: generated Chrome / Chromium extension folder
 - `extension/dist/firefox/`: generated Firefox extension folder
+- `vscode-extension/`: separate VS Code extension package for local LaTeX workflows
 - `docs/`: technical report, demo assets, and PDF overview
 
 ## Step 0: Get The Files
@@ -50,7 +51,17 @@ cd OverCite
 6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 7. Put the cursor inside the citation key and press `Alt+Shift+E`
 
-*sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), go to Account --> Settings --> API Token
+### VS Code
+
+1. In normal VS Code, run `Extensions: Install from VSIX...`
+2. Select `vscode-extension/overcite-vscode-0.1.0.vsix`
+3. Reload VS Code
+4. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
+5. Open Settings, search `OverCite`, and paste your NASA ADS API token*
+6. Put the cursor inside the citation key and and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
+7. Review the dropdown results and choose the paper you want
+
+*sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), then go to Account --> Settings --> API Token
 
 ## Demo
 
@@ -64,6 +75,15 @@ cd OverCite
 4. Review the OverCite results popup, including the title and abstract snippet.
 5. Click the paper you want.
 6. OverCite will update the active citation key and insert the BibTeX entry into the project bibliography file.
+
+## Examples
+
+Recommended citation patterns, from strongest to weakest:
+
+- `\citep{Shariat25}`: best default, combining first author and year
+- `\citep{Shariat2025}`: also supported if you prefer a four-digit year
+- `\citep{Shariat}`: useful when you know the author but not the year
+- `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
 ## Settings
 
@@ -90,6 +110,7 @@ npm test
 ## Documentation
 
 - Logic flow: [docs/OverCite_logic_flow.md](docs/OverCite_logic_flow.md)
+- Ranking flow: [docs/OverCite_ranking_flow.md](docs/OverCite_ranking_flow.md)
 - Technical report: [docs/OverCite_technical_report.md](docs/OverCite_technical_report.md)
 - PDF report: [docs/OverCite_technical_report.pdf](docs/OverCite_technical_report.pdf)
 
