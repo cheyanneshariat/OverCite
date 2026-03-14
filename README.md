@@ -5,8 +5,8 @@ It can also be used as a VSCode extension for those using local TeX installation
 
 It supports two search modes:
 
-- `Contextual` uses the local sentence + typed cite key
-- `Simple search` simply searches author/year and sorts by citation count (no context used)
+1. `Contextual` uses the local sentence + typed cite key
+2. `Simple search` simply searches author/year and sorts by citation count (no context used)
 
 ## Repository
 
@@ -46,7 +46,7 @@ cd OverCite
 6. Paste your NASA ADS API token*, click `Save Settings` at the bottom
 7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 8. Put the cursor inside the citation key and press `Alt+Shift+E`
-   - Mac note: `Alt` means the `Option` key
+   - Mac users: `Alt` means the `Option` key
 
 ### Firefox
 
@@ -142,7 +142,7 @@ The repo also keeps a local-only running benchmark suite in `local_testing/bench
 - Privacy: [PRIVACY.md](PRIVACY.md)
 - Security: [SECURITY.md](SECURITY.md)
 
-## Update
+## Updating
 
 If you download a newer version of the repository later, the update step depends on where you use OverCite.
 
