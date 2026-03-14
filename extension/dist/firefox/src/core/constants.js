@@ -55,6 +55,8 @@ export const CONTEXT_STOPWORDS = new Set([
   "here",
   "however",
   "important",
+  "kill",
+  "killed",
   "may",
   "near",
   "new",

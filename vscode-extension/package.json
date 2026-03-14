@@ -1,0 +1,85 @@
+{
+  "name": "overcite-vscode",
+  "displayName": "OverCite",
+  "description": "Search NASA ADS from LaTeX citation commands and insert BibTeX into local projects.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:overcite.resolveCitation"
+  ],
+  "main": "./src/extension.cjs",
+  "type": "module",
+  "contributes": {
+    "commands": [
+      {
+        "command": "overcite.resolveCitation",
+        "title": "OverCite: Resolve Citation"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "overcite.resolveCitation",
+        "key": "alt+shift+e",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "OverCite",
+      "properties": {
+        "overcite.adsApiToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "NASA ADS API token used for search and BibTeX export."
+        },
+        "overcite.contextWindowChars": {
+          "type": "number",
+          "default": 500,
+          "minimum": 200,
+          "maximum": 1200,
+          "markdownDescription": "Number of nearby characters to include as backup context around the current citation."
+        },
+        "overcite.citationKeyMode": {
+          "type": "string",
+          "default": "informative",
+          "enum": [
+            "informative",
+            "typed"
+          ],
+          "markdownDescription": "Use an informative generated key like `Shariat25_10k` or preserve the typed key when possible."
+        },
+        "overcite.bibliographyInsertMode": {
+          "type": "string",
+          "default": "append",
+          "enum": [
+            "append",
+            "alphabetical"
+          ],
+          "markdownDescription": "Append new BibTeX entries at the end of the target `.bib` file or insert them alphabetically by final citation key."
+        },
+        "overcite.projectBibFileOverrides": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Optional object keyed by workspace folder path. Values should be `.bib` filenames to force OverCite to use in that workspace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
+    "test:integration": "node tests/integration/run_integration.mjs"
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "vscode": "^1.1.37"
+  }
+}

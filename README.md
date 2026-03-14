@@ -114,6 +114,7 @@ npm test
 
 ## Documentation
 
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Logic flow: [docs/OverCite_logic_flow.md](docs/OverCite_logic_flow.md)
 - Ranking flow: [docs/OverCite_ranking_flow.md](docs/OverCite_ranking_flow.md)
 - Technical report: [docs/OverCite_technical_report.md](docs/OverCite_technical_report.md)

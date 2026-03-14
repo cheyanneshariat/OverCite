@@ -5,19 +5,13 @@ import { resolveBibTargetFromProjectState } from "./core/project.js";
 import { getSettings, saveSettings } from "./core/settings.js";
 
 const extensionApi = globalThis.browser ?? globalThis.chrome;
-console.log("[OverCite background] boot", {
-  hasBrowserApi: Boolean(globalThis.browser),
-  hasChromeApi: Boolean(globalThis.chrome)
-});
 
 extensionApi.runtime.onInstalled.addListener(async () => {
-  console.log("[OverCite background] onInstalled");
   const settings = await getSettings();
   await saveSettings({ ...DEFAULT_SETTINGS, ...settings });
 });
 
 extensionApi.commands.onCommand.addListener((command) => {
-  console.log("[OverCite background] command", command);
   if (command !== "open-ezcite") {
     return;
   }
@@ -27,7 +21,6 @@ extensionApi.commands.onCommand.addListener((command) => {
 });
 
 extensionApi.action.onClicked.addListener((tab) => {
-  console.log("[OverCite background] action click", { tabId: tab?.id, url: tab?.url });
   if (!tab?.id || !tab.url?.startsWith("https://www.overleaf.com/project/")) {
     return;
   }
@@ -37,11 +30,6 @@ extensionApi.action.onClicked.addListener((tab) => {
 });
 
 extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log("[OverCite background] message", {
-    type: message?.type ?? null,
-    senderTabId: sender?.tab?.id ?? null,
-    senderUrl: sender?.url ?? sender?.tab?.url ?? null
-  });
   handleMessage(message, sender)
     .then((result) => sendResponse({ ok: true, result }))
     .catch((error) => sendResponse({ ok: false, error: error.message }));
@@ -73,18 +61,12 @@ async function handleMessage(message) {
 }
 
 async function searchAds(citationContext) {
-  const startedAt = performance.now();
   const settings = await getSettings();
-  console.log("[OverCite background] searchAds:start", {
-    token: citationContext?.token ?? null,
-    sentenceText: citationContext?.sentenceText ?? null
-  });
   if (!settings.adsApiToken) {
     throw new Error("No ADS API token is configured. Open OverCite settings and add one.");
   }
 
   const queries = buildAdsQueries(citationContext);
-  console.log("[OverCite background] ADS queries:", queries);
   const mergedDocs = [];
   const seenBibcodes = new Set();
 
@@ -114,7 +96,6 @@ async function searchAds(citationContext) {
 
   const candidates = mergedDocs.map(mapAdsDocToCandidate);
   const finalCandidates = rerankAdsCandidates(citationContext, candidates);
-  console.log(`[OverCite background] searchAds: ${Math.round(performance.now() - startedAt)} ms`);
   return finalCandidates.map((candidate) => ({
     ...candidate,
     keyMode: settings.citationKeyMode,
@@ -127,7 +108,6 @@ async function searchAds(citationContext) {
 }
 
 async function exportBibtex(bibcode) {
-  const startedAt = performance.now();
   const settings = await getSettings();
   if (!settings.adsApiToken) {
     throw new Error("No ADS API token is configured. Open OverCite settings and add one.");
@@ -150,7 +130,6 @@ async function exportBibtex(bibcode) {
   }
 
   const payload = await response.json();
-  console.log(`[OverCite background] exportBibtex: ${Math.round(performance.now() - startedAt)} ms`);
   return payload.export?.trim?.() ?? "";
 }
 

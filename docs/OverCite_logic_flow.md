@@ -2,6 +2,8 @@
 
 This document gives a visual overview of how OverCite goes from a rough cite token in Overleaf to a selected ADS paper and an updated BibTeX entry.
 
+![OverCite logic flow](assets/overcite_logic_flow.svg)
+
 ## Flowchart
 
 ```mermaid

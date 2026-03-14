@@ -3,24 +3,13 @@
   const REQUEST_EVENT = "EZCITE_PAGE_REQUEST";
   let codeMirrorApi = null;
   window.__OVERCITE_PAGE_BRIDGE_READY__ = true;
-  console.log("[OverCite page] page bridge boot");
 
   window.addEventListener("UNSTABLE_editor:extensions", (event) => {
     codeMirrorApi = event.detail?.CodeMirror ?? null;
-    console.log("[OverCite page] UNSTABLE_editor:extensions", {
-      hasCodeMirror: Boolean(codeMirrorApi),
-      hasEditorView: Boolean(codeMirrorApi?.EditorView)
-    });
   });
 
   window.addEventListener(REQUEST_EVENT, (event) => {
     const { requestId, action, payload } = event.detail || {};
-    console.log("[OverCite page] request", {
-      requestId,
-      action,
-      hasCodeMirror: Boolean(codeMirrorApi),
-      activeElementClass: document.activeElement?.className ?? null
-    });
     Promise.resolve()
       .then(() => handleAction(action, payload))
       .then((result) => emitResponse(requestId, { ok: true, result }))

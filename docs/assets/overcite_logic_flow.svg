@@ -1,0 +1,73 @@
+<svg width="1200" height="1220" viewBox="0 0 1200 1220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .bg { fill: #f6f3ee; }
+      .panel { fill: #fffdf9; stroke: #d8cfc2; stroke-width: 2; rx: 18; }
+      .box { fill: #ffffff; stroke: #203447; stroke-width: 2; rx: 16; }
+      .accent { fill: #f3e0d3; stroke: #a45b35; stroke-width: 2; rx: 16; }
+      .text { fill: #1f2a33; font-family: Arial, sans-serif; font-size: 22px; font-weight: 700; }
+      .subtext { fill: #465361; font-family: Arial, sans-serif; font-size: 18px; font-weight: 600; }
+      .subtext-small { fill: #465361; font-family: Arial, sans-serif; font-size: 16px; font-weight: 600; }
+      .arrow { stroke: #6d7680; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .title { fill: #18212a; font-family: Arial, sans-serif; font-size: 34px; font-weight: 800; }
+      .kicker { fill: #8e4f31; font-family: Arial, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: 2px; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10" fill="#6d7680"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="1220"/>
+  <rect class="panel" x="24" y="24" width="1152" height="1172" rx="24"/>
+
+  <text class="kicker" x="60" y="72">OVERCITE</text>
+  <text class="title" x="60" y="116">Citation Retrieval Logic Flow</text>
+
+  <rect class="box" x="420" y="150" width="360" height="74" rx="16"/>
+  <text class="text" x="600" y="194" text-anchor="middle">Cursor Inside \cite Token</text>
+
+  <rect class="box" x="420" y="270" width="360" height="88" rx="16"/>
+  <text class="text" x="600" y="312" text-anchor="middle">Parse Citation Hint</text>
+  <text class="subtext" x="600" y="340" text-anchor="middle">surname, year, initial, suffix</text>
+
+  <rect class="box" x="90" y="430" width="300" height="92" rx="16"/>
+  <text class="text" x="240" y="474" text-anchor="middle">Immediate Sentence</text>
+  <text class="subtext" x="240" y="502" text-anchor="middle">most important local meaning</text>
+
+  <rect class="box" x="450" y="430" width="300" height="92" rx="16"/>
+  <text class="text" x="600" y="474" text-anchor="middle">Wider Context Window</text>
+  <text class="subtext" x="600" y="502" text-anchor="middle">backup semantic context</text>
+
+  <rect class="box" x="810" y="430" width="300" height="92" rx="16"/>
+  <text class="text" x="960" y="474" text-anchor="middle">Author / Year Signals</text>
+  <text class="subtext" x="960" y="502" text-anchor="middle">first author, year, initials</text>
+
+  <rect class="accent" x="180" y="594" width="840" height="146" rx="18"/>
+  <text class="text" x="600" y="654" text-anchor="middle">Build ADS Query Ladder</text>
+  <text class="subtext-small" x="600" y="686" text-anchor="middle">first_author + phrase, keyword conjunctions, author fallbacks, nearby years</text>
+  <text class="subtext-small" x="600" y="710" text-anchor="middle">plus conservative morphology like binaries→binary, mergers→merger, lensing→lens</text>
+
+  <rect class="box" x="420" y="790" width="360" height="88" rx="16"/>
+  <text class="text" x="600" y="832" text-anchor="middle">Fetch ADS Candidates</text>
+  <text class="subtext" x="600" y="860" text-anchor="middle">merge unique bibcodes across queries</text>
+
+  <rect class="box" x="320" y="928" width="560" height="126" rx="16"/>
+  <text class="text" x="600" y="972" text-anchor="middle">Rerank Results</text>
+  <text class="subtext-small" x="600" y="1000" text-anchor="middle">first-author preference, year match, title/abstract overlap,</text>
+  <text class="subtext-small" x="600" y="1024" text-anchor="middle">sentence keywords, morphology variants, collaboration penalty</text>
+
+  <rect class="accent" x="210" y="1078" width="780" height="96" rx="16"/>
+  <text class="text" x="600" y="1120" text-anchor="middle">Show Popup → Select Paper → Export BibTeX</text>
+  <text class="text" x="600" y="1150" text-anchor="middle">Update .bib and TeX</text>
+
+  <path class="arrow" d="M600 224V258" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M530 358L300 418" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 358V418" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M670 358L900 418" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M240 522L430 600" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 522V598" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M960 522L770 600" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 736V778" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 878V928" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M600 1044V1070" marker-end="url(#arrow)"/>
+</svg>

@@ -208,11 +208,6 @@
   const RESPONSE_EVENT = "EZCITE_PAGE_RESPONSE";
   let overlay = null;
   let overlayState = null;
-  console.log("[OverCite content] boot", {
-    hasBrowserApi: Boolean(globalThis.browser),
-    hasChromeApi: Boolean(globalThis.chrome),
-    url: window.location.href
-  });
   injectPageBridge();
   installStyles();
   installRuntimeHooks();
@@ -226,7 +221,6 @@
     script.src = extensionApi.runtime.getURL("src/page-bridge.js");
     script.dataset.ezcitePageBridge = "true";
     script.onload = () => {
-      console.log("[OverCite content] page bridge loaded");
       script.remove();
     };
     script.onerror = () => {
@@ -896,7 +890,6 @@
   async function openProjectFile(fileName, options = {}) {
     const { preferTabsOnly = false } = options;
     const candidates = findOpenableElementsByText(fileName, preferTabsOnly);
-    console.log(`[OverCite] openProjectFile(${fileName}) candidates: ${candidates.length}`);
     if (!candidates.length) {
       if (preferTabsOnly) {
         throw new Error(`Could not find an open editor tab for ${fileName}. Open it once in Overleaf and retry.`);
@@ -921,7 +914,6 @@
         return;
       } catch (error) {
         if (!preferTabsOnly && isLikelyFileTreeCandidate(candidate)) {
-          console.log(`[OverCite] optimistic file open fallback for ${fileName}`);
           await sleep(450);
           return;
         }
@@ -1070,7 +1062,6 @@
       .sort((left, right) => right.score - left.score)
       .map((entry) => entry.candidate);
 
-    console.log(`[OverCite] broad filename matches for ${targetText}: ${ranked.length}`);
     return ranked;
   }
 
@@ -1351,11 +1342,8 @@
           shortcutText
         });
         applyOverlayTheme(overlayState?.settings?.themeMode ?? "auto");
-        console.log(`[OverCite] ${label} (${formatMs(performance.now() - startedAt)})`);
       },
-      finish(label) {
-        console.log(`[OverCite] ${label}`);
-      },
+      finish(_label) {},
       lastLabel() {
         return lastLabel;
       }
@@ -1363,11 +1351,8 @@
   }
 
   async function timed(label, task, diagnostics) {
-    const stepStart = performance.now();
     try {
-      const result = await task();
-      console.log(`[OverCite] ${label}: ${formatMs(performance.now() - stepStart)}`);
-      return result;
+      return await task();
     } catch (error) {
       const prefix = diagnostics ? `${diagnostics.lastLabel()} failed` : `${label} failed`;
       throw new Error(`${prefix}: ${error.message}`);

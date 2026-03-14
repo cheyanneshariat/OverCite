@@ -82,3 +82,14 @@ test("findCitationAtCursor returns null outside a cite command", () => {
   const source = "No citations here.";
   assert.equal(findCitationAtCursor(source, 5, 500), null);
 });
+
+test("findCitationAtCursor supports empty citation tokens for context-only lookup", () => {
+  const source = "Primordial black holes have been killed by wide binaries \\citep{}.";
+  const cursorIndex = source.indexOf("{}") + 1;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.token, "");
+  assert.equal(result.parsedKeyHint, null);
+  assert.equal(result.sentenceText, "Primordial black holes have been killed by wide binaries .");
+});
