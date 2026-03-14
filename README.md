@@ -58,7 +58,7 @@ cd OverCite
 3. Reload VS Code
 4. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
 5. Open Settings, search `OverCite`, and paste your NASA ADS API token*
-6. Put the cursor inside the citation key and and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
+6. Put the cursor inside the citation key and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
 7. Review the dropdown results and choose the paper you want
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), then go to Account --> Settings --> API Token
@@ -113,6 +113,34 @@ npm test
 - Ranking flow: [docs/OverCite_ranking_flow.md](docs/OverCite_ranking_flow.md)
 - Technical report: [docs/OverCite_technical_report.md](docs/OverCite_technical_report.md)
 - PDF report: [docs/OverCite_technical_report.pdf](docs/OverCite_technical_report.pdf)
+
+## Updating OverCite
+
+If you download a newer version of the repository later, the update step depends on where you use OverCite.
+
+### Chrome
+
+1. Replace your local repo copy with the newer one, or `git pull`
+2. Open `chrome://extensions`
+3. Click `Reload` on OverCite
+4. Refresh your Overleaf tab
+
+### Firefox
+
+1. Replace your local repo copy with the newer one, or `git pull`
+2. Open `about:debugging#/runtime/this-firefox`
+3. Remove the old temporary add-on if needed
+4. Click `Load Temporary Add-on...`
+5. Select `extension/dist/firefox/manifest.json` again
+6. Refresh your Overleaf tab
+
+### VS Code
+
+1. Replace your local repo copy with the newer one, or `git pull`
+2. In VS Code, uninstall the old OverCite extension if needed
+3. Run `Extensions: Install from VSIX...`
+4. Select `vscode-extension/overcite-vscode-0.1.0.vsix`
+5. Reload VS Code
 
 ## Notes
 
