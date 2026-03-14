@@ -339,7 +339,6 @@
         font-size: 0.72rem;
         font-weight: 800;
         letter-spacing: 0.18em;
-        text-transform: uppercase;
         color: var(--ez-muted);
       }
 
