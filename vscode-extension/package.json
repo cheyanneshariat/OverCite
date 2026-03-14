@@ -39,6 +39,11 @@
         "command": "overcite.resolveCitation",
         "key": "alt+shift+e",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "overcite.resolveCitationSimple",
+        "key": "alt+shift+s",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {

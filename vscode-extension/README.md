@@ -28,8 +28,8 @@ This package is a separate VS Code extension that brings the OverCite citation w
 
 ## Commands
 
-- `OverCite: Resolve Citation`
-- `OverCite: Resolve Citation (Simple Search)`
+- `OverCite: Resolve Citation` (`Alt+Shift+E`)
+- `OverCite: Resolve Citation (Simple Search)` (`Alt+Shift+S`)
 - `OverCite: Show Diagnostics`
 
 ## Development

@@ -46,6 +46,7 @@ cd OverCite
 6. Paste your NASA ADS API token*, click `Save Settings` at the bottom
 7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 8. Put the cursor inside the citation key and press `Alt+Shift+E`
+   - Mac note: `Alt` means the `Option` key
 
 ### Firefox
 
@@ -70,7 +71,7 @@ cd OverCite
 7. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
 8. Paste your NASA ADS API token* into that field
 9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
-10. If you want the VS Code version to ignore sentence context, run `OverCite: Resolve Citation (Simple Search)`, or set `OverCite: Default Search Mode` in VS Code settings
+10. If you want the VS Code version to ignore sentence context, press `Alt+Shift+S`, run `OverCite: Resolve Citation (Simple Search)`, or set `OverCite: Default Search Mode` in VS Code settings
 11. Review the dropdown results and choose the paper you want
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), then go to Account --> Settings --> API Token
