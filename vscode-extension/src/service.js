@@ -106,7 +106,7 @@ async function fetchAdsDocs(query, adsApiToken, fetchImpl) {
   const url = new URL(ADS_SEARCH_URL);
   url.searchParams.set("q", query);
   url.searchParams.set("rows", "12");
-  url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi");
+  url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,citation_count");
 
   const response = await fetchImpl(url, {
     headers: {

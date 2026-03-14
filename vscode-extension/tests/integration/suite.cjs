@@ -16,6 +16,7 @@ async function run() {
   await runAppendScenario(mainTexPath, referencesPath);
   await runAlphabeticalScenario(mainTexPath, referencesPath);
   await runEmptyTokenScenario(mainTexPath, referencesPath);
+  await runSimpleCommandScenario(mainTexPath, referencesPath);
   await fs.writeFile(resultPath, JSON.stringify({ ok: true }, null, 2));
 }
 
@@ -111,6 +112,40 @@ async function runEmptyTokenScenario(mainTexPath, referencesPath) {
   assert.match(updatedMain, /\\citep\{Shariat25_/);
   assert.match(updatedBib, /Wide Binaries in an Ultra-faint Dwarf Galaxy/);
   assert.match(updatedBib, /Primordial black hole Dark Matter/);
+}
+
+async function runSimpleCommandScenario(mainTexPath, referencesPath) {
+  const config = vscode.workspace.getConfiguration("overcite");
+  await config.update("bibliographyInsertMode", "append", vscode.ConfigurationTarget.Workspace);
+  await config.update("defaultSearchMode", "contextual", vscode.ConfigurationTarget.Workspace);
+
+  const document = await rewriteDocument(
+    mainTexPath,
+    "\\documentclass{article}\n\\begin{document}\nTriple star systems are very common, as revealed by Gaia \\citep{Shariat25}.\n\\bibliography{references}\n\\end{document}\n"
+  );
+  await rewriteDocument(
+    referencesPath,
+    "@ARTICLE{Existing24_demo,\n  author = {{Someone}, Demo},\n  title = {An Existing Demo Entry},\n  year = {2024}\n}\n"
+  );
+
+  const editor = await vscode.window.showTextDocument(document);
+  const source = document.getText();
+  const tokenIndex = source.indexOf("Shariat25");
+  assert.ok(tokenIndex >= 0, "Did not find Shariat25 in main.tex for simple-command scenario");
+
+  const targetOffset = tokenIndex + Math.min(3, "Shariat25".length - 1);
+  const targetPosition = document.positionAt(targetOffset);
+  editor.selection = new vscode.Selection(targetPosition, targetPosition);
+  editor.revealRange(new vscode.Range(targetPosition, targetPosition));
+
+  await vscode.commands.executeCommand("overcite.resolveCitationSimple");
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+
+  const updatedMain = await fs.readFile(mainTexPath, "utf8");
+  const updatedBib = await fs.readFile(referencesPath, "utf8");
+
+  assert.match(updatedMain, /\\citep\{Shariat25_/);
+  assert.match(updatedBib, /Once a Triple|10,000 Resolved Triples from Gaia/);
 }
 
 async function rewriteDocument(filePath, text) {

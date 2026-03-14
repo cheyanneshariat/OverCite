@@ -9,6 +9,7 @@ export function normalizeVsCodeSettings(rawSettings = {}) {
   const contextWindowChars = Number(rawSettings.contextWindowChars ?? DEFAULT_SETTINGS.contextWindowChars);
   const citationKeyMode = String(rawSettings.citationKeyMode ?? DEFAULT_SETTINGS.citationKeyMode).trim().toLowerCase();
   const bibliographyInsertMode = String(rawSettings.bibliographyInsertMode ?? DEFAULT_SETTINGS.bibliographyInsertMode).trim().toLowerCase();
+  const defaultSearchMode = String(rawSettings.defaultSearchMode ?? DEFAULT_SETTINGS.defaultSearchMode).trim().toLowerCase();
 
   return {
     adsApiToken: String(rawSettings.adsApiToken ?? DEFAULT_SETTINGS.adsApiToken).trim(),
@@ -17,6 +18,7 @@ export function normalizeVsCodeSettings(rawSettings = {}) {
       : DEFAULT_SETTINGS.contextWindowChars,
     citationKeyMode: citationKeyMode === "typed" ? "typed" : "informative",
     bibliographyInsertMode: bibliographyInsertMode === "alphabetical" ? "alphabetical" : "append",
+    defaultSearchMode: defaultSearchMode === "simple" ? "simple" : "contextual",
     projectBibFileOverrides: overrides
   };
 }

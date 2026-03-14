@@ -60,7 +60,7 @@ cd OverCite
 ### VS Code
 
 1. In normal VS Code, run `Extensions: Install from VSIX...`
-2. Select `vscode-extension/overcite-vscode-0.1.1.vsix`
+2. Select `vscode-extension/overcite-vscode-0.1.2.vsix`
 3. Reload VS Code
 4. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
 5. Open VS Code Settings:
@@ -70,7 +70,8 @@ cd OverCite
 7. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
 8. Paste your NASA ADS API token* into that field
 9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
-10. Review the dropdown results and choose the paper you want
+10. If you want the VS Code version to ignore sentence context, run `OverCite: Resolve Citation (Simple Search)`, or set `OverCite: Default Search Mode` in VS Code settings
+11. Review the dropdown results and choose the paper you want
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), then go to Account --> Settings --> API Token
 
@@ -165,7 +166,7 @@ If you download a newer version of the repository later, the update step depends
 1. Replace your local repo copy with the newer one, or `git pull`
 2. In VS Code, uninstall the old OverCite extension if needed
 3. Run `Extensions: Install from VSIX...`
-4. Select `vscode-extension/overcite-vscode-0.1.1.vsix`
+4. Select `vscode-extension/overcite-vscode-0.1.2.vsix`
 5. Reload VS Code
 
 ## Notes

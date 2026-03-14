@@ -2,7 +2,7 @@
   "name": "overcite-vscode",
   "displayName": "OverCite",
   "description": "Search NASA ADS from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "local",
   "private": true,
   "icon": "icon.png",
@@ -14,6 +14,7 @@
   ],
   "activationEvents": [
     "onCommand:overcite.resolveCitation",
+    "onCommand:overcite.resolveCitationSimple",
     "onCommand:overcite.showDiagnostics"
   ],
   "main": "./src/extension.cjs",
@@ -23,6 +24,10 @@
       {
         "command": "overcite.resolveCitation",
         "title": "OverCite: Resolve Citation"
+      },
+      {
+        "command": "overcite.resolveCitationSimple",
+        "title": "OverCite: Resolve Citation (Simple Search)"
       },
       {
         "command": "overcite.showDiagnostics",
@@ -68,6 +73,15 @@
             "alphabetical"
           ],
           "markdownDescription": "Append new BibTeX entries at the end of the target `.bib` file or insert them alphabetically by final citation key."
+        },
+        "overcite.defaultSearchMode": {
+          "type": "string",
+          "default": "contextual",
+          "enum": [
+            "contextual",
+            "simple"
+          ],
+          "markdownDescription": "Choose whether `OverCite: Resolve Citation` starts in contextual mode or simple search mode. The separate simple-search command is still always available."
         },
         "overcite.projectBibFileOverrides": {
           "type": "object",

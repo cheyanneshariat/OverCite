@@ -93,3 +93,53 @@ test("searchAds uses ADS query ladder and returns generated keys", async () => {
   assert.match(calls[0], /2025/);
   assert.equal(results[0].generatedKey, "Shariat25_10k");
 });
+
+test("searchAds simple mode requests citation_count and keeps simple query ladder", async () => {
+  const calls = [];
+  await searchAds(
+    {
+      token: "Shariat25",
+      searchMode: "simple",
+      sentenceText: "resolved triples from Gaia",
+      contextText: "resolved triples from Gaia provide empirical constraints on triple star populations",
+      parsedKeyHint: {
+        surname: "Shariat",
+        year: 2025,
+        firstInitial: null,
+        suffix: ""
+      }
+    },
+    {
+      adsApiToken: "token",
+      citationKeyMode: "informative"
+    },
+    async (input) => {
+      calls.push(String(input));
+      return {
+        ok: true,
+        async json() {
+          return {
+            response: {
+              docs: [
+                {
+                  bibcode: "good",
+                  title: ["Once a Triple, Not Always a Triple"],
+                  author: ["Shariat, Cheyanne"],
+                  year: "2025",
+                  abstract: "Triples evolve.",
+                  doi: ["10.1234/example"],
+                  citation_count: 42
+                }
+              ]
+            }
+          };
+        }
+      };
+    }
+  );
+
+  assert.match(calls[0], /citation_count/);
+  assert.match(decodeURIComponent(calls[0]), /first_author/i);
+  assert.match(decodeURIComponent(calls[0]), /year:2025/);
+  assert.doesNotMatch(decodeURIComponent(calls[0]), /resolved triples from Gaia/);
+});

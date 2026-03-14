@@ -381,7 +381,49 @@ export function buildAdsQuery(citationContext) {
   return `title:"${escaped}" OR abstract:"${escaped}"`;
 }
 
+function buildSimpleAdsQueries(citationContext) {
+  const queries = new Set();
+  const hint = citationContext?.parsedKeyHint;
+  const token = String(citationContext?.token ?? "").trim();
+
+  if (hint?.surname && hint?.year) {
+    if (hint.firstInitial) {
+      queries.add(buildFirstAuthorYearInitialQuery(hint.surname, hint.firstInitial, hint.year));
+    }
+    queries.add(buildFirstAuthorYearQuery(hint.surname, hint.year));
+    const surnameVariants = buildSurnameVariants(hint.surname);
+    for (const surname of surnameVariants) {
+      if (hint.firstInitial) {
+        queries.add(buildFirstAuthorYearInitialQuery(surname, hint.firstInitial, hint.year));
+      }
+      queries.add(buildFirstAuthorYearQuery(surname, hint.year));
+      queries.add(`author:"${escapeQueryValue(surname)}" year:${hint.year}`);
+      queries.add(`author:"${escapeQueryValue(surname)}"`);
+      queries.add(buildFirstAuthorQuery(surname));
+    }
+    return [...queries].filter(Boolean);
+  }
+
+  if (hint?.surname) {
+    const surnameVariants = buildSurnameVariants(hint.surname);
+    for (const surname of surnameVariants) {
+      queries.add(buildFirstAuthorQuery(surname));
+      queries.add(`author:"${escapeQueryValue(surname)}"`);
+    }
+    return [...queries].filter(Boolean);
+  }
+
+  queries.add(buildAdsQuery(citationContext));
+  if (isAuthorLikeToken(token)) {
+    queries.add(`author:"${escapeQueryValue(token)}"`);
+  }
+  return [...queries].filter(Boolean);
+}
+
 export function buildAdsQueries(citationContext) {
+  if (citationContext?.searchMode === "simple") {
+    return buildSimpleAdsQueries(citationContext);
+  }
   const queries = new Set();
   const hint = citationContext?.parsedKeyHint;
   const token = String(citationContext?.token ?? "").trim();
@@ -704,12 +746,16 @@ export function mapAdsDocToCandidate(doc) {
     year: doc.year ? Number(doc.year) : null,
     abstract: String(doc.abstract ?? ""),
     doi: Array.isArray(doc.doi) ? doc.doi[0] : doc.doi ?? null,
+    citationCount: Number(doc.citation_count ?? 0) || 0,
     score: 0,
     generatedKey: null
   };
 }
 
 export function rerankAdsCandidates(citationContext, candidates) {
+  if (citationContext?.searchMode === "simple") {
+    return rerankSimpleAdsCandidates(citationContext, candidates);
+  }
   const hint = citationContext?.parsedKeyHint;
   const token = String(citationContext?.token ?? "").trim();
   const isEmptyTokenLookup = !token;
@@ -809,6 +855,62 @@ export function rerankAdsCandidates(citationContext, candidates) {
       return { ...candidate, score };
     })
     .sort((left, right) => right.score - left.score || compareYears(right.year, left.year));
+}
+
+function rerankSimpleAdsCandidates(citationContext, candidates) {
+  const hint = citationContext?.parsedKeyHint;
+  return candidates
+    .map((candidate) => {
+      let score = 0;
+      const firstAuthor = normalizeText(candidate.authors[0] ?? "");
+      const allAuthors = normalizeText(candidate.authors.join(" "));
+      let satisfiesPrimaryAuthor = true;
+      let satisfiesPrimaryYear = true;
+
+      if (hint?.surname) {
+        const surname = normalizeText(hint.surname);
+        if (firstAuthor.includes(surname)) {
+          score += 120;
+        } else if (allAuthors.includes(surname)) {
+          score += 40;
+          satisfiesPrimaryAuthor = false;
+        } else {
+          satisfiesPrimaryAuthor = false;
+        }
+      }
+
+      if (hint?.firstInitial) {
+        const firstInitial = normalizeText(hint.firstInitial);
+        if (firstInitial && firstAuthor.startsWith(`${normalizeText(hint.surname)} ${firstInitial}`)) {
+          score += 20;
+        } else {
+          satisfiesPrimaryAuthor = false;
+        }
+      }
+
+      if (hint?.year && candidate.year === hint.year) {
+        score += 40;
+      } else if (hint?.year && candidate.year && Math.abs(candidate.year - hint.year) === 1) {
+        score += 10;
+        satisfiesPrimaryYear = false;
+      } else if (hint?.year) {
+        satisfiesPrimaryYear = false;
+      }
+
+      const matchesPrimaryConstraints = satisfiesPrimaryAuthor && satisfiesPrimaryYear;
+      if (!matchesPrimaryConstraints) {
+        score -= 5000;
+      }
+
+      score += Math.min(candidate.citationCount || 0, 2000);
+      return { ...candidate, score, matchesPrimaryConstraints };
+    })
+    .sort((left, right) =>
+      Number(Boolean(right.matchesPrimaryConstraints)) - Number(Boolean(left.matchesPrimaryConstraints)) ||
+      right.score - left.score ||
+      (right.citationCount || 0) - (left.citationCount || 0) ||
+      compareYears(right.year, left.year)
+    );
 }
 
 function compareYears(leftYear, rightYear) {

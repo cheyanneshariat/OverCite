@@ -6,6 +6,7 @@ This package is a separate VS Code extension that brings the OverCite citation w
 
 - Detects the active `\cite{...}` token under the cursor
 - Uses local sentence and context text to search NASA ADS
+- Also supports a simple author/year-only fallback mode
 - Shows ranked paper matches in a VS Code quick-pick list
 - Inserts or reuses the matching BibTeX entry in the target `.bib` file
 - Rewrites the active citation key in the source `.tex` file
@@ -22,7 +23,14 @@ This package is a separate VS Code extension that brings the OverCite citation w
 - `overcite.contextWindowChars`
 - `overcite.citationKeyMode`
 - `overcite.bibliographyInsertMode`
+- `overcite.defaultSearchMode`
 - `overcite.projectBibFileOverrides`
+
+## Commands
+
+- `OverCite: Resolve Citation`
+- `OverCite: Resolve Citation (Simple Search)`
+- `OverCite: Show Diagnostics`
 
 ## Development
 
