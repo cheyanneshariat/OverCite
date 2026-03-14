@@ -514,3 +514,38 @@ test("rerankAdsCandidates for empty-token lookups prefers papers matching both l
   assert.equal(candidates[0].bibcode, "target");
   assert.ok(candidates[0].score > candidates[1].score);
 });
+
+test("empty-token lookups can target A Million Binaries from Gaia from sentence context", () => {
+  const citationContext = {
+    token: "",
+    contextText: "They found a million binaries from gaia",
+    sentenceText: "They found a million binaries from gaia",
+    parsedKeyHint: null
+  };
+
+  const queries = buildAdsQueries(citationContext);
+  assert.ok(queries.includes('title:"million binaries gaia" OR abstract:"million binaries gaia"'));
+  assert.ok(queries.includes('title:"binaries gaia" OR abstract:"binaries gaia"'));
+
+  const candidates = rerankAdsCandidates(citationContext, [
+    {
+      bibcode: "target",
+      title: "A Million Binaries from Gaia: Estimating the Binary Fraction",
+      authors: ["El-Badry, Kareem", "Rix, Hans-Walter"],
+      year: 2021,
+      abstract: "A million binaries from Gaia are used to estimate the binary fraction.",
+      doi: null
+    },
+    {
+      bibcode: "weak",
+      title: "Wide Binaries in an Ultra-faint Dwarf Galaxy",
+      authors: ["Shariat, Cheyanne", "El-Badry, Kareem"],
+      year: 2025,
+      abstract: "Wide binaries constrain dark matter.",
+      doi: null
+    }
+  ]);
+
+  assert.equal(candidates[0].bibcode, "target");
+  assert.ok(candidates[0].score > candidates[1].score);
+});

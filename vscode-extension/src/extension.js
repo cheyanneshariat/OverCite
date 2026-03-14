@@ -1,10 +1,14 @@
 import * as vscode from "vscode";
 
 import { normalizeVsCodeSettings, workspaceKeyFromFolder } from "./config.js";
+import { buildAdsQueries } from "./core/ads.js";
 import { findCitationAtCursor } from "./core/citation.js";
 import { applyInsertion, buildQuickPickItems, exportBibtex, resolveBibTarget, searchAds } from "./service.js";
 
+let outputChannel;
+
 export function activate(context) {
+  outputChannel = vscode.window.createOutputChannel("OverCite");
   const disposable = vscode.commands.registerCommand("overcite.resolveCitation", async () => {
     try {
       await runResolveCitation();
@@ -13,8 +17,11 @@ export function activate(context) {
       void vscode.window.showErrorMessage(message);
     }
   });
+  const showDiagnosticsDisposable = vscode.commands.registerCommand("overcite.showDiagnostics", () => {
+    getOutputChannel().show(true);
+  });
 
-  context.subscriptions.push(disposable);
+  context.subscriptions.push(disposable, showDiagnosticsDisposable, outputChannel);
 }
 
 export function deactivate() {}
@@ -31,6 +38,15 @@ async function runResolveCitation() {
   const citationContext = findCitationAtCursor(sourceText, cursorOffset, settings.contextWindowChars);
   if (!citationContext) {
     throw new Error("Place the cursor inside a \\cite{...} command before running OverCite.");
+  }
+
+  const channel = getOutputChannel();
+  channel.appendLine(`[${new Date().toISOString()}] OverCite lookup`);
+  channel.appendLine(`token: ${citationContext.token || "<empty>"}`);
+  channel.appendLine(`sentence: ${citationContext.sentenceText || "<none>"}`);
+  channel.appendLine("ADS queries:");
+  for (const query of buildAdsQueries(citationContext)) {
+    channel.appendLine(`- ${query}`);
   }
 
   await vscode.window.withProgress(
@@ -58,6 +74,13 @@ async function runResolveCitation() {
       }
 
       const candidates = await searchAds(citationContext, settings);
+      channel.appendLine("Top candidates:");
+      for (const candidate of candidates.slice(0, 10)) {
+        channel.appendLine(
+          `- ${candidate.generatedKey || "<key>"} | ${candidate.year || "?"} | ${candidate.title} | ${formatAuthorsForDiagnostics(candidate.authors)} | ${candidate.bibcode || "<no bibcode>"}`
+        );
+      }
+      channel.appendLine("");
       if (!candidates.length) {
         throw new Error("No ADS records matched the current citation token and context.");
       }
@@ -176,4 +199,18 @@ function basename(filePath) {
 
 function shouldAutoPickForTests() {
   return process.env.OVERCITE_TEST_AUTOPICK === "first";
+}
+
+function getOutputChannel() {
+  if (!outputChannel) {
+    outputChannel = vscode.window.createOutputChannel("OverCite");
+  }
+  return outputChannel;
+}
+
+function formatAuthorsForDiagnostics(authors) {
+  if (!Array.isArray(authors) || !authors.length) {
+    return "<no authors>";
+  }
+  return authors.slice(0, 3).join(", ") + (authors.length > 3 ? " et al." : "");
 }

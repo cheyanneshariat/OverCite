@@ -19,6 +19,25 @@ The current implementation is deterministic. It does not use an LLM. Its "contex
 
 This report describes how the current implementation works, what it handles well, where it is adaptive, and where it currently has limitations.
 
+## Benchmarking
+
+OverCite is now tracked against a running benchmark suite that includes:
+
+- standard author-year cases
+- surname-only cases
+- common-surname disambiguation cases
+- empty-token context-only lookups such as `\citep{}`
+- minimal-context lookups such as `\citep{Shariat25}.` and `See \citep{El-Badry21}.`
+
+The minimal-context cases are important because they verify that strong author-year keys still work even when the surrounding sentence contributes very little semantic information. In those cases, the system should safely fall back to author-year retrieval rather than requiring meaningful local context.
+
+The benchmarking workflow also now treats the two popup search modes separately:
+
+- contextual mode, which is the default behavior and uses the local sentence plus typed key
+- simple search mode, which is an explicit fallback for non-empty keys and ignores local sentence context
+
+That separation is important because simple search is meant to be predictable rather than clever. It should not alter the main contextual retrieval path.
+
 ## Logic Diagram
 
 ```mermaid
@@ -34,7 +53,8 @@ flowchart TD
   G --> H["Fetch ADS candidates across fallbacks"]
   H --> I["Merge unique bibcodes"]
   I --> J["Rerank by first author, year, title phrase, abstract phrase, keyword overlap"]
-  J --> K["Show popup results"]
+  J --> J2["Optional simple-search fallback: author/year-only and citation-count ordered"]
+  J2 --> K["Show popup results"]
   K --> L["User selects paper"]
   L --> M["Export ADS BibTeX"]
   M --> N["Resolve target bibliography file"]
@@ -75,6 +95,15 @@ At a high level, OverCite does the following:
 11. Checks whether that paper is already in the bibliography.
 12. Reuses an existing key if found; otherwise appends a rewritten BibTeX entry.
 13. Rewrites the cite token in the `.tex` file.
+
+The popup can also switch from the contextual search path to a simpler ADS-style fallback for non-empty keys. That fallback is useful when the local sentence is sparse or misleading.
+
+The browser settings page now exposes a `Default Search Mode` option:
+
+- `Contextual` opens the popup in the normal local-context-aware mode
+- `Simple Search` opens the popup in the author/year-only fallback mode first
+
+The default stored value remains `Contextual`.
 
 ## How OverCite Finds the Active Citation
 

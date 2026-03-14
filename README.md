@@ -1,6 +1,7 @@
 # OverCite
 
-OverCite is a browser extension for Overleaf that searches NASA ADS from inside LaTeX citation commands, shows likely paper matches, and inserts BibTeX into the correct project bibliography file.
+OverCite is a browser extension for Overleaf that searches NASA ADS from inside LaTeX citation commands, shows likely paper matches, and inserts BibTeX into the correct project bibliography file. 
+It can also be used as a VSCode extension for those using local TeX installations.
 
 ## Repository layout
 
@@ -54,7 +55,7 @@ cd OverCite
 ### VS Code
 
 1. In normal VS Code, run `Extensions: Install from VSIX...`
-2. Select `vscode-extension/overcite-vscode-0.1.0.vsix`
+2. Select `vscode-extension/overcite-vscode-0.1.1.vsix`
 3. Reload VS Code
 4. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
 5. Open VS Code Settings:
@@ -102,7 +103,10 @@ Current settings include:
 - Theme selection
 - Citation key style, including keeping the typed key instead of adding an informative suffix
 - Bibliography entry order, including alphabetical insertion by citation key
+- Default search mode, so OverCite can open in either contextual mode or simple search first
 - Project-specific bibliography file overrides when a project contains multiple `.bib` files
+
+The popup also includes a small `Simple search` fallback for non-empty citation keys. It ignores local sentence context and reruns the lookup from the typed author/year hint alone, then orders the matching results by citation count.
 
 ## Local testing
 
@@ -111,6 +115,13 @@ cd extension
 npm run build
 npm test
 ```
+
+The repo also keeps a local-only running benchmark suite in `local_testing/benchmarks/` for manual and scripted regression checks, including:
+
+- standard author-year cases
+- surname-only cases
+- empty-token context-only cases
+- minimal-context cases such as `\citep{Shariat25}.` and `See \citep{El-Badry21}.`
 
 ## Documentation
 
@@ -147,7 +158,7 @@ If you download a newer version of the repository later, the update step depends
 1. Replace your local repo copy with the newer one, or `git pull`
 2. In VS Code, uninstall the old OverCite extension if needed
 3. Run `Extensions: Install from VSIX...`
-4. Select `vscode-extension/overcite-vscode-0.1.0.vsix`
+4. Select `vscode-extension/overcite-vscode-0.1.1.vsix`
 5. Reload VS Code
 
 ## Notes
@@ -155,7 +166,7 @@ If you download a newer version of the repository later, the update step depends
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
 - The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
-- Multi-word surnames such as `Perez Paolino` and `Perez Paolino25` are supported.
+- Multi-word surnames such as `Smith Jane` and `Smith Jane25` are supported.
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
 - If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.

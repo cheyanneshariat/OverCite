@@ -14,6 +14,28 @@ test("buildAdsQuery prefers fielded author/year search from parsed key hints", (
   assert.equal(query, 'first_author:"Shariat" year:2025');
 });
 
+test("simple search mode uses author-year queries without contextual expansion", () => {
+  const queries = buildAdsQueries({
+    token: "Shariat25",
+    searchMode: "simple",
+    sentenceText: "Triple star systems are very common, as revealed by Gaia",
+    contextText: "Triple star systems are very common, as revealed by Gaia",
+    parsedKeyHint: {
+      surname: "Shariat",
+      year: 2025,
+      suffix: ""
+    }
+  });
+
+  assert.deepEqual(queries.slice(0, 4), [
+    'first_author:"Shariat" year:2025',
+    'author:"Shariat" year:2025',
+    'author:"Shariat"',
+    'first_author:"Shariat"'
+  ]);
+  assert.ok(!queries.some((query) => query.includes("triple star systems")));
+});
+
 test("rerankAdsCandidates prefers matching author and year", () => {
   const candidates = rerankAdsCandidates(
     {
@@ -37,6 +59,72 @@ test("rerankAdsCandidates prefers matching author and year", () => {
         year: 2025,
         abstract: "No relevant words here.",
         doi: null
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "good");
+  assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("simple search mode sorts matching results primarily by citation count", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: "Shariat25",
+      searchMode: "simple",
+      parsedKeyHint: { surname: "Shariat", year: 2025, suffix: "" }
+    },
+    [
+      {
+        bibcode: "less-cited",
+        title: "10,000 Resolved Triples from Gaia",
+        authors: ["Shariat, Cheyanne"],
+        year: 2025,
+        abstract: "",
+        doi: null,
+        citationCount: 5
+      },
+      {
+        bibcode: "more-cited",
+        title: "Another Shariat 2025 paper",
+        authors: ["Shariat, Cheyanne", "Someone Else"],
+        year: 2025,
+        abstract: "",
+        doi: null,
+        citationCount: 500
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "more-cited");
+  assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("simple search mode still penalizes non-first-author mismatches before citation count", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: "Shariat25",
+      searchMode: "simple",
+      parsedKeyHint: { surname: "Shariat", year: 2025, suffix: "" }
+    },
+    [
+      {
+        bibcode: "good",
+        title: "10,000 Resolved Triples from Gaia",
+        authors: ["Shariat, Cheyanne"],
+        year: 2025,
+        abstract: "",
+        doi: null,
+        citationCount: 5
+      },
+      {
+        bibcode: "bad",
+        title: "Very highly cited unrelated paper",
+        authors: ["Someone Else", "Shariat, Cheyanne"],
+        year: 2025,
+        abstract: "",
+        doi: null,
+        citationCount: 500
       }
     ]
   );
@@ -510,6 +598,41 @@ test("rerankAdsCandidates for empty-token lookups prefers papers matching both l
       }
     ]
   );
+
+  assert.equal(candidates[0].bibcode, "target");
+  assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("empty-token lookups can target A Million Binaries from Gaia from sentence context", () => {
+  const citationContext = {
+    token: "",
+    contextText: "They found a million binaries from gaia",
+    sentenceText: "They found a million binaries from gaia",
+    parsedKeyHint: null
+  };
+
+  const queries = buildAdsQueries(citationContext);
+  assert.ok(queries.includes('title:"million binaries gaia" OR abstract:"million binaries gaia"'));
+  assert.ok(queries.includes('title:"binaries gaia" OR abstract:"binaries gaia"'));
+
+  const candidates = rerankAdsCandidates(citationContext, [
+    {
+      bibcode: "target",
+      title: "A Million Binaries from Gaia: Estimating the Binary Fraction",
+      authors: ["El-Badry, Kareem", "Rix, Hans-Walter"],
+      year: 2021,
+      abstract: "A million binaries from Gaia are used to estimate the binary fraction.",
+      doi: null
+    },
+    {
+      bibcode: "weak",
+      title: "Wide Binaries in an Ultra-faint Dwarf Galaxy",
+      authors: ["Shariat, Cheyanne", "El-Badry, Kareem"],
+      year: 2025,
+      abstract: "Wide binaries constrain dark matter.",
+      doi: null
+    }
+  ]);
 
   assert.equal(candidates[0].bibcode, "target");
   assert.ok(candidates[0].score > candidates[1].score);

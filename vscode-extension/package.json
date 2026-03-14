@@ -2,7 +2,7 @@
   "name": "overcite-vscode",
   "displayName": "OverCite",
   "description": "Search NASA ADS from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local",
   "private": true,
   "icon": "icon.png",
@@ -13,7 +13,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:overcite.resolveCitation"
+    "onCommand:overcite.resolveCitation",
+    "onCommand:overcite.showDiagnostics"
   ],
   "main": "./src/extension.cjs",
   "type": "module",
@@ -22,6 +23,10 @@
       {
         "command": "overcite.resolveCitation",
         "title": "OverCite: Resolve Citation"
+      },
+      {
+        "command": "overcite.showDiagnostics",
+        "title": "OverCite: Show Diagnostics"
       }
     ],
     "keybindings": [
