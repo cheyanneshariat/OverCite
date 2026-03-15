@@ -329,30 +329,24 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
-        padding: 15px 16px 11px;
+        padding: 14px 16px 10px;
         border-bottom: 1px solid var(--ez-panel-border);
         background: linear-gradient(180deg, var(--ez-soft-panel), transparent);
       }
 
       .ezcite-kicker {
-        margin: 0 0 8px;
-        font-size: 1.45rem;
+        margin: 0 0 3px;
+        font-size: 1.32rem;
         font-weight: 800;
         letter-spacing: 0.02em;
-        color: var(--ez-muted);
-      }
-
-      .ezcite-title {
-        margin: 0;
-        font-size: 1.08rem;
-        font-weight: 800;
-        letter-spacing: 0.01em;
+        line-height: 1.05;
+        color: var(--ez-ink);
       }
 
       .ezcite-subtitle {
         margin: 7px 0 0;
         color: var(--ez-meta);
-        font-size: 0.86rem;
+        font-size: 1.08rem;
         line-height: 1.35;
       }
 
@@ -601,7 +595,6 @@
       <div class="ezcite-header">
         <div>
           <p class="ezcite-kicker">OverCite</p>
-          <h2 class="ezcite-title">NASA ADS Lookup</h2>
           <p class="ezcite-subtitle"></p>
         </div>
         <button type="button" class="ezcite-close" aria-label="Close OverCite">×</button>
