@@ -8,6 +8,8 @@ It supports two search modes:
 1. `Contextual` uses the local sentence + typed cite key
 2. `Simple search` simply searches author/year and sorts by citation count (no context used)
 
+![OverCite workflow](docs/assets/outline.png)
+
 ## Repository
 
 - `extension/`: browser extension source, tests, and generated browser-specific builds
@@ -103,8 +105,6 @@ If the contextual result list looks wrong for a non-empty key, use the small `Si
 ## Settings
 
 OverCite keeps the UI simple and puts the main behavior controls in the extension settings page.
-
-![OverCite settings](docs/assets/example_settings.png)
 
 Current settings include:
 
