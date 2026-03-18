@@ -5,18 +5,10 @@ It can also be used as a VSCode extension for those using local TeX installation
 
 It supports two search modes:
 
-1. `Contextual` uses the local sentence + typed cite key
-2. `Simple search` simply searches author/year and sorts by citation count (no context used)
+1. `Contextual` uses typed citation key + local sentence context 
+2. `Simple search` simply searches author/year and sorts by citation count
 
 ![OverCite workflow](docs/assets/outline.png)
-
-## Repository
-
-- `extension/`: browser extension source, tests, and generated browser-specific builds
-- `extension/dist/chrome/`: generated Chrome / Chromium extension folder
-- `extension/dist/firefox/`: generated Firefox extension folder
-- `vscode-extension/`: separate VS Code extension package for local LaTeX workflows
-- `docs/`: technical report, demo assets, and PDF overview
 
 ## Get The Files
 
@@ -82,7 +74,7 @@ cd OverCite
 
 - Short tech demo video: [docs/assets/OverCite_demo.mov](docs/assets/OverCite_demo.mov)
 
-## Use OverCite
+## How to use OverCite
 
 1. In Overleaf source mode, type a rough citation key such as `\citep{Shariat25}` or `\citep{Shariat}`.
 2. Put the cursor inside the citation braces on the key you want OverCite to resolve.
@@ -100,7 +92,7 @@ Recommended citation patterns, from strongest to weakest:
 - `\citep{Shariat}`: useful when you know the author but not the year
 - `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
-If the contextual result list looks wrong for a non-empty key, use the small `Simple search` toggle in the popup, or set `Default Search Mode` in the extension settings.
+If the contextual result list looks wrong for a non-empty key, try `Simple search` or set `Default Search Mode` in the extension settings.
 
 ## Settings
 
@@ -181,4 +173,4 @@ If you download a newer version of the repository later, the update step depends
 - If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
 
 ## Contact
-For any questions or feedback, please contact Cheyanne Shariat: **cshariat@caltech.edu**
+I am always happy to hear your thoughts or get any feedback! Please contact [Cheyanne Shariat](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.
