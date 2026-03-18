@@ -204,3 +204,78 @@ test("searchAds contextual mode starts the first two ADS queries in parallel", a
   const results = await resultsPromise;
   assert.equal(results.length, 12);
 });
+
+test("searchAds stops explicit-year contextual lookups after first-author year results are sufficient", async () => {
+  const calls = [];
+
+  await searchAds(
+    {
+      token: "Shariat25",
+      sentenceText: "resolved triples from Gaia",
+      contextText: "resolved triples from Gaia provide empirical constraints on triple star populations",
+      parsedKeyHint: {
+        surname: "Shariat",
+        year: 2025,
+        firstInitial: null,
+        suffix: ""
+      }
+    },
+    {
+      adsApiToken: "token",
+      citationKeyMode: "informative"
+    },
+    async (input) => {
+      const url = new URL(String(input));
+      const query = decodeURIComponent(url.searchParams.get("q") ?? "");
+      calls.push(query);
+
+      if (calls.length === 1) {
+        return okResponse([]);
+      }
+      if (calls.length === 2) {
+        return okResponse([
+          makeDoc("kw-1"),
+          makeDoc("kw-2"),
+          makeDoc("kw-3"),
+          makeDoc("kw-4")
+        ]);
+      }
+      if (calls.length === 3) {
+        return okResponse([]);
+      }
+      if (calls.length === 4) {
+        return okResponse([
+          makeDoc("fy-1"),
+          makeDoc("fy-2"),
+          makeDoc("fy-3"),
+          makeDoc("fy-4"),
+          makeDoc("fy-5")
+        ]);
+      }
+      return okResponse([makeDoc(`late-${calls.length}`)]);
+    }
+  );
+
+  assert.equal(calls.length, 4);
+  assert.match(calls[3], /first_author:"Shariat" year:2025/);
+});
+
+function okResponse(docs) {
+  return {
+    ok: true,
+    async json() {
+      return { response: { docs } };
+    }
+  };
+}
+
+function makeDoc(bibcode) {
+  return {
+    bibcode,
+    title: [`Candidate ${bibcode}`],
+    author: ["Shariat, Cheyanne"],
+    year: "2025",
+    abstract: "Resolved triples from Gaia constrain triple star populations.",
+    doi: [`10.1234/${bibcode}`]
+  };
+}

@@ -93,6 +93,9 @@ function shouldStopAfterQuery(index, mergedCount, citationContext) {
   if (hasExplicitYear && index === 0 && mergedCount >= 6) {
     return true;
   }
+  if (hasExplicitYear && index >= 3 && mergedCount >= 6) {
+    return true;
+  }
   const isSurnameOnlyHint = Boolean(citationContext?.parsedKeyHint?.surname) && !hasExplicitYear;
   if (isSurnameOnlyHint && index < 2) {
     return false;
