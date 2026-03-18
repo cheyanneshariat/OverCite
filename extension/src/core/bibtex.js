@@ -86,6 +86,13 @@ export function generateInformativeKey(candidate, existingKeys = []) {
   return ensureUniqueKey(base, existingKeys);
 }
 
+export function generateAuthorYearKey(candidate, existingKeys = []) {
+  const family = extractFirstAuthorFamily(candidate?.authors).replace(/[^A-Za-z0-9]/g, "") || "Citation";
+  const year = candidate?.year ? String(candidate.year) : "";
+  const base = `${family}${year}` || "Citation";
+  return ensureUniqueKey(base, existingKeys);
+}
+
 function sanitizeTypedTokenKey(rawToken) {
   return String(rawToken ?? "")
     .trim()
@@ -94,12 +101,18 @@ function sanitizeTypedTokenKey(rawToken) {
 }
 
 export function generatePreferredKey(candidate, existingKeys = [], options = {}) {
-  const keyMode = String(options?.keyMode ?? "informative");
+  const keyMode = String(options?.keyMode ?? "authoryear");
   if (keyMode === "typed") {
     const typedBase = sanitizeTypedTokenKey(options?.typedToken);
     if (typedBase) {
       return ensureUniqueKey(typedBase, existingKeys);
     }
+  }
+  if (keyMode === "informative") {
+    return generateInformativeKey(candidate, existingKeys);
+  }
+  if (keyMode === "authoryear") {
+    return generateAuthorYearKey(candidate, existingKeys);
   }
   return generateInformativeKey(candidate, existingKeys);
 }

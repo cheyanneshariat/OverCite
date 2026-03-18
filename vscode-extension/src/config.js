@@ -16,7 +16,9 @@ export function normalizeVsCodeSettings(rawSettings = {}) {
     contextWindowChars: Number.isFinite(contextWindowChars)
       ? Math.min(1200, Math.max(200, contextWindowChars))
       : DEFAULT_SETTINGS.contextWindowChars,
-    citationKeyMode: citationKeyMode === "typed" ? "typed" : "informative",
+    citationKeyMode: citationKeyMode === "typed" || citationKeyMode === "informative" || citationKeyMode === "authoryear"
+      ? citationKeyMode
+      : DEFAULT_SETTINGS.citationKeyMode,
     bibliographyInsertMode: bibliographyInsertMode === "alphabetical" ? "alphabetical" : "append",
     defaultSearchMode: defaultSearchMode === "simple" ? "simple" : "contextual",
     projectBibFileOverrides: overrides

@@ -15,10 +15,11 @@ test("normalizeSettings defaults to staying on the bibliography tab after insert
   assert.equal(normalizeSettings({ returnToSourceAfterInsert: true }).returnToSourceAfterInsert, true);
 });
 
-test("normalizeSettings accepts valid citation key modes and defaults invalid ones to informative", () => {
+test("normalizeSettings accepts valid citation key modes and defaults invalid ones to author-year", () => {
+  assert.equal(normalizeSettings({ citationKeyMode: "authoryear" }).citationKeyMode, "authoryear");
   assert.equal(normalizeSettings({ citationKeyMode: "typed" }).citationKeyMode, "typed");
   assert.equal(normalizeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");
-  assert.equal(normalizeSettings({ citationKeyMode: "other" }).citationKeyMode, "informative");
+  assert.equal(normalizeSettings({ citationKeyMode: "other" }).citationKeyMode, "authoryear");
 });
 
 test("normalizeSettings accepts valid bibliography insert modes and defaults invalid ones to append", () => {

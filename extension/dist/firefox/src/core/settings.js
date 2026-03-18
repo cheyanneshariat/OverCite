@@ -67,7 +67,7 @@ function normalizeThemeMode(themeMode) {
 
 function normalizeCitationKeyMode(citationKeyMode) {
   const normalized = String(citationKeyMode ?? DEFAULT_SETTINGS.citationKeyMode).trim().toLowerCase();
-  if (normalized === "informative" || normalized === "typed") {
+  if (normalized === "authoryear" || normalized === "informative" || normalized === "typed") {
     return normalized;
   }
   return DEFAULT_SETTINGS.citationKeyMode;

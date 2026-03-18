@@ -27,7 +27,7 @@ async function loadSettings() {
   const settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
   tokenInput.value = settings.adsApiToken ?? "";
   themeInput.value = settings.themeMode ?? "auto";
-  citationKeyModeInput.value = settings.citationKeyMode ?? "informative";
+  citationKeyModeInput.value = settings.citationKeyMode ?? "authoryear";
   bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "append";
   defaultSearchModeInput.value = settings.defaultSearchMode ?? "contextual";
   contextInput.value = String(settings.contextWindowChars ?? 500);

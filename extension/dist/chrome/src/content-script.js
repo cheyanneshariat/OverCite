@@ -553,10 +553,13 @@
         transform: translateX(-50%);
         z-index: 2147483647;
         padding: 10px 14px;
-        border-radius: 999px;
+        max-width: min(680px, calc(100vw - 32px));
+        border-radius: 18px;
         background: rgba(24, 33, 42, 0.92);
         color: white;
         font: 600 0.86rem/1.3 "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+        text-align: center;
+        white-space: normal;
         opacity: 0;
         pointer-events: none;
         transition: opacity 160ms ease;
@@ -864,17 +867,87 @@
       await timed(focusLabel, focusAction, diagnostics);
     }
 
-    const shouldReturnToSource = Boolean(overlayState.settings.returnToSourceAfterInsert) || insertion.finalKey !== optimisticKey;
+    const shouldReturnToSource = Boolean(overlayState.settings.returnToSourceAfterInsert);
+    const needsManualSourceUpdate = insertion.finalKey !== optimisticKey;
+    let sourceReadyForFinalRewrite = !switchedToBib;
     if (switchedToBib && shouldReturnToSource) {
-      diagnostics.step(`Returning to ${originalFileName}...`);
+      const returnTargetLabel = originalFileName || "source file";
+      diagnostics.step(`Returning to ${returnTargetLabel}...`);
       try {
-        await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, { preferTabsOnly: true }), diagnostics);
+        if (originalFileName) {
+          await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, { preferTabsOnly: true }), diagnostics);
+        } else {
+          throw new Error("Original source filename was unavailable.");
+        }
       } catch {
-        await waitForManualFileSwitch(originalFileName, candidate.title, overlayState.settings.shortcutHelpText);
+        try {
+          await timed("openSourceTabByContent", () => openSourceTabByContent({
+            excludeFileName: bibTarget.target,
+            preferredFileName: originalFileName,
+            originalText: overlayState.originalEditorState?.text ?? "",
+            tokenStart: overlayState.citationContext?.tokenStart ?? 0,
+            tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+          }), diagnostics);
+        } catch {
+          try {
+            await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan({
+              excludeFileName: bibTarget.target,
+              projectFiles: projectState.projectFiles,
+              originalText: overlayState.originalEditorState?.text ?? "",
+              tokenStart: overlayState.citationContext?.tokenStart ?? 0,
+              tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+            }), diagnostics);
+          } catch {
+            sourceReadyForFinalRewrite = false;
+          }
+        }
       }
     }
 
-    if (shouldReturnToSource || insertion.finalKey !== optimisticKey) {
+    if (switchedToBib && shouldReturnToSource) {
+      try {
+        const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(3, 200), diagnostics);
+        const activeSourceName = activeSourceState.fileName || readActiveFileName();
+        const looksLikeSourceFile = originalFileName
+          ? activeSourceName.includes(originalFileName)
+          : Boolean(activeSourceName && activeSourceName !== bibTarget.target && /\.tex$/i.test(activeSourceName));
+        if (!looksLikeSourceFile) {
+          try {
+            await timed("openSourceTabByContent:verify", () => openSourceTabByContent({
+              excludeFileName: bibTarget.target,
+              preferredFileName: originalFileName,
+              originalText: overlayState.originalEditorState?.text ?? "",
+              tokenStart: overlayState.citationContext?.tokenStart ?? 0,
+              tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+            }), diagnostics);
+          } catch {
+            await timed("openSourceFileByProjectScan:verify", () => openSourceFileByProjectScan({
+              excludeFileName: bibTarget.target,
+              projectFiles: projectState.projectFiles,
+              originalText: overlayState.originalEditorState?.text ?? "",
+              tokenStart: overlayState.citationContext?.tokenStart ?? 0,
+              tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+            }), diagnostics);
+          }
+        }
+        sourceReadyForFinalRewrite = true;
+      } catch {
+        sourceReadyForFinalRewrite = false;
+      }
+    }
+
+    if (needsManualSourceUpdate && !sourceReadyForFinalRewrite) {
+      diagnostics.finish(`Finished in ${formatMs(performance.now() - diagnostics.startedAt)}`);
+      closeOverlay();
+      toast(
+        `Inserted ${insertion.finalKey} into ${bibTarget.target}. Update the cite key in your source from ${optimisticKey} to ${insertion.finalKey}.`,
+        "notice",
+        { durationMs: 7500 }
+      );
+      return;
+    }
+
+    if (shouldReturnToSource || (!switchedToBib && needsManualSourceUpdate)) {
       diagnostics.step(`Finalizing cite key in ${originalFileName || "current file"}...`);
       await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
         from: optimisticRange.from,
@@ -987,13 +1060,117 @@
     }
   }
 
+  async function openLikelySourceTab({ excludeFileName = "", preferredFileName = "", requireTex = false } = {}) {
+    const targetExclude = String(excludeFileName ?? "").trim();
+    const targetPreferred = String(preferredFileName ?? "").trim();
+    const candidates = collectOpenEditorTabs()
+      .filter((entry) => entry.fileName && entry.fileName !== targetExclude)
+      .filter((entry) => !requireTex || /\.tex$/i.test(entry.fileName))
+      .sort((left, right) => scoreSourceTab(right, targetPreferred) - scoreSourceTab(left, targetPreferred));
+
+    if (!candidates.length) {
+      throw new Error("Could not find a likely source editor tab.");
+    }
+
+    let lastError = null;
+    for (const candidate of candidates) {
+      try {
+        candidate.element.scrollIntoView?.({ block: "center", inline: "nearest" });
+        candidate.element.click();
+        await sleep(250);
+        await waitFor(async () => {
+          const activeTabName = readActiveFileName();
+          const activeFileName = extractLikelyEditorFileName(activeTabName) || activeTabName;
+          if (!activeFileName || activeFileName === targetExclude) {
+            return false;
+          }
+          if (!targetPreferred) {
+            return true;
+          }
+          return activeFileName === targetPreferred;
+        }, 3500);
+        return;
+      } catch (error) {
+        lastError = error;
+        await sleep(200);
+      }
+    }
+
+    throw lastError ?? new Error("Could not switch back to a likely source editor tab.");
+  }
+
+  async function openSourceTabByContent({ excludeFileName = "", preferredFileName = "", originalText = "", tokenStart = 0, tokenEnd = 0 } = {}) {
+    const targetExclude = String(excludeFileName ?? "").trim();
+    const targetPreferred = String(preferredFileName ?? "").trim();
+    const candidates = collectOpenEditorTabs()
+      .filter((entry) => entry.fileName && entry.fileName !== targetExclude)
+      .filter((entry) => /\.tex$/i.test(entry.fileName))
+      .sort((left, right) => scoreSourceTab(right, targetPreferred) - scoreSourceTab(left, targetPreferred));
+
+    if (!candidates.length) {
+      throw new Error("Could not find an open .tex editor tab.");
+    }
+
+    const contextMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
+    let lastError = null;
+    for (const candidate of candidates) {
+      try {
+        candidate.element.scrollIntoView?.({ block: "center", inline: "nearest" });
+        candidate.element.click();
+        await sleep(250);
+        await waitFor(async () => {
+          const state = await getEditorStateWithRetry(3, 200);
+          const activeName = state.fileName || readActiveFileName();
+          if (!activeName || activeName === targetExclude || !/\.tex$/i.test(activeName)) {
+            return false;
+          }
+          return contextMatcher(state.text);
+        }, 3500);
+        return;
+      } catch (error) {
+        lastError = error;
+        await sleep(200);
+      }
+    }
+
+    throw lastError ?? new Error("Could not return to the source editor by content match.");
+  }
+
+  async function openSourceFileByProjectScan({ excludeFileName = "", projectFiles = [], originalText = "", tokenStart = 0, tokenEnd = 0 } = {}) {
+    const targetExclude = String(excludeFileName ?? "").trim();
+    const texFiles = Array.from(new Set((projectFiles ?? [])
+      .map((fileName) => String(fileName ?? "").trim())
+      .filter((fileName) => fileName && fileName !== targetExclude && /\.tex$/i.test(fileName))));
+    if (!texFiles.length) {
+      throw new Error("Could not find any candidate source .tex files in the project.");
+    }
+
+    const contextMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
+    let lastError = null;
+    for (const fileName of texFiles) {
+      try {
+        await openProjectFile(fileName, { preferTabsOnly: false });
+        const state = await getEditorStateWithRetry(3, 200);
+        const activeName = state.fileName || readActiveFileName();
+        if (activeName && activeName !== targetExclude && /\.tex$/i.test(activeName) && contextMatcher(state.text)) {
+          return;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error("Could not recover the source file by scanning project .tex files.");
+  }
+
   function findOpenableElementsByText(targetText, preferTabsOnly = false) {
     const normalizedTarget = String(targetText ?? "").trim();
     const tabSelectors = [
       "[role='tab']",
-      "[data-testid*='tab']",
+      "[data-testid='editor-tab-active']",
+      "[data-testid*='editor-tab']",
       ".file-tab",
-      ".tab"
+      "[aria-selected='true'][role='tab']"
     ];
     const treeSelectors = [
       "[role='treeitem']",
@@ -1024,6 +1201,65 @@
     return [];
   }
 
+  function collectOpenEditorTabs() {
+    const entries = [];
+    const seen = new Set();
+    const selectors = [
+      "[role='tab']",
+      ".file-tab",
+      "[data-testid='editor-tab-active']",
+      "[data-testid*='editor-tab']"
+    ];
+    for (const selector of selectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        if (element.closest("#ezcite-root")) {
+          continue;
+        }
+        if (!isVisibleElement(element)) {
+          continue;
+        }
+        if (seen.has(element)) {
+          continue;
+        }
+        seen.add(element);
+        const text = element.textContent?.trim() || "";
+        const fileName = extractLikelyEditorFileName(text);
+        if (!fileName) {
+          continue;
+        }
+        entries.push({ element, text, fileName });
+      }
+    }
+    return entries;
+  }
+
+  function scoreSourceTab(entry, preferredFileName) {
+    let score = 0;
+    const fileName = String(entry?.fileName ?? "");
+    if (preferredFileName && fileName === preferredFileName) {
+      score += 10;
+    }
+    if (/\.tex$/i.test(fileName)) {
+      score += 6;
+    }
+    if (/\.bib$/i.test(fileName)) {
+      score -= 10;
+    }
+    return score;
+  }
+
+  function buildSourceTextMatcher(originalText, tokenStart, tokenEnd) {
+    const text = String(originalText ?? "");
+    const leftSnippet = text.slice(Math.max(0, tokenStart - 80), tokenStart).trim();
+    const rightSnippet = text.slice(tokenEnd, Math.min(text.length, tokenEnd + 80)).trim();
+    return (candidateText) => {
+      const haystack = String(candidateText ?? "");
+      const leftOk = leftSnippet ? haystack.includes(leftSnippet) : true;
+      const rightOk = rightSnippet ? haystack.includes(rightSnippet) : true;
+      return leftOk && rightOk;
+    };
+  }
+
   function collectExactMatches(targetText, selectors) {
     const matches = [];
     const seen = new Set();
@@ -1036,7 +1272,8 @@
           continue;
         }
         const text = element.textContent?.trim();
-        if (!text || text !== targetText) {
+        const extractedFileName = extractLikelyEditorFileName(text);
+        if (!text || (text !== targetText && extractedFileName !== targetText)) {
           continue;
         }
         if (seen.has(element)) {
@@ -1340,7 +1577,7 @@
     return window.matchMedia(THEME_MEDIA_QUERY).matches ? "dark" : "light";
   }
 
-  function toast(message, kind = "info") {
+  function toast(message, kind = "info", options = {}) {
     let toastNode = document.querySelector("#ezcite-toast");
     if (!toastNode) {
       toastNode = document.createElement("div");
@@ -1351,13 +1588,16 @@
     toastNode.className = "visible";
     if (kind === "error") {
       toastNode.style.background = "rgba(146, 40, 22, 0.95)";
+    } else if (kind === "notice") {
+      toastNode.style.background = "rgba(46, 72, 104, 0.96)";
     } else {
       toastNode.style.background = "rgba(24, 33, 42, 0.92)";
     }
     window.clearTimeout(toastNode._timeoutId);
+    const durationMs = Number.isFinite(options?.durationMs) ? Math.max(1800, options.durationMs) : 2600;
     toastNode._timeoutId = window.setTimeout(() => {
       toastNode.classList.remove("visible");
-    }, 2600);
+    }, durationMs);
   }
 
   async function waitFor(check, timeoutMs) {

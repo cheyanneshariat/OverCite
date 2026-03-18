@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   applyBibInsertion,
+  generateAuthorYearKey,
   buildTitleSlug,
   findBibMatch,
   generateInformativeKey,
@@ -22,6 +23,15 @@ test("generateInformativeKey creates author-year-title keys", () => {
     title: "10,000 Resolved Triples from Gaia"
   });
   assert.equal(key, "Shariat25_10k");
+});
+
+test("generateAuthorYearKey creates full-year author keys", () => {
+  const key = generateAuthorYearKey({
+    authors: ["Shariat, Cheyanne"],
+    year: 2025,
+    title: "10,000 Resolved Triples from Gaia"
+  });
+  assert.equal(key, "Shariat2025");
 });
 
 test("findBibMatch deduplicates by DOI", () => {
@@ -76,6 +86,18 @@ test("generatePreferredKey can preserve the typed key", () => {
   assert.equal(key, "Shariat25");
 });
 
+test("generatePreferredKey defaults to author-year keys", () => {
+  const key = generatePreferredKey(
+    {
+      authors: ["Shariat, Cheyanne"],
+      year: 2025,
+      title: "10,000 Resolved Triples from Gaia"
+    },
+    []
+  );
+  assert.equal(key, "Shariat2025");
+});
+
 test("applyBibInsertion can keep the typed key instead of adding a title slug", () => {
   const result = applyBibInsertion({
     bibText: "",
@@ -95,6 +117,10 @@ test("applyBibInsertion can keep the typed key instead of adding a title slug", 
   assert.equal(result.finalKey, "Shariat25");
   assert.match(result.updatedBibText, /@ARTICLE\{Shariat25,/);
   assert.equal(result.cursorAnchor, result.updatedBibText.trimEnd().length);
+  assert.deepEqual(result.insertionRange, {
+    start: 0,
+    end: result.updatedBibText.trimEnd().length
+  });
 });
 
 test("insertBibtexEntryAlphabetically places a new entry before the next larger key", () => {
@@ -158,4 +184,69 @@ test("applyBibInsertion can insert new entries alphabetically by key", () => {
   assert.ok(goldbergIndex >= 0);
   assert.ok(elBadryIndex < goldbergIndex);
   assert.equal(result.cursorAnchor, elBadryIndex + result.rewrittenBibtex.trim().length);
+  assert.deepEqual(result.insertionRange, {
+    start: elBadryIndex,
+    end: elBadryIndex + result.rewrittenBibtex.trim().length
+  });
+});
+
+test("applyBibInsertion append mode anchors the cursor at the end of the inserted entry", () => {
+  const bibText = `
+@ARTICLE{Existing24_demo,
+  title = {An Existing Demo Entry},
+  year = {2024}
+}
+`;
+  const result = applyBibInsertion({
+    bibText,
+    bibtex: `@ARTICLE{2025PASP..137i4201S,
+  title = {10,000 Resolved Triples from Gaia},
+  doi = {10.1088/1538-3873/adfb30}
+}`,
+    candidate: {
+      title: "10,000 Resolved Triples from Gaia",
+      doi: "10.1088/1538-3873/adfb30",
+      authors: ["Shariat, Cheyanne"],
+      year: 2025,
+      keyMode: "typed",
+      typedToken: "Shariat25",
+      bibliographyInsertMode: "append"
+    }
+  });
+
+  const insertedIndex = result.updatedBibText.indexOf("@ARTICLE{Shariat25,");
+  assert.ok(insertedIndex >= 0);
+  assert.equal(result.cursorAnchor, insertedIndex + result.rewrittenBibtex.trim().length);
+  assert.deepEqual(result.insertionRange, {
+    start: insertedIndex,
+    end: insertedIndex + result.rewrittenBibtex.trim().length
+  });
+  assert.equal(result.cursorAnchor, result.updatedBibText.trimEnd().length);
+});
+
+test("applyBibInsertion upgrades colliding author-year keys to letter suffixes", () => {
+  const bibText = `
+@ARTICLE{Shariat2025,
+  title = {An Existing 2025 Shariat Paper},
+  year = {2025}
+}
+`;
+  const result = applyBibInsertion({
+    bibText,
+    bibtex: `@ARTICLE{2025PASP..137i4201S,
+  title = {10,000 Resolved Triples from Gaia},
+  doi = {10.1088/1538-3873/adfb30}
+}`,
+    candidate: {
+      title: "10,000 Resolved Triples from Gaia",
+      doi: "10.1088/1538-3873/adfb30",
+      authors: ["Shariat, Cheyanne"],
+      year: 2025,
+      keyMode: "authoryear",
+      bibliographyInsertMode: "append"
+    }
+  });
+
+  assert.equal(result.finalKey, "Shariat2025a");
+  assert.match(result.updatedBibText, /@ARTICLE\{Shariat2025a,/);
 });

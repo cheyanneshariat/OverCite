@@ -5,7 +5,7 @@ import { findCitationAtCursor } from "../src/core/citation.js";
 import { applyBibInsertion } from "../src/core/bibtex.js";
 import { resolveBibTargetFromProjectState } from "../src/core/project.js";
 
-test("example TeX harness resolves references.bib and generates the expected Shariat key", async () => {
+test("example TeX harness resolves references.bib and generates the default author-year Shariat key", async () => {
   const mainText = String.raw`\documentclass{article}
 \begin{document}
 Triples are common in the Galaxy, as shown by Gaia.
@@ -50,6 +50,6 @@ Triples are common in the Galaxy, as shown by Gaia.
     }
   });
 
-  assert.equal(insertion.finalKey, "Shariat25_10k");
-  assert.match(insertion.updatedBibText, /@ARTICLE\{Shariat25_10k,/);
+  assert.equal(insertion.finalKey, "Shariat2025");
+  assert.match(insertion.updatedBibText, /@ARTICLE\{Shariat2025,/);
 });

@@ -7,7 +7,7 @@ test("normalizeVsCodeSettings constrains and normalizes values", () => {
   const settings = normalizeVsCodeSettings({
     adsApiToken: "  token  ",
     contextWindowChars: 5000,
-    citationKeyMode: "typed",
+    citationKeyMode: "authoryear",
     bibliographyInsertMode: "alphabetical",
     defaultSearchMode: "simple",
     projectBibFileOverrides: { "/tmp/project": "refs.bib" }
@@ -15,10 +15,16 @@ test("normalizeVsCodeSettings constrains and normalizes values", () => {
 
   assert.equal(settings.adsApiToken, "token");
   assert.equal(settings.contextWindowChars, 1200);
-  assert.equal(settings.citationKeyMode, "typed");
+  assert.equal(settings.citationKeyMode, "authoryear");
   assert.equal(settings.bibliographyInsertMode, "alphabetical");
   assert.equal(settings.defaultSearchMode, "simple");
   assert.deepEqual(settings.projectBibFileOverrides, { "/tmp/project": "refs.bib" });
+});
+
+test("normalizeVsCodeSettings accepts typed and informative key modes and defaults invalid values to author-year", () => {
+  assert.equal(normalizeVsCodeSettings({ citationKeyMode: "typed" }).citationKeyMode, "typed");
+  assert.equal(normalizeVsCodeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");
+  assert.equal(normalizeVsCodeSettings({ citationKeyMode: "other" }).citationKeyMode, "authoryear");
 });
 
 test("workspaceKeyFromFolder returns a stable string key", () => {

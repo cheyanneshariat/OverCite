@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   shortcutHelpText: "Alt+Shift+E",
   themeMode: "auto",
   returnToSourceAfterInsert: false,
-  citationKeyMode: "informative",
+  citationKeyMode: "authoryear",
   bibliographyInsertMode: "append",
   defaultSearchMode: "contextual"
 });

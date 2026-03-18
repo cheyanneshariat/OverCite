@@ -39,10 +39,14 @@ async function runAppendScenario(mainTexPath, referencesPath) {
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
+  const activeEditor = vscode.window.activeTextEditor;
 
   assert.match(updatedMain, /\\citep\{Shariat25_10k\}/);
   assert.match(updatedBib, /Shariat25_10k/);
   assert.match(updatedBib, /10,000 Resolved Triples from Gaia/);
+  assert.ok(activeEditor, "Expected an active editor after append insertion");
+  assert.equal(activeEditor.document.uri.fsPath, mainTexPath);
+  assertCollapsedSelectionAtText(activeEditor, "Shariat25_10k");
 }
 
 async function runAlphabeticalScenario(mainTexPath, referencesPath) {
@@ -73,11 +77,15 @@ async function runAlphabeticalScenario(mainTexPath, referencesPath) {
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
+  const activeEditor = vscode.window.activeTextEditor;
 
   assert.match(updatedMain, /\\citep\{Shariat25_10k\}/);
   assert.match(updatedBib, /Shariat25_10k/);
   assert.ok(updatedBib.indexOf("Aaa20_demo") < updatedBib.indexOf("Shariat25_10k"));
   assert.ok(updatedBib.indexOf("Shariat25_10k") < updatedBib.indexOf("Zzz30_demo"));
+  assert.ok(activeEditor, "Expected an active editor after alphabetical insertion");
+  assert.equal(activeEditor.document.uri.fsPath, mainTexPath);
+  assertCollapsedSelectionAtText(activeEditor, "Shariat25_10k");
 }
 
 async function runEmptyTokenScenario(mainTexPath, referencesPath) {
@@ -107,11 +115,15 @@ async function runEmptyTokenScenario(mainTexPath, referencesPath) {
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
+  const activeEditor = vscode.window.activeTextEditor;
 
   assert.doesNotMatch(updatedMain, /\\citep\{\}/);
   assert.match(updatedMain, /\\citep\{Shariat25_/);
   assert.match(updatedBib, /Wide Binaries in an Ultra-faint Dwarf Galaxy/);
   assert.match(updatedBib, /Primordial black hole Dark Matter/);
+  assert.ok(activeEditor, "Expected an active editor after empty-token insertion");
+  assert.equal(activeEditor.document.uri.fsPath, mainTexPath);
+  assertCollapsedSelectionAtText(activeEditor, "Shariat25_");
 }
 
 async function runSimpleCommandScenario(mainTexPath, referencesPath) {
@@ -143,9 +155,13 @@ async function runSimpleCommandScenario(mainTexPath, referencesPath) {
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
+  const activeEditor = vscode.window.activeTextEditor;
 
   assert.match(updatedMain, /\\citep\{Shariat25_/);
   assert.match(updatedBib, /Once a Triple|10,000 Resolved Triples from Gaia/);
+  assert.ok(activeEditor, "Expected an active editor after simple-command insertion");
+  assert.equal(activeEditor.document.uri.fsPath, mainTexPath);
+  assertCollapsedSelectionAtText(activeEditor, "Shariat25_");
 }
 
 async function rewriteDocument(filePath, text) {
@@ -161,4 +177,17 @@ async function rewriteDocument(filePath, text) {
   await document.save();
   await new Promise((resolve) => setTimeout(resolve, 150));
   return vscode.workspace.openTextDocument(filePath);
+}
+
+function assertCollapsedSelectionAtText(editor, textPrefix) {
+  assert.ok(editor.selection.isEmpty, "Expected cursor selection to be collapsed");
+  const documentText = editor.document.getText();
+  const expectedStart = documentText.indexOf(textPrefix);
+  assert.ok(expectedStart >= 0, `Did not find ${textPrefix} in active editor`);
+  const expectedEnd = expectedStart + textPrefix.length;
+  const selectionOffset = editor.document.offsetAt(editor.selection.active);
+  assert.ok(
+    selectionOffset >= expectedEnd,
+    `Expected cursor to land after ${textPrefix}, found offset ${selectionOffset} before ${expectedEnd}`
+  );
 }
