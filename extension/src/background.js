@@ -67,32 +67,7 @@ async function searchAds(citationContext) {
   }
 
   const queries = buildAdsQueries(citationContext);
-  const mergedDocs = [];
-  const seenBibcodes = new Set();
-
-  for (const [index, query] of queries.entries()) {
-    const docs = await fetchAdsDocs(query, settings.adsApiToken);
-    for (const doc of docs) {
-      const bibcode = doc?.bibcode ?? `row-${index}-${mergedDocs.length}`;
-      if (seenBibcodes.has(bibcode)) {
-        continue;
-      }
-      seenBibcodes.add(bibcode);
-      mergedDocs.push(doc);
-    }
-
-    const hasExplicitYear = Boolean(citationContext?.parsedKeyHint?.year);
-    if (hasExplicitYear && index === 0 && mergedDocs.length >= 6) {
-      break;
-    }
-    const isSurnameOnlyHint = Boolean(citationContext?.parsedKeyHint?.surname) && !hasExplicitYear;
-    if (isSurnameOnlyHint && index < 2) {
-      continue;
-    }
-    if (mergedDocs.length >= 12) {
-      break;
-    }
-  }
+  const mergedDocs = await fetchSearchCandidates(queries, citationContext, settings.adsApiToken);
 
   const candidates = mergedDocs.map(mapAdsDocToCandidate);
   const finalCandidates = rerankAdsCandidates(citationContext, candidates);
@@ -105,6 +80,58 @@ async function searchAds(citationContext) {
       typedToken: citationContext?.token ?? ""
     })
   }));
+}
+
+async function fetchSearchCandidates(queries, citationContext, adsApiToken) {
+  const mergedDocs = [];
+  const seenBibcodes = new Set();
+  const initialQueries = citationContext?.searchMode === "simple" ? queries.slice(0, 1) : queries.slice(0, 2);
+
+  if (initialQueries.length) {
+    const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken)));
+    for (const [index, docs] of initialBatches.entries()) {
+      mergeDocs(mergedDocs, seenBibcodes, docs, index);
+    }
+  }
+
+  const initialIndex = initialQueries.length - 1;
+  if (initialQueries.length && shouldStopAfterQuery(initialIndex, mergedDocs.length, citationContext)) {
+    return mergedDocs;
+  }
+
+  for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
+    const index = offset + initialQueries.length;
+    const docs = await fetchAdsDocs(query, adsApiToken);
+    mergeDocs(mergedDocs, seenBibcodes, docs, index);
+    if (shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
+      break;
+    }
+  }
+
+  return mergedDocs;
+}
+
+function mergeDocs(target, seenBibcodes, docs, queryIndex) {
+  for (const doc of docs) {
+    const bibcode = doc?.bibcode ?? `row-${queryIndex}-${target.length}`;
+    if (seenBibcodes.has(bibcode)) {
+      continue;
+    }
+    seenBibcodes.add(bibcode);
+    target.push(doc);
+  }
+}
+
+function shouldStopAfterQuery(index, mergedCount, citationContext) {
+  const hasExplicitYear = Boolean(citationContext?.parsedKeyHint?.year);
+  if (hasExplicitYear && index === 0 && mergedCount >= 6) {
+    return true;
+  }
+  const isSurnameOnlyHint = Boolean(citationContext?.parsedKeyHint?.surname) && !hasExplicitYear;
+  if (isSurnameOnlyHint && index < 2) {
+    return false;
+  }
+  return mergedCount >= 12;
 }
 
 async function exportBibtex(bibcode) {

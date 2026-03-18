@@ -143,3 +143,64 @@ test("searchAds simple mode requests citation_count and keeps simple query ladde
   assert.match(decodeURIComponent(calls[0]), /year:2025/);
   assert.doesNotMatch(decodeURIComponent(calls[0]), /resolved triples from Gaia/);
 });
+
+test("searchAds contextual mode starts the first two ADS queries in parallel", async () => {
+  const startedCalls = [];
+  const resolvers = [];
+
+  const resultsPromise = searchAds(
+    {
+      token: "Shariat25",
+      sentenceText: "resolved triples from Gaia",
+      contextText: "resolved triples from Gaia provide empirical constraints on triple star populations",
+      parsedKeyHint: {
+        surname: "Shariat",
+        year: 2025,
+        firstInitial: null,
+        suffix: ""
+      }
+    },
+    {
+      adsApiToken: "token",
+      citationKeyMode: "informative"
+    },
+    async (input) => {
+      startedCalls.push(String(input));
+      const callNumber = startedCalls.length;
+      if (callNumber <= 2) {
+        return await new Promise((resolve) => {
+          resolvers.push(() => resolve({
+            ok: true,
+            async json() {
+              return {
+                response: {
+                  docs: Array.from({ length: 6 }, (_, index) => ({
+                    bibcode: `${callNumber}-${index}`,
+                    title: [`Candidate ${callNumber}-${index}`],
+                    author: ["Shariat, Cheyanne"],
+                    year: "2025",
+                    abstract: "Resolved triples from Gaia constrain triple star populations.",
+                    doi: [`10.1234/example-${callNumber}-${index}`]
+                  }))
+                }
+              };
+            }
+          }));
+        });
+      }
+      return {
+        ok: true,
+        async json() {
+          return { response: { docs: [] } };
+        }
+      };
+    }
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(startedCalls.length, 2);
+  resolvers.forEach((resolve) => resolve());
+
+  const results = await resultsPromise;
+  assert.equal(results.length, 12);
+});

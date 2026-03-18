@@ -208,6 +208,7 @@
   const RESPONSE_EVENT = "EZCITE_PAGE_RESPONSE";
   let overlay = null;
   let overlayState = null;
+  let activeLookupGeneration = 0;
   injectPageBridge();
   installStyles();
   installRuntimeHooks();
@@ -661,15 +662,23 @@
   }
 
   async function startLookup(searchMode) {
+    const lookupGeneration = ++activeLookupGeneration;
     const settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
+    if (!isCurrentLookup(lookupGeneration)) {
+      return;
+    }
     const resolvedSearchMode = normalizeSearchMode(searchMode, settings.defaultSearchMode);
     const editorState = await getEditorStateWithRetry();
+    if (!isCurrentLookup(lookupGeneration)) {
+      return;
+    }
     const citationContext = findCitationAtCursor(editorState.text, editorState.from, settings.contextWindowChars);
     if (!citationContext) {
       throw new Error("Place the cursor inside a \\cite{...} command before triggering OverCite.");
     }
 
     overlayState = {
+      lookupGeneration,
       settings,
       citationContext: { ...citationContext, searchMode: resolvedSearchMode },
       searchMode: resolvedSearchMode,
@@ -695,6 +704,9 @@
       type: MESSAGE_TYPES.SEARCH_ADS,
       citationContext: { ...citationContext, searchMode: resolvedSearchMode }
     });
+    if (!isCurrentLookup(lookupGeneration)) {
+      return;
+    }
 
     overlayState.results = results;
     if (!results.length) {
@@ -927,9 +939,10 @@
       ".tab.active"
     ];
     for (const selector of selectors) {
-      const text = document.querySelector(selector)?.textContent?.trim();
-      if (text) {
-        return text;
+      const text = document.querySelector(selector)?.textContent?.trim() || "";
+      const fileName = extractLikelyEditorFileName(text);
+      if (fileName) {
+        return fileName;
       }
     }
     return "";
@@ -1057,7 +1070,7 @@
         if (hasExactTextDescendant(element, targetText)) {
           continue;
         }
-        const candidate = element.closest("[role='treeitem'], [role='button'], button, a, div, span") || element;
+        const candidate = findPreferredTreeClickTarget(element);
         if (seen.has(candidate)) {
           continue;
         }
@@ -1069,6 +1082,14 @@
       }
     }
     return matches;
+  }
+
+  function findPreferredTreeClickTarget(element) {
+    const directClickable = element.closest("[role='button'], button, a, [data-testid*='file']");
+    if (directClickable && isVisibleElement(directClickable)) {
+      return directClickable;
+    }
+    return element;
   }
 
   function collectBroadFilenameMatches(targetText) {
@@ -1224,6 +1245,15 @@
     return response.result;
   }
 
+  function extractLikelyEditorFileName(text) {
+    const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return "";
+    }
+    const match = normalized.match(/([A-Za-z0-9_.\-\/ ]+\.(?:tex|bib|sty|cls|bst|bbx|cbx|txt|md|csv|json|yaml|yml|py|js|ts|r|m))(?!.*\.(?:tex|bib|sty|cls|bst|bbx|cbx|txt|md|csv|json|yaml|yml|py|js|ts|r|m))/i);
+    return match ? match[1].trim() : "";
+  }
+
   function pageRequest(action, payload = {}, timeoutMs = 5000) {
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
@@ -1284,10 +1314,15 @@
   }
 
   function closeOverlay() {
+    activeLookupGeneration += 1;
     if (overlay) {
       overlay.hidden = true;
     }
     overlayState = null;
+  }
+
+  function isCurrentLookup(lookupGeneration) {
+    return lookupGeneration === activeLookupGeneration;
   }
 
   function applyOverlayTheme(themeMode) {

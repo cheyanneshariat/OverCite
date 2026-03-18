@@ -34,32 +34,7 @@ export async function searchAds(citationContext, settings, fetchImpl = globalThi
     throw new Error("No ADS API token is configured. Set overcite.adsApiToken in VS Code settings.");
   }
   const queries = buildAdsQueries(citationContext);
-  const seenBibcodes = new Set();
-  const mergedDocs = [];
-
-  for (const [index, query] of queries.entries()) {
-    const docs = await fetchAdsDocs(query, settings.adsApiToken, fetchImpl);
-    for (const doc of docs) {
-      const bibcode = doc?.bibcode ?? `row-${index}-${mergedDocs.length}`;
-      if (seenBibcodes.has(bibcode)) {
-        continue;
-      }
-      seenBibcodes.add(bibcode);
-      mergedDocs.push(doc);
-    }
-
-    const hasExplicitYear = Boolean(citationContext?.parsedKeyHint?.year);
-    if (hasExplicitYear && index === 0 && mergedDocs.length >= 6) {
-      break;
-    }
-    const isSurnameOnlyHint = Boolean(citationContext?.parsedKeyHint?.surname) && !hasExplicitYear;
-    if (isSurnameOnlyHint && index < 2) {
-      continue;
-    }
-    if (mergedDocs.length >= 12) {
-      break;
-    }
-  }
+  const mergedDocs = await fetchSearchCandidates(queries, citationContext, settings.adsApiToken, fetchImpl);
 
   const candidates = rerankAdsCandidates(citationContext, mergedDocs.map(mapAdsDocToCandidate));
   return candidates.map((candidate) => ({
@@ -71,6 +46,58 @@ export async function searchAds(citationContext, settings, fetchImpl = globalThi
       typedToken: citationContext?.token ?? ""
     })
   }));
+}
+
+async function fetchSearchCandidates(queries, citationContext, adsApiToken, fetchImpl) {
+  const mergedDocs = [];
+  const seenBibcodes = new Set();
+  const initialQueries = citationContext?.searchMode === "simple" ? queries.slice(0, 1) : queries.slice(0, 2);
+
+  if (initialQueries.length) {
+    const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken, fetchImpl)));
+    for (const [index, docs] of initialBatches.entries()) {
+      mergeDocs(mergedDocs, seenBibcodes, docs, index);
+    }
+  }
+
+  const initialIndex = initialQueries.length - 1;
+  if (initialQueries.length && shouldStopAfterQuery(initialIndex, mergedDocs.length, citationContext)) {
+    return mergedDocs;
+  }
+
+  for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
+    const index = offset + initialQueries.length;
+    const docs = await fetchAdsDocs(query, adsApiToken, fetchImpl);
+    mergeDocs(mergedDocs, seenBibcodes, docs, index);
+    if (shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
+      break;
+    }
+  }
+
+  return mergedDocs;
+}
+
+function mergeDocs(target, seenBibcodes, docs, queryIndex) {
+  for (const doc of docs) {
+    const bibcode = doc?.bibcode ?? `row-${queryIndex}-${target.length}`;
+    if (seenBibcodes.has(bibcode)) {
+      continue;
+    }
+    seenBibcodes.add(bibcode);
+    target.push(doc);
+  }
+}
+
+function shouldStopAfterQuery(index, mergedCount, citationContext) {
+  const hasExplicitYear = Boolean(citationContext?.parsedKeyHint?.year);
+  if (hasExplicitYear && index === 0 && mergedCount >= 6) {
+    return true;
+  }
+  const isSurnameOnlyHint = Boolean(citationContext?.parsedKeyHint?.surname) && !hasExplicitYear;
+  if (isSurnameOnlyHint && index < 2) {
+    return false;
+  }
+  return mergedCount >= 12;
 }
 
 export async function exportBibtex(bibcode, settings, fetchImpl = globalThis.fetch) {

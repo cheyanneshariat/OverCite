@@ -62,9 +62,10 @@
     ];
     for (const selector of selectors) {
       const element = document.querySelector(selector);
-      const text = element?.textContent?.trim();
-      if (text) {
-        return text;
+      const text = element?.textContent?.trim() || "";
+      const fileName = extractLikelyEditorFileName(text);
+      if (fileName) {
+        return fileName;
       }
     }
     return "";
@@ -85,6 +86,15 @@
       default:
         throw new Error(`Unknown page bridge action: ${action}`);
     }
+  }
+
+  function extractLikelyEditorFileName(text) {
+    const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return "";
+    }
+    const match = normalized.match(/([A-Za-z0-9_.\-\/ ]+\.(?:tex|bib|sty|cls|bst|bbx|cbx|txt|md|csv|json|yaml|yml|py|js|ts|r|m))(?!.*\.(?:tex|bib|sty|cls|bst|bbx|cbx|txt|md|csv|json|yaml|yml|py|js|ts|r|m))/i);
+    return match ? match[1].trim() : "";
   }
 
   function getActiveEditorState() {
