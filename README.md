@@ -179,3 +179,6 @@ If you download a newer version of the repository later, the update step depends
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
 - If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
+
+## Contact
+For any questions or feedback, please contact Cheyanne Shariat: **cshariat@caltech.edu**
