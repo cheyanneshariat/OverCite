@@ -19,9 +19,9 @@ This package is a separate VS Code extension that brings the OverCite citation w
 
 ## Settings
 
-- `overcite.adsApiToken`
+- `overcite.adsApiToken` (accepts either a NASA ADS or SciX API token)
 - `overcite.contextWindowChars`
-- `overcite.citationKeyMode`
+- `overcite.citationKeyMode` (`authoryear`, `informative`, or `typed`)
 - `overcite.bibliographyInsertMode`
 - `overcite.defaultSearchMode`
 - `overcite.projectBibFileOverrides`

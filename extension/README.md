@@ -28,14 +28,14 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 2. Enable Developer mode
 3. Click `Load unpacked`
 4. Select the local `extension/dist/chrome/` folder from this repository
-5. Open the extension options page and paste your ADS API token
+5. Open the extension options page and paste your ADS or SciX API token
 
 ### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
 3. Select `manifest.json` from the local `extension/dist/firefox/` folder
-4. Open the extension options page and paste your ADS API token
+4. Open the extension options page and paste your ADS or SciX API token
 
 ## Trigger inside Overleaf
 

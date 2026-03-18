@@ -52,7 +52,7 @@
         "overcite.adsApiToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "NASA ADS API token used for search and BibTeX export."
+          "markdownDescription": "NASA ADS or SciX API token used for search and BibTeX export."
         },
         "overcite.contextWindowChars": {
           "type": "number",
@@ -63,12 +63,13 @@
         },
         "overcite.citationKeyMode": {
           "type": "string",
-          "default": "informative",
+          "default": "authoryear",
           "enum": [
+            "authoryear",
             "informative",
             "typed"
           ],
-          "markdownDescription": "Use an informative generated key like `Shariat25_10k` or preserve the typed key when possible."
+          "markdownDescription": "Use a plain author-year key like `Shariat2025`, an informative key like `Shariat25_10k`, or preserve the typed key when possible."
         },
         "overcite.bibliographyInsertMode": {
           "type": "string",

@@ -45,7 +45,7 @@ cd OverCite
 3. Click `Load unpacked`
 4. Select `extension/dist/chrome/`
 5. Open the OverCite options page (`Details` --> `Extension options`)
-6. Paste your NASA ADS API token*, click `Save Settings` at the bottom
+6. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
 7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 8. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
@@ -56,7 +56,7 @@ cd OverCite
 2. Click `Load Temporary Add-on...`
 3. Select `extension/dist/firefox/manifest.json`
 4. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
-5. Paste your NASA ADS API token*, click `Save Settings` at the bottom
+5. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
 6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 7. Put the cursor inside the citation key and press `Alt+Shift+E`
 
@@ -71,12 +71,12 @@ cd OverCite
    - or open the Command Palette with `Command+Shift+P` and run `Preferences: Open Settings (UI)`
 6. In the Settings search bar, type `OverCite`
 7. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
-8. Paste your NASA ADS API token* into that field
+8. Paste your NASA ADS or SciX API token* into that field
 9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
 10. If you want the VS Code version to ignore sentence context, press `Alt+Shift+S`, run `OverCite: Resolve Citation (Simple Search)`, or set `OverCite: Default Search Mode` in VS Code settings
 11. Review the dropdown results and choose the paper you want
 
-*sign in to [NASA ADS](https://ui.adsabs.harvard.edu/), then go to Account --> Settings --> API Token
+*sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/), then go to your account settings and copy an API token
 
 ## Demo
 
@@ -108,9 +108,9 @@ OverCite keeps the UI simple and puts the main behavior controls in the extensio
 
 Current settings include:
 
-- ADS API token for NASA ADS search access
+- ADS/SciX API token for search and BibTeX export
 - Theme selection
-- Citation key style, including keeping the typed key instead of adding an informative suffix
+- Citation key style, including plain author-year keys like `Shariat2025`, informative keys like `Shariat25_10k`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
 - Default search mode, so OverCite can open in either contextual mode or simple search first
 - Project-specific bibliography file overrides when a project contains multiple `.bib` files
