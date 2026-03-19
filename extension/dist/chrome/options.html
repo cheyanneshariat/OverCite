@@ -180,6 +180,16 @@
         min-height: 1.4rem;
       }
 
+      .footer-note {
+        margin: 16px 4px 0;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .footer-note a {
+        color: inherit;
+      }
+
       code {
         font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
         font-size: 0.92em;
@@ -195,8 +205,8 @@
       </p>
       <form id="settings-form">
         <label>
-          ADS API Token
-          <span class="hint">Used for ADS search and BibTeX export requests.</span>
+          ADS/SciX API Token
+          <span class="hint">Used for ADS/SciX search and BibTeX export requests.</span>
           <input id="ads-api-token" name="adsApiToken" type="password" autocomplete="off" spellcheck="false">
         </label>
         <label>
@@ -260,6 +270,9 @@
           <div id="status" aria-live="polite"></div>
         </div>
       </form>
+      <p class="footer-note">
+        More info and installation notes: <a href="https://github.com/cheyanneshariat/OverCite" target="_blank" rel="noreferrer">GitHub</a>
+      </p>
     </main>
     <script type="module" src="src/options.js"></script>
   </body>
