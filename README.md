@@ -86,10 +86,6 @@ cd OverCite
 5. Click the paper you want.
 6. OverCite will update the active citation key and insert the BibTeX entry into the project bibliography file.
 
-## Scope
-
-OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching ADS/SciX, copying BibTeX, renaming the citation key, and then returning to writing. It is not meant to replace broader literature exploration, paper discovery, or full reference-management software.
-
 ## Examples
 
 Recommended citation patterns, from strongest to weakest:
@@ -100,6 +96,10 @@ Recommended citation patterns, from strongest to weakest:
 - `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
 If the contextual result list looks wrong for a non-empty key, try `Simple search` or set `Default Search Mode` in the extension settings.
+
+## Scope
+
+OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching ADS/SciX, copying BibTeX, renaming the citation key, and then returning to writing. It is *not* meant to replace broader literature exploration or paper discovery.
 
 ## Settings
 
