@@ -8,6 +8,8 @@ It supports two search modes:
 1. `Contextual` uses typed citation key + local sentence context 
 2. `Simple search` simply searches author/year and sorts by citation count
 
+Covered fields: astronomy, physics, Earth science, general-science collections, and *all papers on the arXiv*.
+
 ![OverCite workflow](docs/assets/outline.png)
 
 ## Get The Files
