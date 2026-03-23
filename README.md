@@ -1,12 +1,13 @@
 # OverCite
 
-OverCite is a browser extension for Overleaf that searches NASA ADS from inside LaTeX citation commands, shows likely paper matches, and inserts BibTeX into the correct project bibliography file. 
-It can also be used as a VSCode extension for those using local TeX installations.
+OverCite is an in-editor citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
+
+The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects.
 
 It supports two search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
-2. `Simple search` simply searches author/year and sorts by citation count
+2. `Simple search` searches author/year only and sorts by citation count
 
 Covered fields: astronomy, physics, Earth science, general-science collections, and *all papers on the arXiv*.
 
