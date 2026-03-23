@@ -1,6 +1,6 @@
 # OverCite
 
-OverCite is an in-editor citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
+OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
 
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects.
 
