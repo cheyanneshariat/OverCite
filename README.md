@@ -166,7 +166,7 @@ If you download a newer version of the repository later, the update step depends
 1. Replace your local repo copy with the newer one, or `git pull`
 2. In VS Code, uninstall the old OverCite extension if needed
 3. Run `Extensions: Install from VSIX...`
-4. Select `vscode-extension/overcite-vscode-0.1.2.vsix`
+4. Select `vscode-extension/overcite-vscode-{version}.vsix`
 5. Reload VS Code
 
 ## Notes
