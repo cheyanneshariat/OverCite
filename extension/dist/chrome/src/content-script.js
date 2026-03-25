@@ -9,6 +9,10 @@
   });
   const THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
   const extensionApi = globalThis.browser ?? globalThis.chrome;
+  function debugTrace() {
+    // Temporary Overleaf live-test tracing removed. Keep the call sites as no-ops
+    // so the recovery logic can stay untouched and easy to compare.
+  }
 
   function findBraceClose(source, openIndex) {
     let depth = 0;
@@ -137,6 +141,10 @@
 
   function removeRange(source, start, end) {
     return `${source.slice(0, start)} ${source.slice(end)}`;
+  }
+
+  function escapeRegex(value) {
+    return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   function findCitationAtCursor(source, cursorIndex, windowChars = 500) {
@@ -657,7 +665,12 @@
           <p class="ezcite-abstract">${escapeHtml(truncate(candidate.abstract, 240))}</p>
         </div>
       `;
-      button.addEventListener("click", () => selectCandidate(candidate));
+      button.addEventListener("click", () => {
+        selectCandidate(candidate).catch((error) => {
+          console.error("[OverCite content] candidate selection failed", error);
+          toast(error.message, "error", { durationMs: 5200 });
+        });
+      });
       body.appendChild(button);
     }
 
@@ -666,6 +679,10 @@
 
   async function startLookup(searchMode) {
     const lookupGeneration = ++activeLookupGeneration;
+    debugTrace("lookup:start", {
+      searchMode: normalizeSearchMode(searchMode),
+      href: window.location.href
+    });
     const settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
     if (!isCurrentLookup(lookupGeneration)) {
       return;
@@ -694,6 +711,12 @@
         projectId: readProjectId()
       }
     };
+    debugTrace("lookup:context", {
+      originalFileName: overlayState.originalFileName,
+      token: citationContext.token || "(empty)",
+      command: citationContext.command,
+      mode: resolvedSearchMode
+    });
 
     renderOverlay({
       subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
@@ -712,6 +735,11 @@
     }
 
     overlayState.results = results;
+    debugTrace("lookup:results", {
+      count: results.length,
+      topKey: results[0]?.generatedKey || "",
+      topTitle: results[0]?.title || ""
+    });
     if (!results.length) {
       renderOverlay({
         subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
@@ -769,6 +797,11 @@
     if (!overlayState) {
       return;
     }
+    debugTrace("candidate:selected", {
+      title: candidate.title,
+      generatedKey: candidate.generatedKey,
+      bibcode: candidate.bibcode
+    });
     const diagnostics = createDiagnostics(candidate.title, overlayState.settings.shortcutHelpText);
     diagnostics.step("Preparing insertion...");
 
@@ -808,6 +841,10 @@
     if (bibTarget.status !== "resolved") {
       throw new Error("Could not resolve the target .bib file for this Overleaf project.");
     }
+    debugTrace("bib:target", {
+      target: bibTarget.target,
+      originalFileName: overlayState.originalFileName || readActiveFileName()
+    });
 
     const originalFileName = overlayState.originalFileName || readActiveFileName();
     const originalRange = {
@@ -815,12 +852,132 @@
       to: overlayState.citationContext.tokenEnd
     };
     const optimisticKey = candidate.generatedKey || overlayState.citationContext.token || "citation";
+    const sourceRecoveryPayload = {
+      excludeFileName: bibTarget.target,
+      preferredFileName: originalFileName,
+      projectFiles: overlayState.projectState?.projectFiles ?? [],
+      originalText: overlayState.originalEditorState?.text ?? "",
+      tokenStart: overlayState.citationContext.tokenStart,
+      tokenEnd: overlayState.citationContext.tokenEnd
+    };
+    const expectedSourceDocument = overlayState.originalEditorState?.text != null
+      ? {
+        length: overlayState.originalEditorState.text.length,
+        head: overlayState.originalEditorState.text.slice(0, 200),
+        tail: overlayState.originalEditorState.text.slice(-200)
+      }
+      : null;
+    if (originalFileName) {
+      diagnostics.step(`Returning to ${originalFileName}...`);
+      if (matchesFileName(readActiveFileName(), originalFileName)) {
+        debugTrace("source:return-skip", {
+          target: originalFileName,
+          activeNow: readActiveFileName()
+        });
+      } else {
+        try {
+          await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, { preferTabsOnly: true }), diagnostics);
+          await sleep(150);
+          debugTrace("source:return-ok", {
+            target: originalFileName,
+            activeAfter: readActiveFileName()
+          });
+        } catch {
+          try {
+            await timed(`openProjectFile:${originalFileName}:project`, () => openProjectFile(originalFileName, { preferTabsOnly: false }), diagnostics);
+            await sleep(250);
+            const recoveredFileName = readActiveFileName();
+            if (recoveredFileName && recoveredFileName.includes(originalFileName)) {
+              debugTrace("source:return-recovered", {
+                target: originalFileName,
+                activeAfter: recoveredFileName
+              });
+            } else {
+              throw new Error(`Recovered file did not match ${originalFileName}.`);
+            }
+          } catch {
+            debugTrace("source:return-manual", {
+              target: originalFileName,
+              activeNow: readActiveFileName()
+            });
+            await waitForManualFileSwitch(originalFileName, candidate.title, overlayState.settings.shortcutHelpText);
+          }
+        }
+      }
+    } else if (overlayState.originalEditorState?.text) {
+      diagnostics.step("Recovering source file...");
+      try {
+        await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan(sourceRecoveryPayload), diagnostics);
+        await sleep(150);
+        debugTrace("source:scan-recovered", {
+          activeAfter: readActiveFileName()
+        });
+      } catch (error) {
+        debugTrace("source:scan-recovery-failed", {
+          message: error.message,
+          activeNow: readActiveFileName()
+        });
+      }
+    }
     diagnostics.step(`Writing cite key in ${originalFileName || "current file"}...`);
-    await timed("replaceRange:optimisticKey", () => pageRequest("replaceRange", {
-      from: originalRange.from,
-      to: originalRange.to,
-      insert: optimisticKey
-    }), diagnostics);
+    try {
+      debugTrace("source:write-start", {
+        target: originalFileName || "(current)",
+        activeBefore: readActiveFileName(),
+        from: originalRange.from,
+        to: originalRange.to,
+        key: optimisticKey
+      });
+      await timed("replaceRange:optimisticKey", () => pageRequest("replaceRange", {
+        from: originalRange.from,
+        to: originalRange.to,
+        insert: optimisticKey,
+        expectedFileName: originalFileName,
+        expectedDocument: expectedSourceDocument
+      }), diagnostics);
+      debugTrace("source:write-ok", {
+        activeAfter: readActiveFileName(),
+        key: optimisticKey
+      });
+    } catch (error) {
+      debugTrace("source:write-failed", {
+        message: error.message,
+        activeNow: readActiveFileName()
+      });
+      if (originalFileName) {
+        await waitForManualFileSwitch(originalFileName, candidate.title, overlayState.settings.shortcutHelpText);
+        diagnostics.step(`Retrying cite key in ${originalFileName}...`);
+        await timed("replaceRange:optimisticKey:retry", () => pageRequest("replaceRange", {
+          from: originalRange.from,
+          to: originalRange.to,
+          insert: optimisticKey,
+          expectedFileName: originalFileName,
+          expectedDocument: expectedSourceDocument
+        }), diagnostics);
+        debugTrace("source:write-retry-ok", {
+          activeAfter: readActiveFileName(),
+          key: optimisticKey
+        });
+      } else if (overlayState.originalEditorState?.text) {
+        diagnostics.step("Retrying source recovery...");
+        await timed("openSourceFileByProjectScan:retry", () => openSourceFileByProjectScan(sourceRecoveryPayload), diagnostics);
+        await sleep(150);
+        diagnostics.step("Retrying cite key in recovered source file...");
+        await timed("replaceRange:optimisticKey:retry", () => pageRequest("replaceRange", {
+          from: originalRange.from,
+          to: originalRange.to,
+          insert: optimisticKey,
+          expectedFileName: originalFileName,
+          expectedDocument: expectedSourceDocument
+        }), diagnostics);
+        debugTrace("source:write-retry-ok", {
+          activeAfter: readActiveFileName(),
+          key: optimisticKey
+        });
+      } else {
+        throw error;
+      }
+    }
     const optimisticRange = {
       from: originalRange.from,
       to: originalRange.from + optimisticKey.length
@@ -829,16 +986,37 @@
     const switchedToBib = originalFileName !== bibTarget.target;
     if (switchedToBib) {
       diagnostics.step(`Opening ${bibTarget.target}...`);
-      try {
-        await timed(`openProjectFile:${bibTarget.target}`, () => openProjectFile(bibTarget.target, { preferTabsOnly: false }), diagnostics);
-      } catch {
-        await waitForManualFileSwitch(bibTarget.target, candidate.title, overlayState.settings.shortcutHelpText);
+      if (matchesFileName(readActiveFileName(), bibTarget.target)) {
+        debugTrace("bib:open-skip", {
+          target: bibTarget.target,
+          activeNow: readActiveFileName()
+        });
+      } else {
+        try {
+          await timed(`openProjectFile:${bibTarget.target}`, () => openProjectFile(bibTarget.target, { preferTabsOnly: false }), diagnostics);
+          debugTrace("bib:open-ok", {
+            target: bibTarget.target,
+            activeAfter: readActiveFileName()
+          });
+        } catch {
+          debugTrace("bib:open-manual", {
+            target: bibTarget.target,
+            activeNow: readActiveFileName()
+          });
+          await waitForManualFileSwitch(bibTarget.target, candidate.title, overlayState.settings.shortcutHelpText);
+        }
       }
     }
 
     diagnostics.step(`Reading ${bibTarget.target}...`);
     const bibEditorState = switchedToBib
-      ? await timed("getEditorState:bib", () => getEditorStateWithRetry(), diagnostics)
+      ? await getConfirmedBibEditorState({
+        fileName: bibTarget.target,
+        diagnostics,
+        originalText: overlayState.originalEditorState?.text ?? "",
+        tokenStart: overlayState.citationContext?.tokenStart ?? 0,
+        tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+      })
       : (overlayState.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics));
     diagnostics.step("Computing bibliography update...");
     const insertion = await timed("applyInsertion", () => callRuntime({
@@ -857,7 +1035,41 @@
 
     if (insertion.updatedBibText !== bibEditorState.text) {
       diagnostics.step(`Writing ${bibTarget.target}...`);
-      await timed(`replaceDocument:${bibTarget.target}`, () => pageRequest("replaceDocument", { text: insertion.updatedBibText }, 12000), diagnostics);
+      if (switchedToBib) {
+        await ensureProjectFileActive(bibTarget.target, diagnostics, "before-write");
+      }
+      debugTrace("bib:write-start", {
+        target: bibTarget.target,
+        activeBefore: readActiveFileName(),
+        finalKey: insertion.finalKey
+      });
+      try {
+        await timed(`replaceDocument:${bibTarget.target}`, () => pageRequest("replaceDocument", {
+          text: insertion.updatedBibText,
+          expectedFileName: bibTarget.target,
+          expectedDocument: {
+            length: bibEditorState.text.length,
+            head: bibEditorState.text.slice(0, 200),
+            tail: bibEditorState.text.slice(-200)
+          }
+        }, 12000), diagnostics);
+      } catch (error) {
+        if (switchedToBib) {
+          await waitForManualFileSwitch(bibTarget.target, candidate.title, overlayState.settings.shortcutHelpText);
+          await ensureProjectFileActive(bibTarget.target, diagnostics, "after-manual-write");
+          await timed(`replaceDocument:${bibTarget.target}:retry`, () => pageRequest("replaceDocument", {
+            text: insertion.updatedBibText,
+            expectedFileName: bibTarget.target,
+            expectedDocument: {
+              length: bibEditorState.text.length,
+              head: bibEditorState.text.slice(0, 200),
+              tail: bibEditorState.text.slice(-200)
+            }
+          }, 12000), diagnostics);
+        } else {
+          throw error;
+        }
+      }
       const focusAction = overlayState.settings.bibliographyInsertMode === "alphabetical"
         ? () => pageRequest("focusDocumentAnchor", { anchor: insertion.cursorAnchor }, 5000)
         : () => pageRequest("focusDocumentEnd", {}, 5000);
@@ -865,6 +1077,11 @@
         ? `focusDocumentAnchor:${bibTarget.target}`
         : `focusDocumentEnd:${bibTarget.target}`;
       await timed(focusLabel, focusAction, diagnostics);
+      debugTrace("bib:write-ok", {
+        target: bibTarget.target,
+        activeAfter: readActiveFileName(),
+        finalKey: insertion.finalKey
+      });
     }
 
     const shouldReturnToSource = Boolean(overlayState.settings.returnToSourceAfterInsert);
@@ -952,7 +1169,8 @@
       await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
         from: optimisticRange.from,
         to: optimisticRange.to,
-        insert: insertion.finalKey
+        insert: insertion.finalKey,
+        expectedFileName: originalFileName
       }), diagnostics);
     }
 
@@ -1009,11 +1227,13 @@
       "[role='tab'][data-active='true']",
       ".active[role='tab']",
       ".file-tab.active",
-      ".tab.active"
+      ".tab.active",
+      ".ol-cm-breadcrumbs",
+      ".ol-cm-toolbar-wrapper",
+      ".cm-panels-top"
     ];
     for (const selector of selectors) {
-      const text = document.querySelector(selector)?.textContent?.trim() || "";
-      const fileName = extractLikelyEditorFileName(text);
+      const fileName = extractLikelyEditorFileNameFromElement(document.querySelector(selector));
       if (fileName) {
         return fileName;
       }
@@ -1021,10 +1241,31 @@
     return "";
   }
 
+  function extractLikelyEditorFileNameFromElement(element) {
+    if (!(element instanceof Element)) {
+      return "";
+    }
+    const direct = extractLikelyEditorFileName(element.textContent?.trim() || "");
+    const descendantMatches = Array.from(element.querySelectorAll("*"))
+      .map((node) => extractLikelyEditorFileName(node.textContent?.trim() || ""))
+      .filter(Boolean)
+      .sort((left, right) => left.length - right.length);
+    return descendantMatches[0] || direct;
+  }
+
   async function openProjectFile(fileName, options = {}) {
     const { preferTabsOnly = false } = options;
+    debugTrace("openProjectFile:start", {
+      fileName,
+      preferTabsOnly,
+      activeBefore: readActiveFileName()
+    });
     const candidates = findOpenableElementsByText(fileName, preferTabsOnly);
     if (!candidates.length) {
+      debugTrace("openProjectFile:no-candidates", {
+        fileName,
+        preferTabsOnly
+      });
       if (preferTabsOnly) {
         throw new Error(`Could not find an open editor tab for ${fileName}. Open it once in Overleaf and retry.`);
       }
@@ -1045,19 +1286,82 @@
           const activeFileName = state.fileName || activeTabName;
           return activeFileName.includes(fileName);
         }, 3500);
+        debugTrace("openProjectFile:ok", {
+          fileName,
+          activeAfter: readActiveFileName()
+        });
         return;
       } catch (error) {
         if (!preferTabsOnly && isLikelyFileTreeCandidate(candidate)) {
           await sleep(450);
-          return;
+          if (await isProjectFileActive(fileName)) {
+            debugTrace("openProjectFile:file-tree-early-return", {
+              fileName,
+              activeAfter: readActiveFileName()
+            });
+            return;
+          }
         }
         lastError = error;
+        debugTrace("openProjectFile:retry", {
+          fileName,
+          message: error.message,
+          activeNow: readActiveFileName()
+        });
         await sleep(200);
       }
     }
     if (lastError) {
+      debugTrace("openProjectFile:failed", {
+        fileName,
+        message: lastError.message,
+        activeNow: readActiveFileName()
+      });
       throw lastError;
     }
+  }
+
+  function matchesFileName(activeFileName, targetFileName) {
+    const active = String(activeFileName ?? "").trim();
+    const target = String(targetFileName ?? "").trim();
+    if (!active || !target) {
+      return false;
+    }
+    return active === target || active.includes(target);
+  }
+
+  async function ensureProjectFileActive(fileName, diagnostics, reasonLabel) {
+    if (await isProjectFileActive(fileName)) {
+      return;
+    }
+    debugTrace("openProjectFile:ensure", {
+      fileName,
+      reason: reasonLabel,
+      activeNow: readActiveFileName()
+    });
+    await timed(
+      `openProjectFile:${fileName}:ensure:${reasonLabel}`,
+      () => openProjectFile(fileName, { preferTabsOnly: false }),
+      diagnostics
+    );
+    await waitForProjectFileActive(fileName, 2500);
+  }
+
+  async function isProjectFileActive(fileName) {
+    const activeNow = readActiveFileName();
+    if (matchesFileName(activeNow, fileName)) {
+      return true;
+    }
+    try {
+      const state = await getEditorStateWithRetry(1, 0);
+      return matchesFileName(state.fileName || activeNow, fileName);
+    } catch {
+      return false;
+    }
+  }
+
+  async function waitForProjectFileActive(fileName, timeoutMs = 3500) {
+    await waitFor(async () => isProjectFileActive(fileName), timeoutMs);
   }
 
   async function openLikelySourceTab({ excludeFileName = "", preferredFileName = "", requireTex = false } = {}) {
@@ -1258,6 +1562,57 @@
       const rightOk = rightSnippet ? haystack.includes(rightSnippet) : true;
       return leftOk && rightOk;
     };
+  }
+
+  function looksLikeTexSourceDocument(text) {
+    const sample = String(text ?? "").slice(0, 4000);
+    if (!sample) {
+      return false;
+    }
+    const texMarkers = [
+      "\\documentclass",
+      "\\begin{document}",
+      "\\section{",
+      "\\subsection{",
+      "\\title{",
+      "\\author{",
+      "\\bibliography{",
+      "\\cite",
+      "\\end{document}"
+    ];
+    return texMarkers.some((marker) => sample.includes(marker));
+  }
+
+  function isLikelyWrongEditorForBib(state, sourceMatcher) {
+    const text = String(state?.text ?? "");
+    if (sourceMatcher(text)) {
+      return true;
+    }
+    return looksLikeTexSourceDocument(text);
+  }
+
+  async function getConfirmedBibEditorState({
+    fileName,
+    diagnostics,
+    originalText = "",
+    tokenStart = 0,
+    tokenEnd = 0
+  }) {
+    const sourceMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await ensureProjectFileActive(fileName, diagnostics, `before-read-${attempt + 1}`);
+      const state = await timed("getEditorState:bib", () => getEditorStateWithRetry(), diagnostics);
+      if (!isLikelyWrongEditorForBib(state, sourceMatcher)) {
+        return state;
+      }
+      await timed(
+        `openProjectFile:${fileName}:reconfirm:${attempt + 1}`,
+        () => openProjectFile(fileName, { preferTabsOnly: false }),
+        diagnostics
+      );
+      await sleep(200);
+    }
+    throw new Error(`Could not confirm that ${fileName} is the active bibliography editor.`);
   }
 
   function collectExactMatches(targetText, selectors) {
@@ -1493,6 +1848,11 @@
 
   function pageRequest(action, payload = {}, timeoutMs = 5000) {
     const requestId = crypto.randomUUID();
+    debugTrace("pageRequest:start", {
+      action,
+      timeoutMs,
+      activeBefore: readActiveFileName()
+    });
     return new Promise((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         window.removeEventListener(RESPONSE_EVENT, listener);
@@ -1501,6 +1861,11 @@
           action,
           requestId,
           bridgeReady
+        });
+        debugTrace("pageRequest:timeout", {
+          action,
+          bridgeReady,
+          activeNow: readActiveFileName()
         });
         reject(new Error(`Timed out waiting for page action: ${action}${bridgeReady ? "" : " (page bridge not ready)"}`));
       }, timeoutMs);
@@ -1511,8 +1876,17 @@
         window.clearTimeout(timeoutId);
         window.removeEventListener(RESPONSE_EVENT, listener);
         if (event.detail.ok) {
+          debugTrace("pageRequest:ok", {
+            action,
+            activeAfter: readActiveFileName()
+          });
           resolve(event.detail.result);
         } else {
+          debugTrace("pageRequest:error", {
+            action,
+            message: event.detail.error,
+            activeNow: readActiveFileName()
+          });
           reject(new Error(event.detail.error));
         }
       };
@@ -1541,9 +1915,20 @@
     let lastError = null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        return await pageRequest("getActiveEditorState", {}, 4000);
+        const state = await pageRequest("getActiveEditorState", {}, 4000);
+        debugTrace("editorState:ok", {
+          attempt: attempt + 1,
+          fileName: state.fileName || "(none)",
+          selection: `${state.from}-${state.to}`
+        });
+        return state;
       } catch (error) {
         lastError = error;
+        debugTrace("editorState:retry", {
+          attempt: attempt + 1,
+          message: error.message,
+          activeNow: readActiveFileName()
+        });
         await sleep(delayMs);
       }
     }
@@ -1628,10 +2013,18 @@
   }
 
   async function waitForManualFileSwitch(fileName, subtitle, shortcutText) {
+    debugTrace("manual-switch:prompt", {
+      fileName,
+      activeNow: readActiveFileName()
+    });
     let continueHandler = null;
     const waitForContinue = new Promise((resolve) => {
       continueHandler = async () => {
         toast(`Continuing with the current editor as ${fileName}.`);
+        debugTrace("manual-switch:continue", {
+          fileName,
+          activeNow: readActiveFileName()
+        });
         resolve();
       };
     });
