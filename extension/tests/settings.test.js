@@ -12,7 +12,7 @@ test("normalizeSettings accepts valid theme modes and defaults invalid ones to a
 
 test("normalizeSettings defaults to staying on the bibliography tab after insert", () => {
   assert.equal(normalizeSettings({}).returnToSourceAfterInsert, false);
-  assert.equal(normalizeSettings({ returnToSourceAfterInsert: true }).returnToSourceAfterInsert, true);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: true }).returnToSourceAfterInsert, false);
 });
 
 test("normalizeSettings accepts valid citation key modes and defaults invalid ones to author-year", () => {

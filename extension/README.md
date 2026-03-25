@@ -1,14 +1,14 @@
 # OverCite
 
-OverCite is a browser extension for Overleaf that searches NASA ADS from inside a `\cite{...}` command, previews likely matches, and inserts BibTeX into your project.
+OverCite is a browser extension for Overleaf that searches ADS/SciX from inside a `\cite{...}` command, previews likely matches, and inserts BibTeX into your project.
 
 ## What is implemented
 
 - Manifest V3 extension scaffold
 - Overleaf content script with an OverCite overlay
-- ADS search and BibTeX export via background worker
+- ADS/SciX search and BibTeX export via background worker
 - Citation parsing, key generation, BibTeX dedupe, and bibliography resolution
-- Options page for ADS token, theme preference, return-to-source behavior, and project-level `.bib` overrides
+- Options page for ADS token, theme preference, and project-level `.bib` overrides
 - Node test suite covering parser, ranking, key generation, dedupe, and an example-TeX harness
 
 ## Current editor strategy
@@ -28,14 +28,14 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 2. Enable Developer mode
 3. Click `Load unpacked`
 4. Select the local `extension/dist/chrome/` folder from this repository
-5. Open the extension options page and paste your ADS or SciX API token
+5. Open the extension options page and paste your ADS/SciX API token
 
 ### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
 3. Select `manifest.json` from the local `extension/dist/firefox/` folder
-4. Open the extension options page and paste your ADS or SciX API token
+4. Open the extension options page and paste your ADS/SciX API token
 
 ## Trigger inside Overleaf
 

@@ -50,7 +50,7 @@ export function normalizeSettings(rawSettings = {}) {
     contextWindowChars: Number.isFinite(contextWindowChars) ? Math.min(1200, Math.max(200, contextWindowChars)) : DEFAULT_SETTINGS.contextWindowChars,
     shortcutHelpText: String(rawSettings.shortcutHelpText ?? DEFAULT_SETTINGS.shortcutHelpText).trim() || DEFAULT_SETTINGS.shortcutHelpText,
     themeMode,
-    returnToSourceAfterInsert: Boolean(rawSettings.returnToSourceAfterInsert ?? DEFAULT_SETTINGS.returnToSourceAfterInsert),
+    returnToSourceAfterInsert: false,
     citationKeyMode,
     bibliographyInsertMode,
     defaultSearchMode

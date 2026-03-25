@@ -12,7 +12,6 @@ const bibliographyInsertModeInput = document.querySelector("#bibliography-insert
 const defaultSearchModeInput = document.querySelector("#default-search-mode");
 const contextInput = document.querySelector("#context-window-chars");
 const shortcutInput = document.querySelector("#shortcut-help-text");
-const returnToSourceInput = document.querySelector("#return-to-source");
 const overridesInput = document.querySelector("#project-overrides");
 
 async function callRuntime(message) {
@@ -32,7 +31,6 @@ async function loadSettings() {
   defaultSearchModeInput.value = settings.defaultSearchMode ?? "contextual";
   contextInput.value = String(settings.contextWindowChars ?? 500);
   shortcutInput.value = settings.shortcutHelpText ?? "";
-  returnToSourceInput.checked = Boolean(settings.returnToSourceAfterInsert);
   overridesInput.value = JSON.stringify(settings.defaultProjectBibFileOverride ?? {}, null, 2);
   applyTheme(settings.themeMode ?? "auto");
 }
@@ -55,7 +53,6 @@ form.addEventListener("submit", async (event) => {
       defaultSearchMode: defaultSearchModeInput.value,
       contextWindowChars: contextInput.value,
       shortcutHelpText: shortcutInput.value,
-      returnToSourceAfterInsert: returnToSourceInput.checked,
       defaultProjectBibFileOverride: overrides
     });
 
