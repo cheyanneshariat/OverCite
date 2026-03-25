@@ -90,9 +90,9 @@ cd OverCite
 
 Recommended citation patterns, from strongest to weakest:
 
-- `\citep{Shariat25}`: best default, combining first author and year
-- `\citep{Shariat2025}`: also supported if you prefer a four-digit year
-- `\citep{Shariat}`: useful when you know the author but not the year
+- `\citep{Perlmutter99}`: best default, combining first author and year
+- `\citep{Abbott2016}`: also supported if you prefer a four-digit year
+- `\citep{Schlegel}`: useful when you know the author but not the year
 - `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
 If the contextual result list looks wrong for a non-empty key, try `Simple search` or set `Default Search Mode` in the extension settings.
@@ -175,9 +175,10 @@ If you download a newer version of the repository later, the update step depends
 - The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
 - Multi-word surnames such as `Smith Jane` and `Smith Jane25` are supported.
+- Collaborations such as `Planck Collaboration` and `The LIGO Collaboration25` are supported.
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
-- If it gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
+- If the popup gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
 
 ## Contact
 I am always happy to hear your thoughts or get any feedback! Please contact [Cheyanne Shariat](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.
