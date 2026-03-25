@@ -24,6 +24,16 @@ test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   assert.equal(longYear.year, 2025);
 });
 
+test("parseCitationKeyHint normalizes diacritics in author-year keys", () => {
+  const accented = parseCitationKeyHint("Hünsch98");
+  const plain = parseCitationKeyHint("Hunsch98");
+
+  assert.equal(accented.surname, "Hunsch");
+  assert.equal(accented.year, 1998);
+  assert.equal(plain.surname, "Hunsch");
+  assert.equal(plain.year, 1998);
+});
+
 test("parseCitationKeyHint can extract an optional first initial before or after the surname", () => {
   const beforeSurname = parseCitationKeyHint("JSmith05");
   const afterSurname = parseCitationKeyHint("SmithJ05");

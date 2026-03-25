@@ -14,13 +14,21 @@ function findBraceClose(source, openIndex) {
   return -1;
 }
 
+function normalizeKeyText(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ß/g, "ss");
+}
+
 export function parseCitationKeyHint(rawToken) {
   const normalized = String(rawToken ?? "").trim();
   if (!normalized) {
     return null;
   }
-  const compact = normalized.replace(/[{}\s]/g, "");
-  const spaced = normalized.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+  const asciiToken = normalizeKeyText(normalized);
+  const compact = asciiToken.replace(/[{}\s]/g, "");
+  const spaced = asciiToken.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
   const match = spaced.match(/^([A-Za-z'`.\-\s]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
   if (!match) {
     const surnameOnlyMatch = spaced.match(/^[A-Za-z'`.\-\s]{2,}$/);
@@ -47,7 +55,7 @@ export function parseCitationKeyHint(rawToken) {
 }
 
 function parseAuthorHint(rawSurnameToken) {
-  const preserved = String(rawSurnameToken ?? "")
+  const preserved = normalizeKeyText(rawSurnameToken)
     .replace(/[^A-Za-z\-'\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
