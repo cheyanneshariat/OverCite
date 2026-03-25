@@ -138,8 +138,7 @@ The repo also keeps a local-only running benchmark suite in `local_testing/bench
 - Ranking flow: [docs/OverCite_ranking_flow.md](docs/OverCite_ranking_flow.md)
 - Technical report: [docs/OverCite_technical_report.md](docs/OverCite_technical_report.md)
 - PDF report: [docs/OverCite_technical_report.pdf](docs/OverCite_technical_report.pdf)
-- Privacy: [PRIVACY.md](PRIVACY.md)
-- Security: [SECURITY.md](SECURITY.md)
+- Security & Privacy: [SECURITY.md](SECURITY.md)
 
 ## Updating
 
