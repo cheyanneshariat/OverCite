@@ -33,7 +33,8 @@ cd OverCite
 
 ## Install
 
-### Chrome
+<details>
+  <summary>Chrome</summary>
 
 1. Open `chrome://extensions`
 2. Turn on Developer mode (top right)
@@ -45,7 +46,10 @@ cd OverCite
 8. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
 
-### Firefox
+</details>
+
+<details>
+  <summary>Firefox</summary>
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
@@ -55,7 +59,10 @@ cd OverCite
 6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 7. Put the cursor inside the citation key and press `Alt+Shift+E`
 
-### VS Code
+</details>
+
+<details>
+  <summary>VS Code</summary>
 
 1. In normal VS Code, run `Extensions: Install from VSIX...`
 2. Select `vscode-extension/overcite-vscode-0.1.2.vsix`
@@ -70,6 +77,8 @@ cd OverCite
 9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
 10. If you want the VS Code version to ignore sentence context, press `Alt+Shift+S`, run `OverCite: Resolve Citation (Simple Search)`, or set `OverCite: Default Search Mode` in VS Code settings
 11. Review the dropdown results and choose the paper you want
+
+</details>
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/), then go to your account settings and copy an API token
 
@@ -144,14 +153,18 @@ The repo also keeps a local-only running benchmark suite in `local_testing/bench
 
 If you download a newer version of the repository later, the update step depends on where you use OverCite.
 
-### Chrome
+<details>
+  <summary>Chrome</summary>
 
 1. Replace your local repo copy with the newer one, or `git pull`
 2. Open `chrome://extensions`
 3. Click `Reload` on OverCite
 4. Refresh your Overleaf tab
 
-### Firefox
+</details>
+
+<details>
+  <summary>Firefox</summary>
 
 1. Replace your local repo copy with the newer one, or `git pull`
 2. Open `about:debugging#/runtime/this-firefox`
@@ -160,13 +173,18 @@ If you download a newer version of the repository later, the update step depends
 5. Select `extension/dist/firefox/manifest.json` again
 6. Refresh your Overleaf tab
 
-### VS Code
+</details>
+
+<details>
+  <summary>VS Code</summary>
 
 1. Replace your local repo copy with the newer one, or `git pull`
 2. In VS Code, uninstall the old OverCite extension if needed
 3. Run `Extensions: Install from VSIX...`
 4. Select `vscode-extension/overcite-vscode-{version}.vsix`
 5. Reload VS Code
+
+</details>
 
 ## Notes
 
