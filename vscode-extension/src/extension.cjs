@@ -236,7 +236,7 @@ function formatAuthorsForDiagnostics(authors) {
   if (!Array.isArray(authors) || !authors.length) {
     return "<no authors>";
   }
-  return authors.slice(0, 3).join(", ") + (authors.length > 3 ? " et al." : "");
+  return authors.slice(0, 3).join("; ") + (authors.length > 3 ? " et al." : "");
 }
 
 async function loadModules() {

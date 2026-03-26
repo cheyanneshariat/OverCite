@@ -2090,7 +2090,7 @@
   }
 
   function formatAuthors(authors, year) {
-    const authorText = Array.isArray(authors) ? authors.slice(0, 3).join(", ") : "";
+    const authorText = Array.isArray(authors) ? authors.slice(0, 3).join("; ") : "";
     const suffix = Array.isArray(authors) && authors.length > 3 ? " et al." : "";
     return [authorText + suffix, year].filter(Boolean).join(" | ");
   }
