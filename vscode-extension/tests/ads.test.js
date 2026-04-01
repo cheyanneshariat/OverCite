@@ -11,7 +11,52 @@ test("buildAdsQuery prefers fielded author/year search from parsed key hints", (
       year: 2025
     }
   });
-  assert.equal(query, 'first_author:"Shariat" year:2025');
+  assert.equal(
+    query,
+    '((first_author:"Shariat") OR (author:"Shariat Collaboration") OR (author:"Shariat Scientific Collaboration")) year:2025'
+  );
+});
+
+test("direct search mode sends the raw token to ADS without author-year parsing or context expansion", () => {
+  const queries = buildAdsQueries({
+    token: "Hünsch98",
+    searchMode: "direct",
+    sentenceText: "Triple star systems are very common, as revealed by Gaia",
+    contextText: "Triple star systems are very common, as revealed by Gaia",
+    parsedKeyHint: {
+      surname: "Hunsch",
+      year: 1998,
+      suffix: ""
+    }
+  });
+
+  assert.deepEqual(queries, ["Hünsch98"]);
+  assert.ok(!queries.some((query) => query.includes("first_author")));
+  assert.ok(!queries.some((query) => query.includes("triple star systems")));
+});
+
+test("direct search mode preserves fielded ADS queries with quotes exactly", () => {
+  const queries = buildAdsQueries({
+    token: 'author:"El-Badry" year:2022 title:"magnetic braking"',
+    searchMode: "direct",
+    sentenceText: "People find that magnetic braking saturates",
+    contextText: "People find that magnetic braking saturates in close binaries",
+    parsedKeyHint: null
+  });
+
+  assert.deepEqual(queries, ['author:"El-Badry" year:2022 title:"magnetic braking"']);
+});
+
+test("direct search mode returns no queries for empty-token lookups", () => {
+  const queries = buildAdsQueries({
+    token: "",
+    searchMode: "direct",
+    sentenceText: "Primordial black holes have been killed by wide binaries",
+    contextText: "Primordial black holes have been killed by wide binaries",
+    parsedKeyHint: null
+  });
+
+  assert.deepEqual(queries, []);
 });
 
 test("rerankAdsCandidates prefers matching author and year", () => {
@@ -45,6 +90,48 @@ test("rerankAdsCandidates prefers matching author and year", () => {
   assert.ok(candidates[0].score > candidates[1].score);
 });
 
+test("direct search mode applies only light token matching boosts and otherwise preserves ADS order", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: "resolved triples",
+      searchMode: "direct"
+    },
+    [
+      {
+        bibcode: "title-match",
+        title: "10,000 Resolved Triples from Gaia",
+        authors: ["Shariat, Cheyanne"],
+        year: 2025,
+        abstract: "",
+        doi: null,
+        citationCount: 1
+      },
+      {
+        bibcode: "no-match",
+        title: "A different paper",
+        authors: ["Someone Else"],
+        year: 2025,
+        abstract: "",
+        doi: null,
+        citationCount: 5000
+      },
+      {
+        bibcode: "same-score-later",
+        title: "Another different paper",
+        authors: ["Someone Else"],
+        year: 2024,
+        abstract: "",
+        doi: null,
+        citationCount: 0
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "title-match");
+  assert.equal(candidates[1].bibcode, "no-match");
+  assert.equal(candidates[2].bibcode, "same-score-later");
+});
+
 test("buildAdsQueries adds cautious fallbacks for surname variants and nearby years", () => {
   const queries = buildAdsQueries({
     token: "ElBadry25",
@@ -60,6 +147,41 @@ test("buildAdsQueries adds cautious fallbacks for surname variants and nearby ye
   assert.ok(queries.includes('first_author:"El-Badry" year:2025'));
   assert.ok(queries.includes('author:"ElBadry" year:2024'));
   assert.ok(queries.some((query) => query.includes('full:"gaia"')));
+});
+
+test("collaboration-style keys add collaboration-aware query variants", () => {
+  const explicitYearQueries = buildAdsQueries({
+    token: "Planck18",
+    sentenceText: "",
+    contextText: "",
+    parsedKeyHint: {
+      surname: "Planck",
+      year: 2018
+    }
+  });
+
+  assert.equal(
+    explicitYearQueries[0],
+    '((first_author:"Planck") OR (author:"Planck Collaboration") OR (author:"Planck Scientific Collaboration")) year:2018'
+  );
+  assert.ok(explicitYearQueries.includes('author:"Planck" year:2018'));
+});
+
+test("explicit collaboration surnames normalize back to collaboration-aware queries", () => {
+  const queries = buildAdsQueries({
+    token: "PlanckCollaboration18",
+    sentenceText: "",
+    contextText: "",
+    parsedKeyHint: {
+      surname: "PlanckCollaboration",
+      year: 2018
+    }
+  });
+
+  assert.equal(
+    queries[0],
+    '((first_author:"Planck") OR (author:"Planck Collaboration") OR (author:"Planck Scientific Collaboration")) year:2018'
+  );
 });
 
 test("explicit author-year queries lead with first-author year and sentence phrase", () => {
@@ -256,7 +378,7 @@ test("buildAdsQuery prioritizes author-only search for surname-only keys", () =>
       year: null
     }
   });
-  assert.equal(query, 'author:"El-Badry"');
+  assert.equal(query, '(first_author:"El-Badry") OR (author:"El-Badry Collaboration") OR (author:"El-Badry Scientific Collaboration")');
 });
 
 test("buildAdsQuery preserves spaces in multi-word surnames", () => {
@@ -275,8 +397,8 @@ test("buildAdsQuery preserves spaces in multi-word surnames", () => {
     }
   });
 
-  assert.equal(authorOnly, 'author:"Perez Paolino"');
-  assert.equal(authorYear, 'first_author:"Perez Paolino" year:2025');
+  assert.equal(authorOnly, '(first_author:"Perez Paolino") OR (author:"Perez Paolino Collaboration") OR (author:"Perez Paolino Scientific Collaboration")');
+  assert.equal(authorYear, '((first_author:"Perez Paolino") OR (author:"Perez Paolino Collaboration") OR (author:"Perez Paolino Scientific Collaboration")) year:2025');
 });
 
 test("buildAdsQuery uses author-only search for author-like tokens even without a parsed hint", () => {
@@ -348,6 +470,66 @@ test("rerankAdsCandidates prioritizes first-author matches for surname-only hint
 
   assert.equal(candidates[0].bibcode, "good");
   assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("rerankAdsCandidates boosts collaboration first authors for collaboration-style hints", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      contextText: "",
+      sentenceText: "",
+      parsedKeyHint: { surname: "Planck", year: 2018, suffix: "" }
+    },
+    [
+      {
+        bibcode: "person",
+        title: "Sea ice work",
+        authors: ["Planck, C."],
+        year: 2018,
+        abstract: "",
+        doi: null
+      },
+      {
+        bibcode: "collab",
+        title: "Planck intermediate results",
+        authors: ["Planck Collaboration", "Someone Else"],
+        year: 2018,
+        abstract: "",
+        doi: null
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "collab");
+});
+
+test("rerankAdsCandidates matches explicit collaboration surnames against collaboration papers", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      contextText: "cosmological parameters from planck",
+      sentenceText: "cosmological parameters from planck",
+      parsedKeyHint: { surname: "PlanckCollaboration", year: 2018, suffix: "" }
+    },
+    [
+      {
+        bibcode: "person",
+        title: "Sea ice work",
+        authors: ["Planck, C."],
+        year: 2018,
+        abstract: "",
+        doi: null
+      },
+      {
+        bibcode: "collab",
+        title: "Planck intermediate results",
+        authors: ["Planck Collaboration", "Someone Else"],
+        year: 2018,
+        abstract: "Planck measured cosmological parameters.",
+        doi: null
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "collab");
 });
 
 test("rerankAdsCandidates can prioritize the right author paper from sentence meaning even without a year", () => {

@@ -4,12 +4,13 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects.
 
-It supports two search modes:
+It supports three search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
 2. `Simple search` searches author/year only and sorts by citation count
+3. `ADS query` sends the typed token directly to ADS/SciX
 
-Covered fields: astronomy, physics, Earth science, general-science collections, and *all papers on the arXiv*.
+Covered fields: astronomy, physics, biology, Earth science, general-science collections, and *all papers on the arXiv*.
 
 ![OverCite workflow](docs/assets/outline.png)
 
@@ -65,7 +66,7 @@ cd OverCite
   <summary>VS Code</summary>
 
 1. In normal VS Code, run `Extensions: Install from VSIX...`
-2. Select `vscode-extension/overcite-vscode-0.1.2.vsix`
+2. Select `vscode-extension/overcite-vscode-0.1.3.vsix`
 3. Reload VS Code
 4. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
 5. Open VS Code Settings:
@@ -74,9 +75,14 @@ cd OverCite
 6. In the Settings search bar, type `OverCite`
 7. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
 8. Paste your NASA ADS or SciX API token* into that field
-9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E` (or run `OverCite: Resolve Citation` in the Command Palette)
-10. If you want the VS Code version to ignore sentence context, press `Alt+Shift+S`, run `OverCite: Resolve Citation (Simple Search)`, or set `OverCite: Default Search Mode` in VS Code settings
+9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E`
+10. Or use the Command Palette and run one of:
+   - `OverCite: Resolve Citation`
+   - `OverCite: Resolve Citation (Simple Search)`
+   - `OverCite: Resolve Citation (ADS Query)`
 11. Review the dropdown results and choose the paper you want
+
+For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-extension/README.md](vscode-extension/README.md).
 
 </details>
 
@@ -88,7 +94,7 @@ cd OverCite
 
 ## How to use OverCite
 
-1. In Overleaf source mode, type a rough citation key such as `\citep{Shariat25}` or `\citep{Shariat}`.
+1. In Overleaf source mode, type a rough citation key such as `\citep{Perlmutter99}` or `\citep{Schlegel}`.
 2. Put the cursor inside the citation braces on the key you want OverCite to resolve.
 3. Press `Alt+Shift+E` or remap the shortcut in your browser's extension shortcut settings.
 4. Review the OverCite results popup, including the title and abstract snippet.
@@ -99,12 +105,19 @@ cd OverCite
 
 Recommended citation patterns, from strongest to weakest:
 
-- `\citep{Perlmutter99}`: best default, combining first author and year
+- `\citep{Shariat25}`: best default, combining first author and year
 - `\citep{Abbott2016}`: also supported if you prefer a four-digit year
 - `\citep{Schlegel}`: useful when you know the author but not the year
 - `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
-If the contextual result list looks wrong for a non-empty key, try `Simple search` or set `Default Search Mode` in the extension settings.
+Mode examples:
+
+- `Contextual`: `Cosmic acceleration from Type Ia supernovae remains foundational \citep{Perlmutter99}.`
+- `Simple search`: `Galactic dust corrections often begin with \citep{Schlegel}.`
+- `ADS query`: `Sometimes, you just have to boot up the MCMC \citep{title:"emcee"}.`
+- `ADS query` with fields: `People find that magnetic braking saturates \citep{author:"El-Badry" year:2022 title:"magnetic braking"}.`
+
+If the contextual result list looks wrong for a non-empty key, try `Simple search`, try `ADS query`, or set `Default Search Mode` in the extension settings.
 
 ## Scope
 
@@ -118,12 +131,13 @@ Current settings include:
 
 - ADS/SciX API token for search and BibTeX export
 - Theme selection
-- Citation key style, including plain author-year keys like `Shariat2025`, informative keys like `Shariat25_10k`, or keeping the typed key
+- Citation key style, including plain author-year keys like `Perlmutter1999`, informative keys like `Perlmutter99_supernovae`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
-- Default search mode, so OverCite can open in either contextual mode or simple search first
+- Default search mode, so OverCite can open in contextual mode, simple search mode, or ADS query mode first
+- An optional `ADS query` mode that sends the typed token directly to ADS/SciX
 - Project-specific bibliography file overrides when a project contains multiple `.bib` files
 
-The popup also includes a small `Simple search` fallback for non-empty citation keys. It ignores local sentence context and reruns the lookup from the typed author/year hint alone, then orders the matching results by citation count.
+For non-empty citation keys, the popup also includes small `Simple search` and `ADS query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `ADS query` sends the typed token directly to ADS/SciX.
 
 ## Development
 
@@ -138,7 +152,8 @@ The repo also keeps a local-only running benchmark suite in `local_testing/bench
 - standard author-year cases
 - surname-only cases
 - empty-token context-only cases
-- minimal-context cases such as `\citep{Shariat25}.` and `See \citep{El-Badry21}.`
+- minimal-context cases such as `\citep{Perlmutter99}.`, `See \citep{Abbott2016}.`, and `See \citep{Schlegel}.`
+- direct ADS-query cases such as `title:"magnetic braking"` and `author:"El-Badry" year:2022 title:"magnetic braking"`
 
 ## Documentation
 
@@ -181,7 +196,7 @@ If you download a newer version of the repository later, the update step depends
 1. Replace your local repo copy with the newer one, or `git pull`
 2. In VS Code, uninstall the old OverCite extension if needed
 3. Run `Extensions: Install from VSIX...`
-4. Select `vscode-extension/overcite-vscode-{version}.vsix`
+4. Select `vscode-extension/overcite-vscode-0.1.3.vsix`
 5. Reload VS Code
 
 </details>

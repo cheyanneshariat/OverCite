@@ -136,6 +136,62 @@ function removeRange(source, start, end) {
   return `${source.slice(0, start)} ${source.slice(end)}`;
 }
 
+function splitCitationTokenSegments(inside) {
+  const segments = [];
+  let segmentStart = 0;
+  let inQuotes = false;
+  let escaped = false;
+
+  for (let index = 0; index < inside.length; index += 1) {
+    const char = inside[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char !== "," || inQuotes) {
+      continue;
+    }
+
+    segments.push(buildCitationTokenSegment(inside, segmentStart, index));
+    segmentStart = index + 1;
+  }
+
+  segments.push(buildCitationTokenSegment(inside, segmentStart, inside.length));
+  return segments;
+}
+
+function buildCitationTokenSegment(source, rawStart, rawEnd) {
+  let start = rawStart;
+  let end = rawEnd;
+
+  while (start < end && /\s/.test(source[start])) {
+    start += 1;
+  }
+  while (end > start && /\s/.test(source[end - 1])) {
+    end -= 1;
+  }
+
+  return {
+    rawStart,
+    rawEnd,
+    start,
+    end,
+    value: source.slice(start, end)
+  };
+}
+
 export function findCitationAtCursor(source, cursorIndex, windowChars = 500) {
   const citeCommandRegex = /\\cite[a-zA-Z*]*\s*(?:\[[^[\]]*]\s*){0,2}\{/g;
   let match;
@@ -163,28 +219,15 @@ export function findCitationAtCursor(source, cursorIndex, windowChars = 500) {
 
   const inside = source.slice(active.openBraceIndex + 1, active.closeBraceIndex);
   const relativeCursor = Math.max(0, Math.min(inside.length, cursorIndex - active.openBraceIndex - 1));
-
-  let tokenStart = relativeCursor;
-  while (tokenStart > 0 && inside[tokenStart - 1] !== ",") {
-    tokenStart -= 1;
-  }
-
-  let tokenEnd = relativeCursor;
-  while (tokenEnd < inside.length && inside[tokenEnd] !== ",") {
-    tokenEnd += 1;
-  }
-
-  while (tokenStart < tokenEnd && /\s/.test(inside[tokenStart])) {
-    tokenStart += 1;
-  }
-  while (tokenEnd > tokenStart && /\s/.test(inside[tokenEnd - 1])) {
-    tokenEnd -= 1;
-  }
-
-  const token = inside.slice(tokenStart, tokenEnd);
-  const tokenStartAbsolute = active.openBraceIndex + 1 + tokenStart;
-  const tokenEndAbsolute = active.openBraceIndex + 1 + tokenEnd;
-  const tokens = inside.split(",").map((piece) => piece.trim()).filter(Boolean);
+  const segments = splitCitationTokenSegments(inside);
+  const activeSegment = segments.find((segment) => relativeCursor >= segment.rawStart && relativeCursor <= segment.rawEnd)
+    ?? segments.find((segment) => relativeCursor >= segment.start && relativeCursor <= segment.end)
+    ?? segments[0]
+    ?? { start: 0, end: 0, value: "" };
+  const token = activeSegment.value;
+  const tokenStartAbsolute = active.openBraceIndex + 1 + activeSegment.start;
+  const tokenEndAbsolute = active.openBraceIndex + 1 + activeSegment.end;
+  const tokens = segments.map((segment) => segment.value).filter(Boolean);
   const sanitizedSource = removeRange(source, active.matchStart, active.closeBraceIndex + 1);
   const sanitizedCursorIndex = active.matchStart;
 

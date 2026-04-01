@@ -25,11 +25,19 @@ export function activate(context) {
       void vscode.window.showErrorMessage(message);
     }
   });
+  const directDisposable = vscode.commands.registerCommand("overcite.resolveCitationDirect", async () => {
+    try {
+      await runResolveCitation("direct");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(message);
+    }
+  });
   const showDiagnosticsDisposable = vscode.commands.registerCommand("overcite.showDiagnostics", () => {
     getOutputChannel().show(true);
   });
 
-  context.subscriptions.push(disposable, simpleDisposable, showDiagnosticsDisposable, outputChannel);
+  context.subscriptions.push(disposable, simpleDisposable, directDisposable, showDiagnosticsDisposable, outputChannel);
 }
 
 export function deactivate() {}
@@ -47,7 +55,13 @@ async function runResolveCitation(searchModeOverride) {
   if (!citationContext) {
     throw new Error("Place the cursor inside a \\cite{...} command before running OverCite.");
   }
-  const resolvedSearchMode = normalizeSearchMode(searchModeOverride, settings.defaultSearchMode);
+  let resolvedSearchMode = normalizeSearchMode(searchModeOverride, settings.defaultSearchMode);
+  if (resolvedSearchMode === "direct" && !citationContext.token.trim()) {
+    if (normalizeSearchMode(searchModeOverride) === "direct") {
+      throw new Error("ADS query mode requires a non-empty citation token.");
+    }
+    resolvedSearchMode = "contextual";
+  }
   citationContext.searchMode = resolvedSearchMode;
 
   const channel = getOutputChannel();
@@ -67,7 +81,13 @@ async function runResolveCitation(searchModeOverride) {
       cancellable: false
     },
     async (progress) => {
-      progress.report({ message: resolvedSearchMode === "simple" ? "Running simple ADS search..." : "Searching NASA ADS..." });
+      progress.report({
+        message: resolvedSearchMode === "simple"
+          ? "Running simple ADS search..."
+          : resolvedSearchMode === "direct"
+            ? "Running ADS query..."
+            : "Searching NASA ADS..."
+      });
 
       const projectState = await collectProjectState(editor.document, settings);
       let bibResolution = resolveBibTarget(projectState, settings);
@@ -96,7 +116,9 @@ async function runResolveCitation(searchModeOverride) {
         throw new Error(
           resolvedSearchMode === "simple"
             ? "No ADS records matched the current citation token in simple search mode."
-            : "No ADS records matched the current citation token and context."
+            : resolvedSearchMode === "direct"
+              ? "No ADS records matched the direct token query."
+              : "No ADS records matched the current citation token and context."
         );
       }
 
@@ -177,7 +199,7 @@ function readSettings() {
 function normalizeSearchMode(...candidates) {
   for (const candidate of candidates) {
     const normalized = String(candidate ?? "").trim().toLowerCase();
-    if (normalized === "contextual" || normalized === "simple") {
+    if (normalized === "contextual" || normalized === "simple" || normalized === "direct") {
       return normalized;
     }
   }

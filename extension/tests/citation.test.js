@@ -13,6 +13,26 @@ test("findCitationAtCursor resolves the active token inside a multi-citation com
   assert.deepEqual(result.tokens, ["Goldberg24", "Shariat25", "Joyce20"]);
 });
 
+test("findCitationAtCursor preserves literal ADS query tokens with spaces and quotes", () => {
+  const source = 'Here is text \\citep{author:"El-Badry" year:2022 title:"magnetic braking"} and more.';
+  const cursorIndex = source.indexOf('El-Badry') + 2;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.token, 'author:"El-Badry" year:2022 title:"magnetic braking"');
+  assert.deepEqual(result.tokens, ['author:"El-Badry" year:2022 title:"magnetic braking"']);
+});
+
+test("findCitationAtCursor does not split on commas inside quoted ADS query values", () => {
+  const source = 'Here is text \\citep{first_author:"Smith, J" year:2020, Shariat25} and more.';
+  const cursorIndex = source.indexOf('Smith, J') + 2;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.token, 'first_author:"Smith, J" year:2020');
+  assert.deepEqual(result.tokens, ['first_author:"Smith, J" year:2020', "Shariat25"]);
+});
+
 test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   const shortYear = parseCitationKeyHint("Shariat25");
   const longYear = parseCitationKeyHint("MacLeod2025");

@@ -21,6 +21,11 @@ test("normalizeVsCodeSettings constrains and normalizes values", () => {
   assert.deepEqual(settings.projectBibFileOverrides, { "/tmp/project": "refs.bib" });
 });
 
+test("normalizeVsCodeSettings accepts direct as a valid default search mode", () => {
+  assert.equal(normalizeVsCodeSettings({ defaultSearchMode: "direct" }).defaultSearchMode, "direct");
+  assert.equal(normalizeVsCodeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "contextual");
+});
+
 test("normalizeVsCodeSettings accepts typed and informative key modes and defaults invalid values to author-year", () => {
   assert.equal(normalizeVsCodeSettings({ citationKeyMode: "typed" }).citationKeyMode, "typed");
   assert.equal(normalizeVsCodeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");

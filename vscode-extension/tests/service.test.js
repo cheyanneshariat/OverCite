@@ -144,6 +144,40 @@ test("searchAds simple mode requests citation_count and keeps simple query ladde
   assert.doesNotMatch(decodeURIComponent(calls[0]), /resolved triples from Gaia/);
 });
 
+test("searchAds direct mode performs one literal ADS query with no contextual expansion", async () => {
+  const calls = [];
+  const results = await searchAds(
+    {
+      token: 'author:"El-Badry" year:2022 title:"magnetic braking"',
+      searchMode: "direct",
+      sentenceText: "People find that magnetic braking saturates",
+      contextText: "People find that magnetic braking saturates in close binaries from ZTF",
+      parsedKeyHint: null
+    },
+    {
+      adsApiToken: "token",
+      citationKeyMode: "informative"
+    },
+    async (input) => {
+      calls.push(String(input));
+      return okResponse([
+        makeDoc("direct-1", {
+          title: "Magnetic braking saturates: evidence from the orbital period distribution of low-mass detached eclipsing binaries from ZTF",
+          author: ["El-Badry, Kareem"],
+          year: "2022",
+          abstract: "Magnetic braking saturates in detached eclipsing binaries."
+        })
+      ]);
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  const query = new URL(calls[0]).searchParams.get("q") ?? "";
+  assert.equal(query, 'author:"El-Badry" year:2022 title:"magnetic braking"');
+  assert.doesNotMatch(query, /People find that magnetic braking saturates/);
+  assert.match(results[0].title, /Magnetic braking saturates/i);
+});
+
 test("searchAds contextual mode starts the first two ADS queries in parallel", async () => {
   const startedCalls = [];
   const resolvers = [];
@@ -257,7 +291,7 @@ test("searchAds stops explicit-year contextual lookups after first-author year r
   );
 
   assert.equal(calls.length, 4);
-  assert.match(calls[3], /first_author:"Shariat" year:2025/);
+  assert.match(calls[3], /\(\(first_author:"Shariat"\) OR \(author:"Shariat Collaboration"\) OR \(author:"Shariat Scientific Collaboration"\)\) year:2025|first_author:"Shariat" year:2025/);
 });
 
 function okResponse(docs) {
@@ -269,13 +303,13 @@ function okResponse(docs) {
   };
 }
 
-function makeDoc(bibcode) {
+function makeDoc(bibcode, overrides = {}) {
   return {
     bibcode,
-    title: [`Candidate ${bibcode}`],
-    author: ["Shariat, Cheyanne"],
-    year: "2025",
-    abstract: "Resolved triples from Gaia constrain triple star populations.",
-    doi: [`10.1234/${bibcode}`]
+    title: [overrides.title ?? `Candidate ${bibcode}`],
+    author: overrides.author ?? ["Shariat, Cheyanne"],
+    year: overrides.year ?? "2025",
+    abstract: overrides.abstract ?? "Resolved triples from Gaia constrain triple star populations.",
+    doi: [overrides.doi ?? `10.1234/${bibcode}`]
   };
 }

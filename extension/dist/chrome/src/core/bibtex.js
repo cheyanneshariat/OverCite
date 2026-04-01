@@ -23,9 +23,29 @@ function extractFirstAuthorFamily(authors) {
   if (raw.includes(",")) {
     return toAscii(raw.split(",")[0]).replace(/\s+/g, "") || "Citation";
   }
+  const collaborationFamily = extractCollaborationFamily(raw);
+  if (collaborationFamily) {
+    return collaborationFamily;
+  }
   const normalized = toAscii(raw);
   const pieces = normalized.split(" ").filter(Boolean);
   return pieces[pieces.length - 1] ?? "Citation";
+}
+
+function extractCollaborationFamily(raw) {
+  const normalized = toAscii(raw);
+  if (!normalized) {
+    return "";
+  }
+  const pieces = normalized.split(" ").filter(Boolean);
+  const keywordIndex = pieces.findIndex((piece) => /^(collaboration|consortium|team|group)$/i.test(piece));
+  if (keywordIndex <= 0) {
+    return "";
+  }
+  const familyPieces = pieces
+    .slice(0, keywordIndex)
+    .filter((piece) => !/^(the|scientific)$/i.test(piece));
+  return familyPieces.join("");
 }
 
 function compactLeadingNumber(numberText) {

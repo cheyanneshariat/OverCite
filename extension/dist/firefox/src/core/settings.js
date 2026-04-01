@@ -83,7 +83,7 @@ function normalizeBibliographyInsertMode(bibliographyInsertMode) {
 
 function normalizeDefaultSearchMode(defaultSearchMode) {
   const normalized = String(defaultSearchMode ?? DEFAULT_SETTINGS.defaultSearchMode).trim().toLowerCase();
-  if (normalized === "contextual" || normalized === "simple") {
+  if (normalized === "contextual" || normalized === "simple" || normalized === "direct") {
     return normalized;
   }
   return DEFAULT_SETTINGS.defaultSearchMode;

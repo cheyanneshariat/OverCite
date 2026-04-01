@@ -34,6 +34,24 @@ test("generateAuthorYearKey creates full-year author keys", () => {
   assert.equal(key, "Shariat2025");
 });
 
+test("generateAuthorYearKey uses collaboration names instead of Collaboration as the family", () => {
+  const key = generateAuthorYearKey({
+    authors: ["Planck Collaboration"],
+    year: 2020,
+    title: "Planck 2018 results. VI. Cosmological parameters"
+  });
+  assert.equal(key, "Planck2020");
+});
+
+test("generateInformativeKey handles collaboration first authors", () => {
+  const key = generateInformativeKey({
+    authors: ["LIGO Scientific Collaboration"],
+    year: 2015,
+    title: "Advanced LIGO"
+  });
+  assert.equal(key, "LIGO15_advanced_ligo");
+});
+
 test("findBibMatch deduplicates by DOI", () => {
   const bibText = `
 @ARTICLE{Joyce20,

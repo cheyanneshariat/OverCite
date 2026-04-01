@@ -17,6 +17,7 @@ async function run() {
   await runAlphabeticalScenario(mainTexPath, referencesPath);
   await runEmptyTokenScenario(mainTexPath, referencesPath);
   await runSimpleCommandScenario(mainTexPath, referencesPath);
+  await runDirectCommandScenario(mainTexPath, referencesPath);
   await fs.writeFile(resultPath, JSON.stringify({ ok: true }, null, 2));
 }
 
@@ -35,7 +36,8 @@ async function runAppendScenario(mainTexPath, referencesPath) {
   editor.revealRange(new vscode.Range(targetPosition, targetPosition));
 
   await vscode.commands.executeCommand("overcite.resolveCitation");
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await waitForFileMatch(mainTexPath, /\\citep\{Shariat25_10k\}/);
+  await waitForFileMatch(referencesPath, /Shariat25_10k/);
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
@@ -73,7 +75,8 @@ async function runAlphabeticalScenario(mainTexPath, referencesPath) {
   editor.revealRange(new vscode.Range(targetPosition, targetPosition));
 
   await vscode.commands.executeCommand("overcite.resolveCitation");
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await waitForFileMatch(mainTexPath, /\\citep\{Shariat25_10k\}/);
+  await waitForFileMatch(referencesPath, /Shariat25_10k/);
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
@@ -111,7 +114,8 @@ async function runEmptyTokenScenario(mainTexPath, referencesPath) {
   editor.revealRange(new vscode.Range(targetPosition, targetPosition));
 
   await vscode.commands.executeCommand("overcite.resolveCitation");
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await waitForFileExcludes(mainTexPath, /\\citep\{\}/);
+  await waitForFileMatch(referencesPath, /Wide Binaries in an Ultra-faint Dwarf Galaxy/);
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
@@ -151,7 +155,8 @@ async function runSimpleCommandScenario(mainTexPath, referencesPath) {
   editor.revealRange(new vscode.Range(targetPosition, targetPosition));
 
   await vscode.commands.executeCommand("overcite.resolveCitationSimple");
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await waitForFileMatch(mainTexPath, /\\citep\{Shariat25_/);
+  await waitForFileMatch(referencesPath, /Once a Triple|10,000 Resolved Triples from Gaia/);
 
   const updatedMain = await fs.readFile(mainTexPath, "utf8");
   const updatedBib = await fs.readFile(referencesPath, "utf8");
@@ -162,6 +167,48 @@ async function runSimpleCommandScenario(mainTexPath, referencesPath) {
   assert.ok(activeEditor, "Expected an active editor after simple-command insertion");
   assert.equal(activeEditor.document.uri.fsPath, mainTexPath);
   assertCollapsedSelectionAtText(activeEditor, "Shariat25_");
+}
+
+async function runDirectCommandScenario(mainTexPath, referencesPath) {
+  const config = vscode.workspace.getConfiguration("overcite");
+  await config.update("bibliographyInsertMode", "append", vscode.ConfigurationTarget.Workspace);
+  await config.update("defaultSearchMode", "contextual", vscode.ConfigurationTarget.Workspace);
+
+  const document = await rewriteDocument(
+    mainTexPath,
+    "\\documentclass{article}\n\\begin{document}\nPeople find that magnetic braking saturates \\citep{author:\"El-Badry\" year:2022 title:\"magnetic braking\"}.\n\\bibliography{references}\n\\end{document}\n"
+  );
+  await rewriteDocument(
+    referencesPath,
+    "@ARTICLE{Existing24_demo,\n  author = {{Someone}, Demo},\n  title = {An Existing Demo Entry},\n  year = {2024}\n}\n"
+  );
+
+  const editor = await vscode.window.showTextDocument(document);
+  const source = document.getText();
+  const tokenText = 'author:"El-Badry" year:2022 title:"magnetic braking"';
+  const tokenIndex = source.indexOf(tokenText);
+  assert.ok(tokenIndex >= 0, "Did not find direct ADS query token in main.tex for direct-command scenario");
+
+  const targetOffset = tokenIndex + Math.min(8, tokenText.length - 1);
+  const targetPosition = document.positionAt(targetOffset);
+  editor.selection = new vscode.Selection(targetPosition, targetPosition);
+  editor.revealRange(new vscode.Range(targetPosition, targetPosition));
+
+  await vscode.commands.executeCommand("overcite.resolveCitationDirect");
+  await waitForFileExcludes(mainTexPath, /author:"El-Badry" year:2022 title:"magnetic braking"/);
+  await waitForFileMatch(mainTexPath, /\\citep\{ElBadry22/);
+  await waitForFileMatch(referencesPath, /Magnetic braking saturates/i);
+
+  const updatedMain = await fs.readFile(mainTexPath, "utf8");
+  const updatedBib = await fs.readFile(referencesPath, "utf8");
+  const activeEditor = vscode.window.activeTextEditor;
+
+  assert.doesNotMatch(updatedMain, /author:"El-Badry" year:2022 title:"magnetic braking"/);
+  assert.match(updatedMain, /\\citep\{ElBadry22/);
+  assert.match(updatedBib, /Magnetic braking saturates/i);
+  assert.ok(activeEditor, "Expected an active editor after direct-command insertion");
+  assert.equal(activeEditor.document.uri.fsPath, mainTexPath);
+  assertCollapsedSelectionAtText(activeEditor, "ElBadry22");
 }
 
 async function rewriteDocument(filePath, text) {
@@ -190,4 +237,32 @@ function assertCollapsedSelectionAtText(editor, textPrefix) {
     selectionOffset >= expectedEnd,
     `Expected cursor to land after ${textPrefix}, found offset ${selectionOffset} before ${expectedEnd}`
   );
+}
+
+async function waitForFileMatch(filePath, pattern, timeoutMs = 10000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const text = await fs.readFile(filePath, "utf8");
+    if (pattern.test(text)) {
+      return text;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  const finalText = await fs.readFile(filePath, "utf8");
+  assert.match(finalText, pattern);
+  return finalText;
+}
+
+async function waitForFileExcludes(filePath, pattern, timeoutMs = 10000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const text = await fs.readFile(filePath, "utf8");
+    if (!pattern.test(text)) {
+      return text;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  const finalText = await fs.readFile(filePath, "utf8");
+  assert.doesNotMatch(finalText, pattern);
+  return finalText;
 }

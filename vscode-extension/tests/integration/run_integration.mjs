@@ -45,11 +45,31 @@ const mockWideBinariesBibtex = `@ARTICLE{2025ApJ...999..123S,
        adsurl = {https://ui.adsabs.harvard.edu/abs/2025ApJ...999..123S}
 }`;
 
+const mockMagneticBrakingBibtex = `@ARTICLE{2022ApJ...940L...4E,
+       author = {{El-Badry}, Kareem and {Rix}, Hans-Walter and {Heintz}, Timothy M.},
+        title = "{Magnetic braking saturates: evidence from the orbital period distribution of low-mass detached eclipsing binaries from ZTF}",
+      journal = {\\apjl},
+         year = 2022,
+          doi = {10.3847/2041-8213/ac9cb7},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2022ApJ...940L...4E}
+}`;
+
 const mockServer = http.createServer((req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   if (url.pathname === "/v1/search/query") {
     const query = url.searchParams.get("q") ?? "";
-    const docs = query.includes("primordial") || query.includes("wide binaries")
+    const docs = query.includes('author:"El-Badry" year:2022 title:"magnetic braking"')
+      ? [
+          {
+            bibcode: "2022ApJ...940L...4E",
+            title: ["Magnetic braking saturates: evidence from the orbital period distribution of low-mass detached eclipsing binaries from ZTF"],
+            author: ["El-Badry, Kareem", "Rix, Hans-Walter", "Heintz, Timothy M."],
+            year: "2022",
+            abstract: "Magnetic braking saturates in low-mass detached eclipsing binaries from ZTF.",
+            doi: ["10.3847/2041-8213/ac9cb7"]
+          }
+        ]
+      : query.includes("primordial") || query.includes("wide binaries")
       ? [
           {
             bibcode: "2025ApJ...999..123S",
@@ -98,6 +118,10 @@ const mockServer = http.createServer((req, res) => {
         bibcode = "";
       }
       res.writeHead(200, { "Content-Type": "application/json" });
+      if (String(bibcode).includes("2022ApJ...940L...4E")) {
+        res.end(JSON.stringify({ export: mockMagneticBrakingBibtex }));
+        return;
+      }
       if (String(bibcode).includes("2025ApJ...999..123S")) {
         res.end(JSON.stringify({ export: mockWideBinariesBibtex }));
         return;

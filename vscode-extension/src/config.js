@@ -20,7 +20,7 @@ export function normalizeVsCodeSettings(rawSettings = {}) {
       ? citationKeyMode
       : DEFAULT_SETTINGS.citationKeyMode,
     bibliographyInsertMode: bibliographyInsertMode === "alphabetical" ? "alphabetical" : "append",
-    defaultSearchMode: defaultSearchMode === "simple" ? "simple" : "contextual",
+    defaultSearchMode: defaultSearchMode === "simple" || defaultSearchMode === "direct" ? defaultSearchMode : "contextual",
     projectBibFileOverrides: overrides
   };
 }

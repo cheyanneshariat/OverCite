@@ -143,6 +143,62 @@
     return `${source.slice(0, start)} ${source.slice(end)}`;
   }
 
+  function splitCitationTokenSegments(inside) {
+    const segments = [];
+    let segmentStart = 0;
+    let inQuotes = false;
+    let escaped = false;
+
+    for (let index = 0; index < inside.length; index += 1) {
+      const char = inside[index];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === "\"") {
+        inQuotes = !inQuotes;
+        continue;
+      }
+
+      if (char !== "," || inQuotes) {
+        continue;
+      }
+
+      segments.push(buildCitationTokenSegment(inside, segmentStart, index));
+      segmentStart = index + 1;
+    }
+
+    segments.push(buildCitationTokenSegment(inside, segmentStart, inside.length));
+    return segments;
+  }
+
+  function buildCitationTokenSegment(source, rawStart, rawEnd) {
+    let start = rawStart;
+    let end = rawEnd;
+
+    while (start < end && /\s/.test(source[start])) {
+      start += 1;
+    }
+    while (end > start && /\s/.test(source[end - 1])) {
+      end -= 1;
+    }
+
+    return {
+      rawStart,
+      rawEnd,
+      start,
+      end,
+      value: source.slice(start, end)
+    };
+  }
+
   function escapeRegex(value) {
     return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -174,28 +230,15 @@
 
     const inside = source.slice(active.openBraceIndex + 1, active.closeBraceIndex);
     const relativeCursor = Math.max(0, Math.min(inside.length, cursorIndex - active.openBraceIndex - 1));
-
-    let tokenStart = relativeCursor;
-    while (tokenStart > 0 && inside[tokenStart - 1] !== ",") {
-      tokenStart -= 1;
-    }
-
-    let tokenEnd = relativeCursor;
-    while (tokenEnd < inside.length && inside[tokenEnd] !== ",") {
-      tokenEnd += 1;
-    }
-
-    while (tokenStart < tokenEnd && /\s/.test(inside[tokenStart])) {
-      tokenStart += 1;
-    }
-    while (tokenEnd > tokenStart && /\s/.test(inside[tokenEnd - 1])) {
-      tokenEnd -= 1;
-    }
-
-    const token = inside.slice(tokenStart, tokenEnd);
-    const tokenStartAbsolute = active.openBraceIndex + 1 + tokenStart;
-    const tokenEndAbsolute = active.openBraceIndex + 1 + tokenEnd;
-    const tokens = inside.split(",").map((piece) => piece.trim()).filter(Boolean);
+    const segments = splitCitationTokenSegments(inside);
+    const activeSegment = segments.find((segment) => relativeCursor >= segment.rawStart && relativeCursor <= segment.rawEnd)
+      ?? segments.find((segment) => relativeCursor >= segment.start && relativeCursor <= segment.end)
+      ?? segments[0]
+      ?? { start: 0, end: 0, value: "" };
+    const token = activeSegment.value;
+    const tokenStartAbsolute = active.openBraceIndex + 1 + activeSegment.start;
+    const tokenEndAbsolute = active.openBraceIndex + 1 + activeSegment.end;
+    const tokens = segments.map((segment) => segment.value).filter(Boolean);
     const sanitizedSource = removeRange(source, active.matchStart, active.closeBraceIndex + 1);
     const sanitizedCursorIndex = active.matchStart;
 
@@ -687,7 +730,7 @@
     if (!isCurrentLookup(lookupGeneration)) {
       return;
     }
-    const resolvedSearchMode = normalizeSearchMode(searchMode, settings.defaultSearchMode);
+    let resolvedSearchMode = normalizeSearchMode(searchMode, settings.defaultSearchMode);
     const editorState = await getEditorStateWithRetry();
     if (!isCurrentLookup(lookupGeneration)) {
       return;
@@ -695,6 +738,9 @@
     const citationContext = findCitationAtCursor(editorState.text, editorState.from, settings.contextWindowChars);
     if (!citationContext) {
       throw new Error("Place the cursor inside a \\cite{...} command before triggering OverCite.");
+    }
+    if (resolvedSearchMode === "direct" && !citationContext.token.trim()) {
+      resolvedSearchMode = "contextual";
     }
 
     overlayState = {
@@ -720,7 +766,11 @@
 
     renderOverlay({
       subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
-      status: resolvedSearchMode === "simple" ? "Running simple ADS search..." : "Searching NASA ADS...",
+      status: resolvedSearchMode === "simple"
+        ? "Running simple ADS search..."
+        : resolvedSearchMode === "direct"
+          ? "Running ADS query..."
+          : "Searching NASA ADS...",
       shortcutText: settings.shortcutHelpText,
       actions: buildSearchModeActions(citationContext, resolvedSearchMode)
     });
@@ -745,7 +795,9 @@
         subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
         status: resolvedSearchMode === "simple"
           ? "No ADS records matched the simple token-only search."
-          : "No ADS records matched the current citation token and context.",
+          : resolvedSearchMode === "direct"
+            ? "No ADS records matched the direct token query."
+            : "No ADS records matched the current citation token and context.",
         shortcutText: settings.shortcutHelpText,
         error: true,
         actions: buildSearchModeActions(citationContext, resolvedSearchMode)
@@ -764,7 +816,7 @@
   function normalizeSearchMode(...candidates) {
     for (const candidate of candidates) {
       const normalized = String(candidate ?? "").trim().toLowerCase();
-      if (normalized === "contextual" || normalized === "simple") {
+      if (normalized === "contextual" || normalized === "simple" || normalized === "direct") {
         return normalized;
       }
     }
@@ -781,6 +833,25 @@
           label: "Back to contextual",
           kind: "tertiary",
           onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
+        },
+        {
+          label: "ADS query",
+          kind: "tertiary",
+          onClick: () => startLookup("direct").catch((error) => toast(error.message, "error"))
+        }
+      ];
+    }
+    if (searchMode === "direct") {
+      return [
+        {
+          label: "Back to contextual",
+          kind: "tertiary",
+          onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
+        },
+        {
+          label: "Simple search",
+          kind: "tertiary",
+          onClick: () => startLookup("simple").catch((error) => toast(error.message, "error"))
         }
       ];
     }
@@ -789,6 +860,11 @@
         label: "Simple search",
         kind: "tertiary",
         onClick: () => startLookup("simple").catch((error) => toast(error.message, "error"))
+      },
+      {
+        label: "ADS query",
+        kind: "tertiary",
+        onClick: () => startLookup("direct").catch((error) => toast(error.message, "error"))
       }
     ];
   }
