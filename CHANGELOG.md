@@ -4,11 +4,10 @@
 
 ## 0.1.3
 
-- Added an optional `ADS query` mode in both the Overleaf and VS Code extensions. This mode sends the active citation token directly to ADS/SciX without contextual expansion.
-- Added `OverCite: Resolve Citation (ADS Query)` in VS Code and documented how to bind a custom shortcut for it.
-- Improved direct ADS-query parsing so quoted fielded queries and commas inside quoted values work correctly, including inputs such as `author:"El-Badry" year:2022 title:"magnetic braking"` and `first_author:"Smith, J" year:2020`.
-- Hardened Overleaf/VS Code parity and added permanent direct-mode regression coverage in browser tests, VS Code tests, benchmark runs, and local Overleaf/VS Code smoke harnesses.
-- Preserved existing contextual and simple-search behavior while expanding the direct-query diagnostics and benchmark suite.
+- Added an optional `ADS query` mode in both the Overleaf and VS Code extensions.
+- VS Code now includes a dedicated `Resolve Citation (ADS Query)` command.
+- Improved direct ADS-query parsing for quoted fielded queries and quoted commas.
+- Expanded browser, VS Code, benchmark, and local smoke-test coverage for the new mode.
 
 ## 0.1.2
 
