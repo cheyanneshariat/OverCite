@@ -197,4 +197,4 @@ If you download a newer version of the repository later, the update step depends
 - If the popup gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
 
 ## Contact
-I am always happy to hear your thoughts or get any feedback! Please contact [Cheyanne Shariat](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.
+I am always happy to hear your thoughts or get any feedback! You can contact [me](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.
