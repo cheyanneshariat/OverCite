@@ -139,22 +139,6 @@ Current settings include:
 
 For non-empty citation keys, the popup also includes small `Simple search` and `ADS query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `ADS query` sends the typed token directly to ADS/SciX.
 
-## Development
-
-```bash
-cd extension
-npm run build
-npm test
-```
-
-The repo also keeps a local-only running benchmark suite in `local_testing/benchmarks/` for manual and scripted regression checks, including:
-
-- standard author-year cases
-- surname-only cases
-- empty-token context-only cases
-- minimal-context cases such as `\citep{Perlmutter99}.`, `See \citep{Abbott2016}.`, and `See \citep{Schlegel}.`
-- direct ADS-query cases such as `title:"magnetic braking"` and `author:"El-Badry" year:2022 title:"magnetic braking"`
-
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
