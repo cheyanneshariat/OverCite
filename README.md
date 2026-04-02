@@ -10,7 +10,7 @@ It supports three search modes:
 2. `Simple search` searches author/year only and sorts by citation count
 3. `ADS query` sends the typed token directly to ADS/SciX
 
-Covered fields: astronomy, physics, biology, Earth science, general-science collections, and *all papers on the arXiv*.
+Covered fields: CS, math, physics, biology, astronomy, and *all papers on the arXiv*.
 
 ![OverCite workflow](docs/assets/outline.png)
 
