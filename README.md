@@ -4,6 +4,10 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects.
 
+Install:
+- Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
+- VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) or search `OverCite` in the Extensions view
+
 It supports three search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
@@ -14,37 +18,25 @@ Covered fields: CS, math, physics, biology, astronomy, and *all papers on the ar
 
 ![OverCite workflow](docs/assets/outline.png)
 
-## Get The Files
-
-Before loading OverCite in Chrome, Firefox, or VSCode, get a local copy of this repository.
-
-Option 1: Download from GitHub
-
-1. Click the green `Code` button on GitHub.
-2. Click `Download ZIP`.
-3. Unzip the downloaded folder somewhere convenient.
-4. Then use the committed `extension/dist/chrome/` or `extension/dist/firefox/` paths below.
-
-Option 2: Clone with git
-
-```bash
-git clone https://github.com/cheyanneshariat/OverCite.git
-cd OverCite
-```
-
 ## Install
+
+For most users, installation is now just:
+
+1. Install OverCite from the Chrome Web Store or VS Code Marketplace
+2. Paste your NASA ADS or SciX API token*
+3. Start citing
+
+You do **not** need to clone or download this repository unless you want the manual Firefox install or a local developer copy.
 
 <details>
   <summary>Chrome</summary>
 
-1. Open `chrome://extensions`
-2. Turn on Developer mode (top right)
-3. Click `Load unpacked`
-4. Select `extension/dist/chrome/`
-5. Open the OverCite options page (`Details` --> `Extension options`)
-6. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
-7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-8. Put the cursor inside the citation key and press `Alt+Shift+E`
+1. Install OverCite from the [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
+   - Click `Add to Chrome`
+2. Open the OverCite options page (`Details` --> `Extension options`)
+3. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
+4. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+5. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
 
 </details>
@@ -52,35 +44,40 @@ cd OverCite
 <details>
   <summary>Firefox</summary>
 
-1. Open `about:debugging#/runtime/this-firefox`
-2. Click `Load Temporary Add-on...`
-3. Select `extension/dist/firefox/manifest.json`
-4. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
-5. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
-6. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-7. Put the cursor inside the citation key and press `Alt+Shift+E`
+Firefox is still a manual install from this repository.
+
+1. Get a local copy of this repository:
+   - Download ZIP from GitHub and unzip it, or
+   - `git clone https://github.com/cheyanneshariat/OverCite.git`
+2. Open `about:debugging#/runtime/this-firefox`
+3. Click `Load Temporary Add-on...`
+4. Select `extension/dist/firefox/manifest.json`
+5. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
+6. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
+7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+8. Put the cursor inside the citation key and press `Alt+Shift+E`
 
 </details>
 
 <details>
   <summary>VS Code</summary>
 
-1. In normal VS Code, run `Extensions: Install from VSIX...`
-2. Select `vscode-extension/overcite-vscode-0.1.3.vsix`
-3. Reload VS Code
-4. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
-5. Open VS Code Settings:
+1. Install OverCite from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
+   - Or open Extensions in VS Code and search for `OverCite`, then click `Install`
+2. Reload VS Code if needed
+3. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
+4. Open VS Code Settings:
    - Mac shortcut: `Command+,`
    - or open the Command Palette with `Command+Shift+P` and run `Preferences: Open Settings (UI)`
-6. In the Settings search bar, type `OverCite`
-7. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
-8. Paste your NASA ADS or SciX API token* into that field
-9. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E`
-10. Or use the Command Palette and run one of:
+5. In the Settings search bar, type `OverCite`
+6. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
+7. Paste your NASA ADS or SciX API token* into that field
+8. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E`
+9. Or use the Command Palette and run one of:
    - `OverCite: Resolve Citation`
    - `OverCite: Resolve Citation (Simple Search)`
    - `OverCite: Resolve Citation (ADS Query)`
-11. Review the dropdown results and choose the paper you want
+10. Review the dropdown results and choose the paper you want
 
 For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-extension/README.md](vscode-extension/README.md).
 
@@ -148,15 +145,14 @@ For non-empty citation keys, the popup also includes small `Simple search` and `
 
 ## Updating
 
-If you download a newer version of the repository later, the update step depends on where you use OverCite.
+If you install from the Chrome Web Store or VS Code Marketplace, updates come through those channels. Manual repo updates are only relevant for Firefox or local developer installs.
 
 <details>
   <summary>Chrome</summary>
 
-1. Replace your local repo copy with the newer one, or `git pull`
-2. Open `chrome://extensions`
-3. Click `Reload` on OverCite
-4. Refresh your Overleaf tab
+1. Open the Chrome Web Store page for OverCite
+2. Let Chrome pick up the latest published version automatically
+3. If needed, refresh your Overleaf tab
 
 </details>
 
@@ -175,11 +171,9 @@ If you download a newer version of the repository later, the update step depends
 <details>
   <summary>VS Code</summary>
 
-1. Replace your local repo copy with the newer one, or `git pull`
-2. In VS Code, uninstall the old OverCite extension if needed
-3. Run `Extensions: Install from VSIX...`
-4. Select `vscode-extension/overcite-vscode-0.1.3.vsix`
-5. Reload VS Code
+1. Update OverCite through the VS Code Extensions view
+2. Or reinstall from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
+3. Reload VS Code if needed
 
 </details>
 
