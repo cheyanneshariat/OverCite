@@ -23,7 +23,7 @@ Covered fields: CS, math, physics, biology, astronomy, and *all papers on the ar
 For most users, installation is now just:
 
 1. Install OverCite from the Chrome Web Store or VS Code Marketplace
-2. Paste your NASA ADS or SciX API token (account settings --> API token)*
+2. Paste your NASA ADS or SciX API token (account settings -> API token)
 3. Start citing
 
 You do **not** need to clone or download this repository unless you want the manual Firefox install or a local developer copy.
