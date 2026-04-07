@@ -5,9 +5,9 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects. Just search for `OverCite` in the extensions store or marketplace.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
-> This work made use of `OverCite`, an in-editor citation tool for LaTeX ([OverCite](https://github.com/cheyanneshariat/OverCite)).
+> This work made use of {\tt OverCite}, an in-editor citation tool for LaTeX (\href{https://github.com/cheyanneshariat/OverCite}{OverCite 2026}).
 
-...or, you can just do `\citep{title:"OverCite"}` ;)
+...or, you can just do `\citep{title:"OverCite"}` and activate OverCite, ADS Query ;)
 
 <details>
   <summary>BibTeX for OverCite</summary>
