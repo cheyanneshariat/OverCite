@@ -2,10 +2,10 @@
 
 OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
 
-The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects.
+The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects. Just search for `OverCite` in the extensions store or marketplace.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
-> This work made use of `OverCite`, an in-editor citation tool for LaTeX ([GitHub](https://github.com/cheyanneshariat/OverCite)).
+> This work made use of `OverCite`, an in-editor citation tool for LaTeX ([OverCite](https://github.com/cheyanneshariat/OverCite)).
 
 ...or, you can just do `\citep{title:"OverCite"}` ;)
 
@@ -26,7 +26,7 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
-- VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) or search `OverCite` in the Extensions view
+- VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
 
 It supports three search modes:
 
