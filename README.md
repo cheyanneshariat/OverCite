@@ -6,6 +6,7 @@ The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected B
 
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
+- Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
 - VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) or search `OverCite` in the Extensions view
 
 It supports three search modes:
@@ -22,11 +23,11 @@ Covered fields: CS, math, physics, biology, astronomy, and *all papers on the ar
 
 For most users, installation is now just:
 
-1. Install OverCite from the Chrome Web Store or VS Code Marketplace
+1. Install OverCite from the Chrome Web Store, Firefox Add-ons, or VS Code Marketplace
 2. Paste your NASA ADS or SciX API token* (account settings -> API token)
 3. Start citing
 
-You do **not** need to clone or download this repository unless you want the manual Firefox install or a local developer copy.
+You do **not** need to clone or download this repository unless you want a local developer copy.
 
 <details>
   <summary>Chrome</summary>
@@ -44,18 +45,13 @@ You do **not** need to clone or download this repository unless you want the man
 <details>
   <summary>Firefox</summary>
 
-Firefox is still a manual install from this repository.
-
-1. Get a local copy of this repository:
-   - Download ZIP from GitHub and unzip it, or
-   - `git clone https://github.com/cheyanneshariat/OverCite.git`
-2. Open `about:debugging#/runtime/this-firefox`
-3. Click `Load Temporary Add-on...`
-4. Select `extension/dist/firefox/manifest.json`
-5. Open the OverCite options page (open `about:addons` in browser, find OverCite, click `...`, click `Preferences`)
-6. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
-7. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-8. Put the cursor inside the citation key and press `Alt+Shift+E`
+1. Install OverCite from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
+   - Click `Add to Firefox`
+2. Open the OverCite options page (`about:addons` -> `OverCite` -> `Preferences`)
+3. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
+4. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+5. Put the cursor inside the citation key and press `Alt+Shift+E`
+   - Mac users: `Alt` means the `Option` key
 
 </details>
 
@@ -187,6 +183,23 @@ If you install from the Chrome Web Store or VS Code Marketplace, updates come th
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
 - If the popup gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
+
+## Acknowledging OverCite
+
+If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
+
+> This work made use of `OverCite`, an in-editor citation tool for LaTeX ([GitHub](https://github.com/cheyanneshariat/OverCite)).
+
+If you prefer a BibTeX entry for a software or acknowledgements section:
+
+```bibtex
+@software{OverCite,
+  title   = {OverCite},
+  year    = {2026},
+  url     = {https://github.com/cheyanneshariat/OverCite},
+  version = {0.1.3}
+}
+```
 
 ## Contact
 I am always happy to hear your thoughts or get any feedback! You can contact [me](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.
