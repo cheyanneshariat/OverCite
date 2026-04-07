@@ -1,4 +1,8 @@
-# OverCite
+<!--# OverCite-->
+<h1>
+  OverCite
+  <img src="https://raw.githubusercontent.com/cheyanneshariat/OverCite/main/extension/icons/overcite-logo-square.png" alt="OverCite logo" width="40" style="vertical-align: middle; margin-left: 10px;">
+</h1>
 
 OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
 
