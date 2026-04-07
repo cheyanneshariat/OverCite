@@ -1,7 +1,7 @@
 <!--# OverCite-->
 <h1>
   OverCite
-  <img src="https://raw.githubusercontent.com/cheyanneshariat/OverCite/main/extension/icons/overcite-logo-square.png" alt="OverCite logo" height="46" style="vertical-align: -10px; margin-left: 8px;">
+  <img src="https://raw.githubusercontent.com/cheyanneshariat/OverCite/main/extension/icons/overcite-logo-square.png" alt="OverCite logo" height="26" style="vertical-align: -3px; margin-left: 18px;">
 </h1>
 
 OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
@@ -9,7 +9,9 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects. Just search for `OverCite` in the extensions store or marketplace.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
-> This work made use of {\tt OverCite}, an in-editor citation tool for LaTeX (\href{https://github.com/cheyanneshariat/OverCite}{OverCite 2026}).
+<blockquote>
+  This work made use of <a href="https://github.com/cheyanneshariat/OverCite">OverCite</a>, an in-editor citation tool for LaTeX.
+</blockquote>
 
 <!--...or, you can just do `\citep{title:"OverCite"}` and activate OverCite/ADS query ;)-->
 
