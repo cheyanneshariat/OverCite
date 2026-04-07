@@ -4,6 +4,25 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects.
 
+If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
+> This work made use of `OverCite`, an in-editor citation tool for LaTeX ([GitHub](https://github.com/cheyanneshariat/OverCite)).
+
+...or, you can just do `\citep{title:"OverCite"}` ;)
+
+<details>
+  <summary>BibTeX for OverCite</summary>
+
+```bibtex
+@software{OverCite,
+  title   = {OverCite},
+  year    = {2026},
+  url     = {https://github.com/cheyanneshariat/OverCite},
+  version = {0.1.3}
+}
+```
+
+</details>
+
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
@@ -183,23 +202,6 @@ If you install from the Chrome Web Store or VS Code Marketplace, updates come th
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
 - If the popup gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
-
-## Acknowledging OverCite
-
-If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
-
-> This work made use of `OverCite`, an in-editor citation tool for LaTeX ([GitHub](https://github.com/cheyanneshariat/OverCite)).
-
-If you prefer a BibTeX entry for a software or acknowledgements section:
-
-```bibtex
-@software{OverCite,
-  title   = {OverCite},
-  year    = {2026},
-  url     = {https://github.com/cheyanneshariat/OverCite},
-  version = {0.1.3}
-}
-```
 
 ## Contact
 I am always happy to hear your thoughts or get any feedback! You can contact [me](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.
