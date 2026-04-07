@@ -161,7 +161,7 @@ For non-empty citation keys, the popup also includes small `Simple search` and `
 
 ## Updating
 
-If you install from the Chrome Web Store or VS Code Marketplace, updates come through those channels. Manual repo updates are only relevant for Firefox or local developer installs.
+If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Marketplace, updates come through those channels automatically. Manual repo updates are only relevant for local developer installs.
 
 <details>
   <summary>Chrome</summary>
