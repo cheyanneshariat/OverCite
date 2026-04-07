@@ -7,7 +7,7 @@ The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected B
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 > This work made use of {\tt OverCite}, an in-editor citation tool for LaTeX (\href{https://github.com/cheyanneshariat/OverCite}{OverCite 2026}).
 
-...or, you can just do `\citep{title:"OverCite"}` and activate OverCite/ADS query ;)
+<!--...or, you can just do `\citep{title:"OverCite"}` and activate OverCite/ADS query ;)-->
 
 <details>
   <summary>BibTeX for OverCite</summary>
