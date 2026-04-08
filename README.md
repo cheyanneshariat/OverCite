@@ -1,4 +1,9 @@
-# OverCite
+<!--# OverCite-->
+<h1 style="display: flex; align-items: center; gap: 0.48rem; margin-bottom: 0.8rem;">
+  <img src="extension/icons/overcite-logo-square.png" alt="OverCite logo" width="42">
+  <span>OverCite</span>
+</h1>
+
 OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
 
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects. Just search for `OverCite` in the extensions store or marketplace.
