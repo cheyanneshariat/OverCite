@@ -2,10 +2,18 @@
   "name": "overcite-vscode",
   "displayName": "OverCite",
   "description": "Search ADS/SciX from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.1.3",
-  "publisher": "local",
-  "private": true,
+  "version": "0.1.5",
+  "publisher": "CheyanneShariat",
   "icon": "icon.png",
+  "homepage": "https://github.com/cheyanneshariat/OverCite",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cheyanneshariat/OverCite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cheyanneshariat/OverCite/issues"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -72,9 +80,10 @@
           "enum": [
             "authoryear",
             "informative",
+            "bibcode",
             "typed"
           ],
-          "markdownDescription": "Use a plain author-year key like `Shariat2025`, an informative key like `Shariat25_10k`, or preserve the typed key when possible."
+          "markdownDescription": "Use a plain author-year key like `Shariat2025`, an informative key like `Shariat25_10k`, an ADS bibcode like `2024MNRAS.52711719Y`, or preserve the typed key when possible."
         },
         "overcite.bibliographyInsertMode": {
           "type": "string",

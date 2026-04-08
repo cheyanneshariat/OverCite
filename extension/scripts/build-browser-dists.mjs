@@ -7,7 +7,17 @@ const __dirname = path.dirname(__filename);
 const extensionRoot = path.resolve(__dirname, "..");
 const distRoot = path.join(extensionRoot, "dist");
 
-const sharedEntries = ["icons", "src", "options.html"];
+const sharedEntries = ["src", "options.html"];
+const iconEntries = [
+  "icon-16.png",
+  "icon-32.png",
+  "icon-48.png",
+  "icon-96.png",
+  "icon-128.png",
+  "icon-256.png",
+  "icon-512.png",
+  "overcite-logo-square.png"
+];
 
 async function main() {
   const baseManifest = JSON.parse(await readFile(path.join(extensionRoot, "manifest.json"), "utf8"));
@@ -39,7 +49,16 @@ async function buildBrowserDist(browserName, manifest) {
   await mkdir(targetRoot, { recursive: true });
 
   for (const entry of sharedEntries) {
-    await cp(path.join(extensionRoot, entry), path.join(targetRoot, entry), { recursive: true });
+    await cp(path.join(extensionRoot, entry), path.join(targetRoot, entry), {
+      recursive: true,
+      filter: (source) => !path.basename(source).startsWith(".")
+    });
+  }
+
+  const targetIconsRoot = path.join(targetRoot, "icons");
+  await mkdir(targetIconsRoot, { recursive: true });
+  for (const iconName of iconEntries) {
+    await cp(path.join(extensionRoot, "icons", iconName), path.join(targetIconsRoot, iconName));
   }
 
   await writeFile(

@@ -29,6 +29,7 @@ test("normalizeVsCodeSettings accepts direct as a valid default search mode", ()
 test("normalizeVsCodeSettings accepts typed and informative key modes and defaults invalid values to author-year", () => {
   assert.equal(normalizeVsCodeSettings({ citationKeyMode: "typed" }).citationKeyMode, "typed");
   assert.equal(normalizeVsCodeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");
+  assert.equal(normalizeVsCodeSettings({ citationKeyMode: "bibcode" }).citationKeyMode, "bibcode");
   assert.equal(normalizeVsCodeSettings({ citationKeyMode: "other" }).citationKeyMode, "authoryear");
 });
 

@@ -19,7 +19,7 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
   title   = {OverCite},
   year    = {2026},
   url     = {https://github.com/cheyanneshariat/OverCite},
-  version = {0.1.3}
+  version = {0.1.5}
 }
 ```
 
@@ -145,7 +145,7 @@ Current settings include:
 
 - ADS/SciX API token for search and BibTeX export
 - Theme selection
-- Citation key style, including plain author-year keys like `Perlmutter1999`, informative keys like `Perlmutter99_supernovae`, or keeping the typed key
+- Citation key style, including plain author-year keys like `Perlmutter1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2024MNRAS.52711719Y`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or ADS query mode first
 - An optional `ADS query` mode that sends the typed token directly to ADS/SciX

@@ -8,7 +8,7 @@ OverCite is a browser extension for Overleaf that searches ADS/SciX from inside 
 - Overleaf content script with an OverCite overlay
 - ADS/SciX search and BibTeX export via background worker
 - Three search modes: contextual, simple search, and direct `ADS query`
-- Citation parsing, key generation, BibTeX dedupe, and bibliography resolution
+- Citation parsing, key generation (including ADS bibcodes), BibTeX dedupe, and bibliography resolution
 - Options page for ADS token, theme preference, and project-level `.bib` overrides
 - Node test suite covering parser, ranking, key generation, dedupe, and an example-TeX harness
 
@@ -49,6 +49,13 @@ For non-empty citation keys, the popup also exposes two small mode toggles:
 
 - `Simple search` reruns the lookup from the typed token only
 - `ADS query` sends the typed token directly to ADS/SciX
+
+The options page also lets you choose how inserted citation keys are written:
+
+- `Author + Full Year` for keys like `Perlmutter1999`
+- `Informative` for keys like `Perlmutter99_supernovae`
+- `Bibcode` for keys like `2024MNRAS.52711719Y`
+- `Keep Typed Key` to preserve what you entered when possible
 
 Short examples:
 

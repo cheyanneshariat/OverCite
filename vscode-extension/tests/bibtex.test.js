@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   applyBibInsertion,
   generateAuthorYearKey,
+  generateBibcodeKey,
   buildTitleSlug,
   findBibMatch,
   generateInformativeKey,
@@ -30,6 +31,23 @@ test("generateAuthorYearKey creates full-year author keys", () => {
     authors: ["Shariat, Cheyanne"],
     year: 2025,
     title: "10,000 Resolved Triples from Gaia"
+  });
+  assert.equal(key, "Shariat2025");
+});
+
+test("generateBibcodeKey uses the ADS bibcode as the final key", () => {
+  const key = generateBibcodeKey({
+    bibcode: "2024MNRAS.52711719Y",
+    authors: ["Yamaguchi, Natsuko"],
+    year: 2024
+  });
+  assert.equal(key, "2024MNRAS.52711719Y");
+});
+
+test("generateBibcodeKey falls back to author-year when the bibcode is missing", () => {
+  const key = generateBibcodeKey({
+    authors: ["Shariat, Cheyanne"],
+    year: 2025
   });
   assert.equal(key, "Shariat2025");
 });
@@ -104,6 +122,19 @@ test("generatePreferredKey can preserve the typed key", () => {
   assert.equal(key, "Shariat25");
 });
 
+test("generatePreferredKey can use bibcode mode", () => {
+  const key = generatePreferredKey(
+    {
+      bibcode: "2024MNRAS.52711719Y",
+      authors: ["Yamaguchi, Natsuko"],
+      year: 2024
+    },
+    [],
+    { keyMode: "bibcode" }
+  );
+  assert.equal(key, "2024MNRAS.52711719Y");
+});
+
 test("generatePreferredKey defaults to author-year keys", () => {
   const key = generatePreferredKey(
     {
@@ -139,6 +170,79 @@ test("applyBibInsertion can keep the typed key instead of adding a title slug", 
     start: 0,
     end: result.updatedBibText.trimEnd().length
   });
+});
+
+test("applyBibInsertion can use the bibcode as the cite key and keep the ADS entry key", () => {
+  const bibtex = `@ARTICLE{2024MNRAS.52711719Y,
+  title = {Wide post-common envelope binaries containing ultramassive white dwarfs},
+  doi = {10.1093/mnras/stad4005}
+}`;
+  const result = applyBibInsertion({
+    bibText: "",
+    bibtex,
+    candidate: {
+      bibcode: "2024MNRAS.52711719Y",
+      title: "Wide post-common envelope binaries containing ultramassive white dwarfs",
+      doi: "10.1093/mnras/stad4005",
+      authors: ["Yamaguchi, Natsuko"],
+      year: 2024,
+      keyMode: "bibcode"
+    }
+  });
+  assert.equal(result.finalKey, "2024MNRAS.52711719Y");
+  assert.equal(result.rewrittenBibtex.trim(), bibtex);
+  assert.match(result.updatedBibText, /@ARTICLE\{2024MNRAS\.52711719Y,/);
+});
+
+test("applyBibInsertion deduplicates existing bibcode-mode entries by bibcode", () => {
+  const bibText = `
+@ARTICLE{2024MNRAS.52711719Y,
+  title = {Wide post-common envelope binaries containing ultramassive white dwarfs},
+  adsurl = {https://ui.adsabs.harvard.edu/abs/2024MNRAS.52711719Y}
+}
+`;
+  const result = applyBibInsertion({
+    bibText,
+    bibtex: `@ARTICLE{2024MNRAS.52711719Y,
+  title = {Wide post-common envelope binaries containing ultramassive white dwarfs},
+  adsurl = {https://ui.adsabs.harvard.edu/abs/2024MNRAS.52711719Y}
+}`,
+    candidate: {
+      bibcode: "2024MNRAS.52711719Y",
+      title: "Wide post-common envelope binaries containing ultramassive white dwarfs",
+      authors: ["Yamaguchi, Natsuko"],
+      year: 2024,
+      keyMode: "bibcode"
+    }
+  });
+  assert.equal(result.finalKey, "2024MNRAS.52711719Y");
+  assert.equal(result.updatedBibText, bibText);
+});
+
+test("applyBibInsertion upgrades colliding bibcode keys to suffixes", () => {
+  const bibText = `
+@ARTICLE{2024MNRAS.52711719Y,
+  title = {A Different Entry},
+  year = {2024}
+}
+`;
+  const result = applyBibInsertion({
+    bibText,
+    bibtex: `@ARTICLE{someOtherKey,
+  title = {Wide post-common envelope binaries containing ultramassive white dwarfs},
+  doi = {10.1093/mnras/stad4005}
+}`,
+    candidate: {
+      bibcode: "2024MNRAS.52711719Y",
+      title: "Wide post-common envelope binaries containing ultramassive white dwarfs",
+      doi: "10.1093/mnras/stad4005",
+      authors: ["Yamaguchi, Natsuko"],
+      year: 2024,
+      keyMode: "bibcode"
+    }
+  });
+  assert.equal(result.finalKey, "2024MNRAS.52711719Ya");
+  assert.match(result.updatedBibText, /@ARTICLE\{2024MNRAS\.52711719Ya,/);
 });
 
 test("insertBibtexEntryAlphabetically places a new entry before the next larger key", () => {

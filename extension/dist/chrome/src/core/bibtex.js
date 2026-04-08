@@ -113,6 +113,14 @@ export function generateAuthorYearKey(candidate, existingKeys = []) {
   return ensureUniqueKey(base, existingKeys);
 }
 
+export function generateBibcodeKey(candidate, existingKeys = []) {
+  const bibcode = String(candidate?.bibcode ?? "").trim();
+  if (!bibcode) {
+    return generateAuthorYearKey(candidate, existingKeys);
+  }
+  return ensureUniqueKey(bibcode, existingKeys);
+}
+
 function sanitizeTypedTokenKey(rawToken) {
   return String(rawToken ?? "")
     .trim()
@@ -127,6 +135,9 @@ export function generatePreferredKey(candidate, existingKeys = [], options = {})
     if (typedBase) {
       return ensureUniqueKey(typedBase, existingKeys);
     }
+  }
+  if (keyMode === "bibcode") {
+    return generateBibcodeKey(candidate, existingKeys);
   }
   if (keyMode === "informative") {
     return generateInformativeKey(candidate, existingKeys);

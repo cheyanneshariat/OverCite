@@ -19,6 +19,7 @@ test("normalizeSettings accepts valid citation key modes and defaults invalid on
   assert.equal(normalizeSettings({ citationKeyMode: "authoryear" }).citationKeyMode, "authoryear");
   assert.equal(normalizeSettings({ citationKeyMode: "typed" }).citationKeyMode, "typed");
   assert.equal(normalizeSettings({ citationKeyMode: "informative" }).citationKeyMode, "informative");
+  assert.equal(normalizeSettings({ citationKeyMode: "bibcode" }).citationKeyMode, "bibcode");
   assert.equal(normalizeSettings({ citationKeyMode: "other" }).citationKeyMode, "authoryear");
 });
 

@@ -1,6 +1,24 @@
-# OverCite for VS Code
+<h1>OverCite <img src="https://raw.githubusercontent.com/cheyanneshariat/OverCite/main/extension/icons/overcite-logo-square.png" alt="OverCite logo" height="24"></h1>
 
-This package is a separate VS Code extension that brings the OverCite citation workflow to local LaTeX projects.
+OverCite helps you add LaTeX citations in VS Code without leaving the editor.
+
+Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches from NASA ADS/SciX, and insert the selected BibTeX entry directly into your project bibliography.
+
+If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
+
+<blockquote>
+  This work made use of <a href="https://github.com/cheyanneshariat/OverCite">OverCite</a>, an in-editor citation tool for LaTeX.
+</blockquote>
+
+## Getting Started
+
+1. Install by searching for `OverCite` in VS Code Extensions.
+2. Open Settings, search for `OverCite`, and paste your NASA ADS or SciX API token into `OverCite: Ads Api Token`.
+3. That's it. Open a `.tex` file, place the cursor inside a `\cite{...}` command, and press `Alt+Shift+E` to get started.
+
+To get an API token, sign in to NASA ADS or SciX and go to `Settings -> API Token`.
+
+More details: https://github.com/cheyanneshariat/OverCite
 
 ## What It Does
 
@@ -22,7 +40,7 @@ This package is a separate VS Code extension that brings the OverCite citation w
 
 - `overcite.adsApiToken` (accepts either a NASA ADS or SciX API token)
 - `overcite.contextWindowChars`
-- `overcite.citationKeyMode` (`authoryear`, `informative`, or `typed`)
+- `overcite.citationKeyMode` (`authoryear`, `informative`, `bibcode`, or `typed`)
 - `overcite.bibliographyInsertMode`
 - `overcite.defaultSearchMode`
 - `overcite.projectBibFileOverrides`

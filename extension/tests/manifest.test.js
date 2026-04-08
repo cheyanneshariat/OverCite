@@ -18,5 +18,9 @@ test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   assert.equal(manifest.action.default_icon["16"], "icons/icon-16.png");
   assert.equal(manifest.action.default_icon["32"], "icons/icon-32.png");
   assert.equal(manifest.browser_specific_settings.gecko.id, "overcite-addon@example.com");
-  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "121.0");
+  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "140.0");
+  assert.deepEqual(
+    manifest.browser_specific_settings.gecko.data_collection_permissions.required,
+    ["authenticationInfo", "websiteContent"]
+  );
 });

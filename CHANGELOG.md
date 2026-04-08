@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a `bibcode` citation-key mode so inserted citations can use ADS bibcodes such as `2024MNRAS.52711719Y`.
+
 ## 0.1.3
 
 - Added an optional `ADS query` mode in both the Overleaf and VS Code extensions.
