@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## latest
 
-- Added a `bibcode` citation-key mode so inserted citations can use ADS bibcodes such as `2024MNRAS.52711719Y`.
+- Added a `bibcode` citation-key mode so inserted citations can use ADS bibcodes such as `1975CMaPh..43..199H`.
 
 ## 0.1.3
 
