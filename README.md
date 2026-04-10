@@ -5,21 +5,25 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects. Just search for `OverCite` in the extensions store or marketplace.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
-<blockquote>
-  This work made use of <a href="https://github.com/cheyanneshariat/OverCite">OverCite</a>, an in-editor citation tool for LaTeX.
-</blockquote>
+
+```tex
+This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat_OverCite_2026}, an in-editor citation tool for \LaTeX.
+```
 
 <!--...or, you can just do `\citep{title:"OverCite"}` and activate OverCite/ADS query ;)-->
 
 <details>
-  <summary>BibTeX for OverCite</summary>
+  <summary>BibTeX for the Zenodo software citation</summary>
 
 ```bibtex
-@software{OverCite,
-  title   = {OverCite},
-  year    = {2026},
-  url     = {https://github.com/cheyanneshariat/OverCite},
-  version = {0.1.5}
+@software{Shariat_OverCite_2026,
+  author    = {Shariat, Cheyanne},
+  title     = {OverCite: Add citations in LaTeX without leaving the editor},
+  version   = {0.1.5},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.19485160},
+  url       = {https://zenodo.org/records/19485160}
 }
 ```
 
