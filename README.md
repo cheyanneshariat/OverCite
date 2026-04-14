@@ -10,8 +10,6 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{OverCite2026}, an in-editor citation tool for \LaTeX.
 ```
 
-...and if you're using OverCite, just try `\citep{title:"OverCite"}` with ADS query ;)
-
 <details>
   <summary>BibTeX for the published RNAAS paper</summary>
 
@@ -28,6 +26,7 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
   url     = {https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc}
 }
 ```
+...and if you're using OverCite, just do `\citep{title:"OverCite"}` with ADS query ;)
 
 </details>
 
