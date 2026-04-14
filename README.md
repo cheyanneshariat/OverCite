@@ -7,16 +7,16 @@ The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected B
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
 ```tex
-This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat_OverCite_RNAAS_2026}, an in-editor citation tool for \LaTeX.
+This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{OverCite2026}, an in-editor citation tool for \LaTeX.
 ```
 
-<!--...or, you can just do `\citep{title:"OverCite"}` and activate OverCite/ADS query ;)-->
+<!-- ...or use OverCite to cite it, you know? Try `\citep{title:"OverCite"}` with ADS query. -->
 
 <details>
   <summary>BibTeX for the published RNAAS paper</summary>
 
 ```bibtex
-@article{Shariat_OverCite_RNAAS_2026,
+@article{OverCite2026,
   author  = {Shariat, Cheyanne},
   title   = {OverCite: Add citations in {LaTeX} without leaving the editor},
   journal = {Research Notes of the AAS},
