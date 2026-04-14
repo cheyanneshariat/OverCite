@@ -7,23 +7,25 @@ The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected B
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
 ```tex
-This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat_OverCite_2026}, an in-editor citation tool for \LaTeX.
+This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat_OverCite_RNAAS_2026}, an in-editor citation tool for \LaTeX.
 ```
 
 <!--...or, you can just do `\citep{title:"OverCite"}` and activate OverCite/ADS query ;)-->
 
 <details>
-  <summary>BibTeX for the Zenodo software citation</summary>
+  <summary>BibTeX for the published RNAAS paper</summary>
 
 ```bibtex
-@software{Shariat_OverCite_2026,
-  author    = {Shariat, Cheyanne},
-  title     = {OverCite: Add citations in LaTeX without leaving the editor},
-  version   = {0.1.5},
-  year      = {2026},
-  publisher = {Zenodo},
-  doi       = {10.5281/zenodo.19485160},
-  url       = {https://zenodo.org/records/19485160}
+@article{Shariat_OverCite_RNAAS_2026,
+  author  = {Shariat, Cheyanne},
+  title   = {OverCite: Add citations in {LaTeX} without leaving the editor},
+  journal = {Research Notes of the AAS},
+  year    = {2026},
+  volume  = {10},
+  number  = {4},
+  pages   = {86},
+  doi     = {10.3847/2515-5172/ae5dbc},
+  url     = {https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc}
 }
 ```
 
@@ -108,7 +110,9 @@ For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-exte
 
 ## Demo
 
-- Short tech demo video: [docs/assets/OverCite_demo.mov](docs/assets/OverCite_demo.mov)
+[![Watch the OverCite demo](docs/assets/overcite-demo-poster.png)](docs/assets/OverCite_demo.mov)
+
+Click the preview above to open the short demo video.
 
 ## How to use OverCite
 
