@@ -34,6 +34,7 @@ Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
 - VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
+- Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
 
 It supports three search modes:
 
@@ -109,9 +110,9 @@ For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-exte
 
 ## Demo
 
-[![Watch the OverCite demo](docs/assets/overcite-demo-poster.png)](docs/assets/OverCite_demo.mov)
+[![Watch the OverCite demo](docs/assets/overcite-demo-preview.gif)](docs/assets/OverCite_demo.mov)
 
-Click the preview above to open the short demo video.
+Click the animated preview above to open the full demo video.
 
 ## How to use OverCite
 
@@ -163,6 +164,8 @@ For non-empty citation keys, the popup also includes small `Simple search` and `
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)
+- Paper PDF: [docs/papers/OverCite_RNAAS_2026.pdf](docs/papers/OverCite_RNAAS_2026.pdf)
 - Logic flow: [docs/OverCite_logic_flow.md](docs/OverCite_logic_flow.md)
 - Ranking flow: [docs/OverCite_ranking_flow.md](docs/OverCite_ranking_flow.md)
 - Privacy policy: [PRIVACY.md](PRIVACY.md)
