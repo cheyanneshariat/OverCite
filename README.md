@@ -116,12 +116,11 @@ Click the animated preview above to open the full demo video.
 
 ## How to use OverCite
 
-1. In Overleaf source mode, type a rough citation key such as `\citep{Perlmutter99}` or `\citep{Schlegel}`.
-2. Put the cursor inside the citation braces on the key you want OverCite to resolve.
-3. Press `Alt+Shift+E` or remap the shortcut in your browser's extension shortcut settings.
-4. Review the OverCite results popup, including the title and abstract snippet.
-5. Click the paper you want.
-6. OverCite will update the active citation key and insert the BibTeX entry into the project bibliography file.
+1. In Overleaf source mode, type a rough citation key like `\citep{Perlmutter99}` or `\citep{Schlegel}`.
+2. Put the cursor on the key you want to resolve.
+3. Press `Alt+Shift+E` (or remap this in your settings).
+4. Review the OverCite results popup, click the paper you want.
+5. That's it! OverCite will update the cite key and insert the BibTeX entry into your .bib file. At this stage you can also change the cite key if desired.
 
 ## Examples
 
