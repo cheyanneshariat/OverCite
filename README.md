@@ -10,7 +10,7 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{OverCite2026}, an in-editor citation tool for \LaTeX.
 ```
 
-<details>
+
   <summary>BibTeX for the published RNAAS paper</summary>
 
 ```bibtex
@@ -28,7 +28,7 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
 ```
 ...OR just do `\citep{title:"OverCite"}` with ADS query ;)
 
-</details>
+
 
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
