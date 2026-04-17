@@ -26,7 +26,7 @@ BibTeX for the published RNAAS paper
   url     = {https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc}
 }
 ```
-...OR just do `\citep{title:"OverCite"}` with ADS query ;)
+...OR just do `\citep{title:"OverCite"}` with the ADS query mode ;)
 
 
 
