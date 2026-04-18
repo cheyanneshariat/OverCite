@@ -11,7 +11,7 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
 ```
 
 
-BibTeX for the published RNAAS paper
+BibTeX:
 
 ```bibtex
 @article{OverCite2026,
