@@ -13,7 +13,10 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{OverCite2026}, an in-editor citation tool for \LaTeX.
 ```
 
+To get the BibTex, you can just do `\citep{title:"OverCite"}` with the ADS query mode ;)...
+OR you can copy it here:
 
+<details>
 BibTeX:
 
 ```bibtex
@@ -29,8 +32,7 @@ BibTeX:
   url     = {https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc}
 }
 ```
-...OR just do `\citep{title:"OverCite"}` with the ADS query mode ;)
-
+<details>
 
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
