@@ -9,7 +9,7 @@ To download, just
 2.  paste your NASA ADS or SciX API token in the OverCite extension settings 
     
     (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token).
-3. start citing!
+3. start citing! To get started, try citing one of your own (or your colleagues) papers, the default command is `Alt+Shift+E`.
 
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
