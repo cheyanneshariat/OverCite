@@ -32,7 +32,7 @@ BibTeX:
   url     = {https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc}
 }
 ```
-<details>
+</details>
 
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
