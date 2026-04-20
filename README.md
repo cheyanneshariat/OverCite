@@ -159,13 +159,12 @@ OverCite keeps the UI simple and puts the main behavior controls in the extensio
 
 Current settings include:
 
-- ADS/SciX API token for search and BibTeX export
+- ADS/SciX API token
 - Theme selection
-- Citation key style, including plain author-year keys like `Perlmutter1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2024MNRAS.52711719Y`, or keeping the typed key
+- Citation key style, including plain author-year keys like `Perlmutter1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or ADS query mode first
-- An optional `ADS query` mode that sends the typed token directly to ADS/SciX
-- Project-specific bibliography file overrides when a project contains multiple `.bib` files
+- Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
 
 For non-empty citation keys, the popup also includes small `Simple search` and `ADS query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `ADS query` sends the typed token directly to ADS/SciX.
 
