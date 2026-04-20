@@ -56,9 +56,9 @@ Covered fields: CS, math, physics, biology, astronomy, and *all indexed papers o
 
 ## Demo
 Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac users: `Alt` = `option`
-[![Watch the OverCite demo](docs/assets/overcite-demo-preview-hq-apr20.gif)](docs/assets/OverCite_demo.mov)
+[![Watch the OverCite demo](docs/assets/overcite-demo-preview-hq-apr20.gif)](docs/assets/overcite-demo-preview-hq-apr20.gif)
 
-Click the animated preview above to open the full demo video.
+Click the animated preview above to open the full GIF demo.
 
 ## Install
 
