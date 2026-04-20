@@ -62,7 +62,7 @@ Click the animated preview above to open the full demo video.
 For most users, installation is now just:
 
 1. Install OverCite from the Chrome Web Store, Firefox Add-ons, or VS Code Marketplace
-2. Paste your NASA ADS or SciX API token (sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token)
+2. Paste your NASA ADS or SciX API token in the extensions settings (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token)
 3. Start citing
 
 You do **not** need to clone or download this repository unless you want a local developer copy.
