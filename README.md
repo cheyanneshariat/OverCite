@@ -23,7 +23,7 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
 ```
 
-To get the BibTex, you can just do `\citep{title:"OverCite"}` with the ADS query mode ;)
+To get the BibTex, just write `\citep{title:"OverCite"}` and use OverCite's ADS query mode ;)
 
 ...OR you can copy it here:
 
