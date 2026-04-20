@@ -137,6 +137,7 @@ Recommended citation patterns, from strongest to weakest:
 
 - `\citep{Shariat25}`: best default, combining first author and year
 - `\citep{Abbott2016}`: also supported if you prefer a four-digit year
+- `\citep{title:"emcee"}`: supports raw ads queries, just use `ADS query` mode
 - `\citep{Schlegel}`: useful when you know the author but not the year
 - `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
