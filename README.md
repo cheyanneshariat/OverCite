@@ -212,7 +212,7 @@ If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Market
 </details>
 
 ## Notes
-- OverCite DOES NOT use an LLM during any part of the search/ranking.
+- OverCite **does not** use an LLM during any part of the search/ranking.
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
 - The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
