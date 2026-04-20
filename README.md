@@ -25,7 +25,7 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
 
 To get the BibTex, just write `\citep{title:"OverCite"}` and use OverCite's ADS query mode ;)
 
-...OR you can copy it here:
+...or you can copy it here:
 
 ```bibtex
 @article{Shariat2026,
