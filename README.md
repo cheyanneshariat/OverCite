@@ -6,6 +6,13 @@ The tool queries NASA ADS/SciX, find papers, and inserts the selected BibTeX ent
 
 To download, just search for `OverCite` in the extensions store or marketplace.
 
+
+
+- Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
+- Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
+- VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
+- Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
+
 ## Attribution
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
@@ -31,12 +38,6 @@ To get the BibTex, you can just do `\citep{title:"OverCite"}` with the ADS query
 }
 ```
 
-
-Install:
-- Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
-- Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
-- VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
-- Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
 
 It supports 3 search modes:
 
