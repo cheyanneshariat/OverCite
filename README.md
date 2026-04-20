@@ -133,13 +133,12 @@ For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-exte
 
 ## Examples
 
-Recommended citation patterns, from strongest to weakest:
+Recommended citation patterns:
 
 - `\citep{Shariat25}`: best default, combining first author and year
 - `\citep{Abbott2016}`: also supported if you prefer a four-digit year
-- `\citep{title:"emcee"}`: supports raw ads queries, just use `ADS query` mode
+- `\citep{title:"emcee"}`: supports raw ADS queries, just use `ADS query` mode
 - `\citep{Schlegel}`: useful when you know the author but not the year
-- `\citep{}`: last resort, where OverCite searches from the local sentence context alone
 
 Mode examples:
 
