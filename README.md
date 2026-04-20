@@ -2,7 +2,8 @@
 
 OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
 
-The tool queries NASA ADS/SciX, shows likely matches, and inserts the selected BibTeX entry into the project bibliography file. It's available as a browser extension for Overleaf or a VS Code extension for local LaTeX projects. Just search for `OverCite` in the extensions store or marketplace.
+The tool queries NASA ADS/SciX and inserts the selected BibTeX entry into the project .bib file. It's available as a browser extension for Overleaf or a VS Code extension for local projects. 
+Just search for `OverCite` in the extensions store or marketplace.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
@@ -29,22 +30,27 @@ BibTeX:
 ...OR just do `\citep{title:"OverCite"}` with the ADS query mode ;)
 
 
-
 Install:
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
 - VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
 
-It supports three search modes:
+It supports 3 search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
 2. `Simple search` searches author/year only and sorts by citation count
 3. `ADS query` sends the typed token directly to ADS/SciX
 
-Covered fields: CS, math, physics, biology, astronomy, and *all papers on the arXiv*.
+Covered fields: CS, math, physics, biology, astronomy, and *all indexed papers on the arXiv*.
 
 ![OverCite workflow](docs/assets/outline.png)
+
+## Demo
+
+[![Watch the OverCite demo](docs/assets/overcite-demo-preview.gif)](docs/assets/OverCite_demo.mov)
+
+Click the animated preview above to open the full demo video.
 
 ## Install
 
@@ -108,11 +114,6 @@ For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-exte
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/), then go to your account settings and copy an API token
 
-## Demo
-
-[![Watch the OverCite demo](docs/assets/overcite-demo-preview.gif)](docs/assets/OverCite_demo.mov)
-
-Click the animated preview above to open the full demo video.
 
 ## How to use OverCite
 
