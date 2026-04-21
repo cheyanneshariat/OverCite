@@ -6,7 +6,7 @@ The tool queries NASA ADS/SciX, find papers, and inserts the selected BibTeX ent
 
 To download, just 
 1. search for `OverCite` in the extensions store or marketplace (Chrome, Firefox, VSCode). 
-2.  paste your NASA ADS or SciX API token in the OverCite extension settings 
+2.  paste your NASA ADS/SciX *API token* in the OverCite extension settings 
     
     (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token).
 3. Get citing! To get started, try citing one of your own (or your colleagues) papers; default command is `Alt+Shift+E`.
