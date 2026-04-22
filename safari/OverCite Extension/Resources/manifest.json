@@ -1,0 +1,44 @@
+{
+   "action": {
+      "default_icon": {
+         "16": "icons/icon-16.png",
+         "32": "icons/icon-32.png"
+      },
+      "default_title": "OverCite"
+   },
+   "background": {
+      "service_worker": "src/background-safari.js"
+   },
+   "commands": {
+      "open-ezcite": {
+         "description": "Open OverCite inside the active Overleaf project",
+         "suggested_key": {
+            "default": "Alt+Shift+E",
+            "mac": "Alt+Shift+E"
+         }
+      }
+   },
+   "content_scripts": [ {
+      "js": [ "src/content-script.js" ],
+      "matches": [ "https://www.overleaf.com/*" ],
+      "run_at": "document_idle"
+   } ],
+   "description": "Search the literature from Overleaf and insert BibTeX entries directly into your project.",
+   "host_permissions": [ "https://www.overleaf.com/*", "https://api.adsabs.harvard.edu/*" ],
+   "icons": {
+      "128": "icons/icon-128.png",
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+   },
+   "manifest_version": 3,
+   "name": "OverCite",
+   "options_page": "options.html",
+   "permissions": [ "storage", "tabs" ],
+   "version": "0.1.5",
+   "web_accessible_resources": [ {
+      "matches": [ "https://www.overleaf.com/*" ],
+      "resources": [ "src/page-bridge.js" ]
+   } ]
+}
