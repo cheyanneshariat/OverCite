@@ -14,3 +14,5 @@ playwright-report/
 test-results/
 /package.json
 /package-lock.json
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/

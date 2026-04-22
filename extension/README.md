@@ -38,6 +38,10 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 3. Select `manifest.json` from the local `extension/dist/firefox/` folder
 4. Open the extension options page and paste your ADS/SciX API token
 
+### Safari
+
+Safari support lives in the repository as a separate Xcode wrapper rather than a loadable browser folder. For the current local-build path, see [../safari/README.md](../safari/README.md).
+
 ## Trigger inside Overleaf
 
 - Open your target bibliography file such as `references.bib`, `refs.bib`, or any other `.bib` file as an editor tab once before using OverCite

@@ -2,15 +2,18 @@ import { DEFAULT_SETTINGS } from "./constants.js";
 
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 
-function getStorageArea() {
-  if (extensionApi?.storage?.sync) {
-    return extensionApi.storage.sync;
+export function getStorageArea(api = extensionApi) {
+  if (api?.storage?.sync) {
+    return api.storage.sync;
+  }
+  if (api?.storage?.local) {
+    return api.storage.local;
   }
   return null;
 }
 
-export async function getSettings() {
-  const storage = getStorageArea();
+export async function getSettings(api = extensionApi) {
+  const storage = getStorageArea(api);
   if (!storage) {
     return structuredClone(DEFAULT_SETTINGS);
   }
@@ -18,9 +21,9 @@ export async function getSettings() {
   return normalizeSettings({ ...DEFAULT_SETTINGS, ...stored });
 }
 
-export async function saveSettings(nextSettings) {
+export async function saveSettings(nextSettings, api = extensionApi) {
   const normalized = normalizeSettings(nextSettings);
-  const storage = getStorageArea();
+  const storage = getStorageArea(api);
   if (storage) {
     await storage.set(normalized);
   }

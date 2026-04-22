@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { normalizeSettings } from "../src/core/settings.js";
+import { getSettings, getStorageArea, normalizeSettings, saveSettings } from "../src/core/settings.js";
 
 test("normalizeSettings accepts valid theme modes and defaults invalid ones to auto", () => {
   assert.equal(normalizeSettings({ themeMode: "dark" }).themeMode, "dark");
@@ -34,4 +34,41 @@ test("normalizeSettings accepts valid default search modes and defaults invalid 
   assert.equal(normalizeSettings({ defaultSearchMode: "direct" }).defaultSearchMode, "direct");
   assert.equal(normalizeSettings({ defaultSearchMode: "contextual" }).defaultSearchMode, "contextual");
   assert.equal(normalizeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "contextual");
+});
+
+test("getStorageArea falls back to local storage when sync storage is unavailable", () => {
+  const local = {
+    async get() {
+      return {};
+    },
+    async set() {}
+  };
+
+  assert.equal(getStorageArea({ storage: { local } }), local);
+});
+
+test("saveSettings and getSettings use local storage as a Safari-compatible fallback", async () => {
+  const store = new Map();
+  const local = {
+    async get(keys) {
+      const result = {};
+      for (const key of keys) {
+        if (store.has(key)) {
+          result[key] = store.get(key);
+        }
+      }
+      return result;
+    },
+    async set(values) {
+      for (const [key, value] of Object.entries(values)) {
+        store.set(key, value);
+      }
+    }
+  };
+  const api = { storage: { local } };
+
+  await saveSettings({ adsApiToken: " safari-token " }, api);
+  const settings = await getSettings(api);
+
+  assert.equal(settings.adsApiToken, "safari-token");
 });
