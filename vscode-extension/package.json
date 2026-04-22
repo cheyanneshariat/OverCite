@@ -13,7 +13,7 @@
   "bugs": {
     "url": "https://github.com/cheyanneshariat/OverCite/issues"
   },
-  "license": "MIT",
+  "license": "CC-BY-NC-ND-4.0",
   "engines": {
     "vscode": "^1.90.0"
   },

@@ -25,11 +25,7 @@
   }
 
   function findActiveEditorView() {
-    const EditorView = codeMirrorApi?.EditorView;
-    if (!EditorView?.findFromDOM) {
-      console.warn("[OverCite page] missing CodeMirror EditorView");
-      return null;
-    }
+    const EditorView = codeMirrorApi?.EditorView ?? globalThis.CodeMirror?.EditorView;
     const candidates = [
       document.activeElement?.closest?.(".cm-editor"),
       document.querySelector(".cm-editor.cm-focused"),
@@ -37,8 +33,12 @@
     ].filter(Boolean).filter(isVisibleEditorElement);
 
     for (const candidate of candidates) {
+      const fallbackView = readEditorViewFromDom(candidate);
+      if (fallbackView) {
+        return fallbackView;
+      }
       try {
-        const view = EditorView.findFromDOM(candidate);
+        const view = EditorView?.findFromDOM?.(candidate);
         if (view) {
           return view;
         }
@@ -46,7 +46,19 @@
         continue;
       }
     }
+    if (!EditorView?.findFromDOM) {
+      console.warn("[OverCite page] missing CodeMirror EditorView");
+    }
     console.warn("[OverCite page] no active .cm-editor view found");
+    return null;
+  }
+
+  function readEditorViewFromDom(element) {
+    const cmView = element?.cmView;
+    const view = cmView?.rootView?.view ?? cmView?.view ?? null;
+    if (view?.state?.doc && typeof view.dispatch === "function") {
+      return view;
+    }
     return null;
   }
 
