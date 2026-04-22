@@ -14,7 +14,7 @@ To download, just
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
 - VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
-- Safari: coming soon! A local preview build already works; see below if you want to try it early.
+- Safari: local preview build available from this repo; see below if you want to try it.
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
 
 ## Attribution
@@ -125,14 +125,14 @@ For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-exte
 <details>
   <summary>Safari (preview)</summary>
 
-Safari is not in the App Store yet, but the local source build already works if you want to try it.
+Safari currently lives as a local source build from this repository.
 
 1. Clone or download this repository to your Mac
 2. Open `safari/OverCite.xcodeproj` in Xcode
 3. If Xcode prompts for signing, select your Apple development team for both the app and extension targets
 4. Run the `OverCite` scheme, enable the extension in Safari, add your token, and try `Alt+Shift+E` in Overleaf
 
-For full local-build instructions and release notes, see [safari/README.md](safari/README.md).
+For full local-build instructions, see [safari/README.md](safari/README.md).
 
 </details>
 

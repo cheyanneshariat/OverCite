@@ -22,29 +22,15 @@ The canonical browser extension source remains in `../extension/`. The Safari la
 
 - Unsigned builds are for local development and limited beta testing. Safari requires extra developer settings to run them.
 - Signed builds are associated with an Apple developer identity and are the baseline for real distribution.
-- For broad public release outside local testing, use a signed build. For direct downloads, that should also be notarized.
+- For ordinary use from this repo, the main difference is that unsigned builds need the extra Safari developer setting.
 
-## Public Release Path
+## Current Status
 
-Keep Safari officially unpublished until these are true:
-
-1. The Safari wrapper version matches the browser release being shipped.
-2. The app icon and extension icon surfaces use approved OverCite artwork.
-3. Manual Overleaf checks pass for contextual search, simple search, ADS query, cite-key rewrite, and bibliography insertion.
-4. A signed Release archive installs cleanly on a machine that has not enabled unsigned-extension development settings.
-
-Current repo state:
+Safari is currently documented and supported here as a local source build from this repository.
 
 - The source build works and is testable from this repo right now.
-- The browser extension release version should stay aligned with the Safari wrapper marketing version once Safari is shipped publicly.
-- Do not advertise Safari like a normal store install until a signed distribution path actually exists.
-
-Two viable public distribution routes:
-
-- Mac App Store / App Store Connect
-  This is the closest Safari equivalent to the Chrome Web Store or Firefox Add-ons flow.
-- Developer ID signed and notarized direct download
-  This supports distribution from a website or GitHub release without requiring users to enable unsigned-extension developer settings.
+- Safari should be described in the README as a local preview build, not a store install.
+- Keep the Safari wrapper marketing version aligned with the browser release version when Safari behavior changes.
 
 ## Maintainer Notes
 

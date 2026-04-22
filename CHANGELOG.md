@@ -4,7 +4,7 @@
 
 ## 0.2.0
 
-- Added Safari support via a Safari Web Extension wrapper and Xcode project. Will be on the app store soon.
+- Added Safari support via a Safari Web Extension wrapper and Xcode project for local installs from this repo.
 - Added a `bibcode` citation-key mode so inserted citations can use ADS bibcodes such as `1975CMaPh..43..199H`.
 - Fixed issues in Safari PR
 
