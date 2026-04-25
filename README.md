@@ -24,7 +24,6 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
 ```
 
 To get the BibTex, you can just use Overcite on `\citep{Shariat2026}` ;)
-<!--To get the BibTex, just write `\citep{title:"OverCite"}` and use OverCite's ADS query mode ;)-->
 
 ...or you can copy it here:
 
@@ -58,8 +57,6 @@ Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac use
 [![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
 
 Click the animated preview above to open the full GIF demo.
-
-![OverCite workflow](docs/assets/outline.png)
 
 ## Install
 
@@ -145,6 +142,8 @@ For full local-build instructions, see [safari/README.md](safari/README.md).
 3. Press `Alt+Shift+E` (or remap this in your settings).
 4. Review the OverCite results popup, click the paper you want.
 5. That's it! OverCite will update the cite key and insert the BibTeX entry into your .bib file.
+
+![OverCite workflow](docs/assets/outline.png)
 
 ## Examples
 
