@@ -5,7 +5,7 @@ OverCite is a citation tool for LaTeX that helps you find papers and insert thei
 The tool queries NASA ADS/SciX, find papers, and inserts the selected BibTeX entry into the project .bib file. It's available as a browser extension (for Overleaf) or a VS Code extension (for local projects). 
 
 To download, just 
-1. search for `OverCite` in the extensions store or marketplace (Chrome, Firefox, VSCode). 
+1. search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VSCode](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)). 
 2.  paste your NASA ADS/SciX *API token* in the OverCite extension settings 
     
     (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token).
