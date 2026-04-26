@@ -164,7 +164,9 @@ Note that you can set the `Default Search Mode` in the extension settings.
 
 ## Scope
 
-OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching ADS/SciX, copying BibTeX, renaming the citation key, and then returning to writing. *OverCite is not meant to replace broader literature exploration or paper discovery.*
+OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching ADS/SciX, copying BibTeX, renaming the citation key, and then returning to writing. 
+
+*OverCite is not meant to replace broader literature exploration or paper discovery.*
 
 ## Settings
 
