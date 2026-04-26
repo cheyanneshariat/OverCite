@@ -28,18 +28,20 @@ To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 ...or you can copy it here:
 
 ```bibtex
-@article{Shariat2026,
-    doi = {10.3847/2515-5172/ae5dbc},
-    url = {https://doi.org/10.3847/2515-5172/ae5dbc},
-    year = {2026},
-    month = {apr},
-    publisher = {The American Astronomical Society},
-    volume = {10},
-    number = {4},
-    pages = {86},
-    author = {Shariat, Cheyanne},
-    title = {OverCite: Add Citations in LaTeX without Leaving the Editor},
-    journal = {Research Notes of the AAS}
+@ARTICLE{Shariat2026,
+       author = {{Shariat}, Cheyanne},
+        title = "{OverCite: Add Citations in LaTeX without Leaving the Editor}",
+      journal = {Research Notes of the American Astronomical Society},
+     keywords = {Astronomy software, Open source software, 1855, 1866},
+         year = 2026,
+        month = apr,
+       volume = {10},
+       number = {4},
+          eid = {86},
+        pages = {86},
+          doi = {10.3847/2515-5172/ae5dbc},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2026RNAAS..10...86S},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 ```
 
