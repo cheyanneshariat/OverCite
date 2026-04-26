@@ -118,7 +118,7 @@ For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-exte
 </details>
 
 <details>
-  <summary>Safari (preview)</summary>
+  <summary>Safari (beta)</summary>
 
 Safari currently lives as a local source build from this repository.
 
