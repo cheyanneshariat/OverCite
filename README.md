@@ -23,7 +23,7 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
 ```
 
-To get the BibTex, you can just use Overcite on `\citep{Shariat2026}` ;)
+To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 
 ...or you can copy it here:
 
@@ -55,8 +55,6 @@ Covered fields: CS, math, physics, biology, astronomy, and *all indexed papers o
 ## Demo
 Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac users: `Alt` = `option`
 [![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
-
-Click the animated preview above to open the full GIF demo.
 
 ## Install
 
