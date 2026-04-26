@@ -45,7 +45,6 @@ To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 }
 ```
 
-
 It supports 3 search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
@@ -60,11 +59,11 @@ Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac use
 
 ## Install
 
-For most users, installation is now just:
+For most users, installation is just:
 
-1. Install OverCite from the Chrome Web Store, Firefox Add-ons, or VS Code Marketplace
-2. Paste your NASA ADS or SciX API token in the extensions settings (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token)
-3. Get citing
+1. Install OverCite from [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), or [VSCode](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode))
+2. Paste your NASA ADS/SciX API token in OverCite's settings (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token)
+3. Get citing!
 
 You do **not** need to clone or download this repository unless you want a local developer copy.
 
