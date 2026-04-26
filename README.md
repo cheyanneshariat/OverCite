@@ -160,7 +160,7 @@ Mode examples:
 - `ADS query`: `Sometimes, you just need to boot up MCMC \citep{title:"emcee"}.`
 - `ADS query` with fields: `It's a hard day to be a primordial black hole \citep{author:"Shariat" year:2025 title:"dark matter"}.`
 
-If the contextual result list looks wrong for a non-empty key, try `Simple search`, try `ADS query`, or set `Default Search Mode` in the extension settings.
+Note that you can set the `Default Search Mode` in the extension settings.
 
 ## Scope
 
