@@ -29,7 +29,8 @@ To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 ...or you can copy it here:
 
 <details>
-<!---->
+
+
 ```bibtex
 @ARTICLE{Shariat2026,
        author = {{Shariat}, Cheyanne},
