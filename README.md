@@ -2,8 +2,7 @@
 
 Type rough citation key -> press shortcut -> choose paper -> OverCite inserts BibTeX.
 
-... without leaving the editor. 
-[Demo](#demo)
+... without leaving the editor! Here's a [Demo](#demo).
 <!--By default, the tool queries NASA ADS/SciX, finds papers, and inserts the selected BibTeX entry into the project .bib file. You can keep that fast ADS/SciX-only behavior or turn on broader source presets for fields such as CS, math, physics, and life sciences. It's available as a browser extension (for Overleaf) or a VS Code extension (for local projects).-->
 
 To download,  
