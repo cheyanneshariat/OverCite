@@ -29,7 +29,7 @@ To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 ...or you can copy it here:
 
 <details>
-
+<!---->
 ```bibtex
 @ARTICLE{Shariat2026,
        author = {{Shariat}, Cheyanne},
@@ -57,9 +57,9 @@ It supports 3 search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
 2. `Simple search` searches author/year only and sorts by citation count
-3. `Raw query` sends the typed token directly to the configured literature sources
+3. `ADS query` sends the typed token directly to the ADS
 
-Covered fields depend on the selected source preset. The default ADS/SciX-only mode is the fastest path for astronomy and physics; optional broader presets add sources such as arXiv, Crossref, DataCite, OpenAlex, PubMed, and Semantic Scholar for CS, math, biology, and cross-field papers.
+<!--Covered fields depend on the selected source preset. The default ADS/SciX-only mode is the fastest path for astronomy and physics; optional broader presets add sources such as arXiv, Crossref, DataCite, OpenAlex, PubMed, and Semantic Scholar for CS, math, biology, and cross-field papers.-->
 
 ## Demo
 Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac users: `Alt` = `option`
