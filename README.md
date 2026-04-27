@@ -1,10 +1,11 @@
 # OverCite
 
-OverCite is a citation tool for LaTeX that helps you find papers and insert their BibTeX entries without leaving the editor.
+Type rough citation key -> press shortcut -> choose paper -> OverCite inserts BibTeX.
 
-The tool queries NASA ADS/SciX, find papers, and inserts the selected BibTeX entry into the project .bib file. It's available as a browser extension (for Overleaf) or a VS Code extension (for local projects). 
+all without leaving the editor
+<!--By default, the tool queries NASA ADS/SciX, finds papers, and inserts the selected BibTeX entry into the project .bib file. You can keep that fast ADS/SciX-only behavior or turn on broader source presets for fields such as CS, math, physics, and life sciences. It's available as a browser extension (for Overleaf) or a VS Code extension (for local projects).-->
 
-To download, just 
+To download,  
 1. search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VSCode](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)). 
 2.  paste your NASA ADS/SciX *API token* in the OverCite extension settings 
     
@@ -15,7 +16,7 @@ To download, just
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
 - VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
-- Safari: local download (see below, beta version only)
+- Safari: local download (beta version only)
 ## Attribution
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
@@ -26,7 +27,7 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
 To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 
 ...or you can copy it here:
-
+<details>
 ```bibtex
 @ARTICLE{Shariat2026,
        author = {{Shariat}, Cheyanne},
@@ -47,14 +48,15 @@ archivePrefix = {arXiv},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 ```
+</details>
 
 It supports 3 search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
 2. `Simple search` searches author/year only and sorts by citation count
-3. `ADS query` sends the typed token directly to ADS/SciX
+3. `Raw query` sends the typed token directly to the configured literature sources
 
-Covered fields: CS, math, physics, biology, astronomy, and *all indexed papers on the arXiv*.
+Covered fields depend on the selected source preset. The default ADS/SciX-only mode is the fastest path for astronomy and physics; optional broader presets add sources such as arXiv, Crossref, DataCite, OpenAlex, PubMed, and Semantic Scholar for CS, math, biology, and cross-field papers.
 
 ## Demo
 Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac users: `Alt` = `option`
@@ -153,15 +155,15 @@ Recommended citation patterns:
 
 - `\citep{Shariat25}`: best default, combining first author and year
 - `\citep{Abbott2016}`: also supported if you prefer a four-digit year
-- `\citep{title:"emcee"}`: supports raw ADS queries, just use `ADS query` mode
+- `\citep{title:"emcee"}`: supports raw ADS/SciX queries when ADS is configured, just use `Raw query` mode
 - `\citep{Schlegel}`: useful when you know the author but not the year
 
 Mode examples:
 
 - `Contextual`: `Cosmic acceleration from Type Ia supernovae remains foundational \citep{Perlmutter99}.`
 - `Simple search`: `Galactic dust corrections often begin with \citep{Schlegel}.`
-- `ADS query`: `Sometimes, you just need to boot up MCMC \citep{title:"emcee"}.`
-- `ADS query` with fields: `It's a hard day to be a primordial black hole \citep{author:"Shariat" year:2025 title:"dark matter"}.`
+- `Raw query`: `Sometimes, you just need to boot up MCMC \citep{title:"emcee"}.`
+- `Raw query` with ADS fields: `It's a hard day to be a primordial black hole \citep{author:"Shariat" year:2025 title:"dark matter"}.`
 
 Note that you can set the `Default Search Mode` in the extension settings.
 
@@ -178,13 +180,16 @@ OverCite keeps the UI simple and puts the main behavior controls in the extensio
 Current settings include:
 
 - ADS/SciX API token
+- Optional Semantic Scholar API key
+- Optional NCBI API key for higher-rate PubMed requests
+- Source preset, primary source, and optional fallback sources. `ADS/SciX only` is the default and fastest legacy behavior; broader presets search the primary source first and only use fallbacks when the top hit is not strong enough.
 - Theme selection
-- Citation key style, including plain author-year keys like `Perlmutter1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
+- Citation key style, including plain author-year keys like `Perlmutter1999`, underscore keys like `Perlmutter_1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
-- Default search mode, so OverCite can open in contextual mode, simple search mode, or ADS query mode first
+- Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
 
-For non-empty citation keys, the popup also includes small `Simple search` and `ADS query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `ADS query` sends the typed token directly to ADS/SciX.
+For non-empty citation keys, the popup also includes small `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources.
 
 ## Documentation
 
