@@ -27,7 +27,9 @@ This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}
 To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
 
 ...or you can copy it here:
+
 <details>
+
 ```bibtex
 @ARTICLE{Shariat2026,
        author = {{Shariat}, Cheyanne},
@@ -48,6 +50,7 @@ archivePrefix = {arXiv},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 ```
+
 </details>
 
 It supports 3 search modes:
