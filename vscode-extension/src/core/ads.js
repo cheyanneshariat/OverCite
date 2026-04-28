@@ -72,18 +72,21 @@ function buildSurnameVariants(surname) {
   if (!raw) {
     return [];
   }
-  const variants = new Set([raw]);
+  const variants = new Set();
+  const collaborationHint = parseCollaborationHint(raw);
+  if (!raw.includes("-") && !/\s/.test(raw) && !collaborationHint) {
+    const camelCaseHyphenated = raw.replace(/([a-z])([A-Z])/g, "$1-$2");
+    if (camelCaseHyphenated !== raw) {
+      variants.add(camelCaseHyphenated);
+    }
+  }
+  variants.add(raw);
   const withoutPunctuation = raw.replace(/['`.\s]/g, "");
   if (withoutPunctuation) {
     variants.add(withoutPunctuation);
   }
   if (raw.includes("-")) {
     variants.add(raw.replace(/-/g, ""));
-  } else {
-    const camelCaseHyphenated = raw.replace(/([a-z])([A-Z])/g, "$1-$2");
-    if (camelCaseHyphenated !== raw) {
-      variants.add(camelCaseHyphenated);
-    }
   }
   return [...variants].filter(Boolean);
 }
@@ -308,6 +311,44 @@ function buildHintSurnameMatchVariants(surname) {
   ].filter(Boolean))];
 }
 
+function authorNameMatchesSurnameVariant(authorText, surnameVariant) {
+  const author = normalizeText(authorText);
+  const surname = normalizeText(surnameVariant);
+  if (!author || !surname) {
+    return false;
+  }
+  return author === surname || author.startsWith(`${surname} `) || author.endsWith(` ${surname}`);
+}
+
+function authorNameMatchesSurnameVariants(authorText, surnameVariants) {
+  return surnameVariants.some((surname) => authorNameMatchesSurnameVariant(authorText, surname));
+}
+
+function firstAuthorInitialMatches(firstAuthorText, surname, firstInitial) {
+  const author = normalizeText(firstAuthorText);
+  const family = normalizeText(surname);
+  const initial = normalizeText(firstInitial).slice(0, 1);
+  if (!author || !family || !initial) {
+    return false;
+  }
+  const tokens = author.split(/\s+/).filter(Boolean);
+  const familyTokens = family.split(/\s+/).filter(Boolean);
+  if (!tokens.length || !familyTokens.length) {
+    return false;
+  }
+  const startsWithFamily = familyTokens.every((token, index) => tokens[index] === token);
+  if (startsWithFamily) {
+    const given = tokens[familyTokens.length] ?? "";
+    return given.startsWith(initial);
+  }
+  const familyStart = tokens.length - familyTokens.length;
+  const endsWithFamily = familyStart > 0 && familyTokens.every((token, index) => tokens[familyStart + index] === token);
+  if (endsWithFamily) {
+    return tokens[0]?.startsWith(initial) ?? false;
+  }
+  return false;
+}
+
 function buildFirstAuthorOrCollaborationYearQuery(surname, year) {
   if (!surname || !year) {
     return null;
@@ -506,7 +547,41 @@ function buildDirectAdsQueries(citationContext) {
   if (!token) {
     return [];
   }
+  const doi = directDoiToken(token);
+  if (doi) {
+    return [`doi:"${escapeQueryValue(doi)}"`];
+  }
+  const arxivId = directArxivToken(token);
+  if (arxivId) {
+    return [`identifier:${arxivId}`];
+  }
+  if (isFieldedAdsQuery(token)) {
+    return [token];
+  }
   return [token];
+}
+
+function isFieldedAdsQuery(token) {
+  return /\b(?:abs|abstract|author|bibcode|doi|identifier|title|year|arxiv):/i.test(token);
+}
+
+function directDoiToken(token) {
+  const normalized = String(token ?? "")
+    .trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:/i, "")
+    .toLowerCase();
+  return /^10\.\d{4,9}\/\S+$/i.test(normalized) ? normalized : "";
+}
+
+function directArxivToken(token) {
+  const value = String(token ?? "").trim();
+  const modern = value.match(/^(?:arxiv:|https?:\/\/arxiv\.org\/abs\/)?(\d{4}\.\d{4,5})(?:v\d+)?$/i);
+  if (modern) {
+    return modern[1];
+  }
+  const legacy = value.match(/^(?:arxiv:|https?:\/\/arxiv\.org\/abs\/)?([a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i);
+  return legacy?.[1] ?? "";
 }
 
 export function buildAdsQueries(citationContext) {
@@ -518,6 +593,9 @@ export function buildAdsQueries(citationContext) {
   }
   const queries = new Set();
   const hint = citationContext?.parsedKeyHint;
+  const primarySurname = hint?.surname
+    ? (buildSurnameVariants(hint.surname)[0] ?? hint.surname)
+    : null;
   const token = String(citationContext?.token ?? "").trim();
   const isEmptyTokenLookup = !token;
   const primaryQuery = buildAdsQuery(citationContext);
@@ -527,65 +605,65 @@ export function buildAdsQueries(citationContext) {
   const leadingTitleAbstractPhraseQuery = buildLeadingTitleAbstractPhraseQuery(citationContext);
   const trailingTitleAbstractPhraseQuery = buildTrailingTitleAbstractPhraseQuery(citationContext);
   const leadTrailTitleAbstractQuery = buildLeadTrailTitleAbstractQuery(citationContext);
-  const primaryAuthorContextQuery = hint?.surname
-    ? buildAuthorContextQuery(hint.surname, citationContext)
+  const primaryAuthorContextQuery = primarySurname
+    ? buildAuthorContextQuery(primarySurname, citationContext)
     : null;
-  const primaryAuthorPhraseQuery = hint?.surname
-    ? buildAuthorSentencePhraseQuery(hint.surname, citationContext)
+  const primaryAuthorPhraseQuery = primarySurname
+    ? buildAuthorSentencePhraseQuery(primarySurname, citationContext)
     : null;
-  const primaryAuthorTitleAbstractPhraseQuery = hint?.surname
-    ? buildAuthorTitleAbstractPhraseQuery(hint.surname, citationContext)
+  const primaryAuthorTitleAbstractPhraseQuery = primarySurname
+    ? buildAuthorTitleAbstractPhraseQuery(primarySurname, citationContext)
     : null;
-  const primaryFirstAuthorYearQuery = hint?.surname && hint?.year
-    ? buildFirstAuthorOrCollaborationYearQuery(hint.surname, hint.year)
+  const primaryFirstAuthorYearQuery = primarySurname && hint?.year
+    ? buildFirstAuthorOrCollaborationYearQuery(primarySurname, hint.year)
     : null;
-  const primaryFirstAuthorYearInitialQuery = hint?.surname && hint?.firstInitial && hint?.year
-    ? buildFirstAuthorYearInitialQuery(hint.surname, hint.firstInitial, hint.year)
+  const primaryFirstAuthorYearInitialQuery = primarySurname && hint?.firstInitial && hint?.year
+    ? buildFirstAuthorYearInitialQuery(primarySurname, hint.firstInitial, hint.year)
     : null;
-  const primaryFirstAuthorYearPhraseQuery = hint?.surname && hint?.year
-    ? buildFirstAuthorYearSentencePhraseQuery(hint.surname, hint.year, citationContext)
+  const primaryFirstAuthorYearPhraseQuery = primarySurname && hint?.year
+    ? buildFirstAuthorYearSentencePhraseQuery(primarySurname, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearInitialPhraseQuery = hint?.surname && hint?.firstInitial && hint?.year
-    ? buildFirstAuthorYearInitialSentencePhraseQuery(hint.surname, hint.firstInitial, hint.year, citationContext)
+  const primaryFirstAuthorYearInitialPhraseQuery = primarySurname && hint?.firstInitial && hint?.year
+    ? buildFirstAuthorYearInitialSentencePhraseQuery(primarySurname, hint.firstInitial, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearTitleAbstractPhraseQuery = hint?.surname && hint?.year
-    ? buildFirstAuthorYearTitleAbstractPhraseQuery(hint.surname, hint.year, citationContext)
+  const primaryFirstAuthorYearTitleAbstractPhraseQuery = primarySurname && hint?.year
+    ? buildFirstAuthorYearTitleAbstractPhraseQuery(primarySurname, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearInitialTitleAbstractPhraseQuery = hint?.surname && hint?.firstInitial && hint?.year
-    ? buildFirstAuthorYearInitialTitleAbstractPhraseQuery(hint.surname, hint.firstInitial, hint.year, citationContext)
+  const primaryFirstAuthorYearInitialTitleAbstractPhraseQuery = primarySurname && hint?.firstInitial && hint?.year
+    ? buildFirstAuthorYearInitialTitleAbstractPhraseQuery(primarySurname, hint.firstInitial, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearContextQuery = hint?.surname && hint?.year
-    ? buildFirstAuthorYearContextQuery(hint.surname, hint.year, citationContext)
+  const primaryFirstAuthorYearContextQuery = primarySurname && hint?.year
+    ? buildFirstAuthorYearContextQuery(primarySurname, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearInitialContextQuery = hint?.surname && hint?.firstInitial && hint?.year
-    ? buildFirstAuthorYearInitialContextQuery(hint.surname, hint.firstInitial, hint.year, citationContext)
+  const primaryFirstAuthorYearInitialContextQuery = primarySurname && hint?.firstInitial && hint?.year
+    ? buildFirstAuthorYearInitialContextQuery(primarySurname, hint.firstInitial, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearTitleAbstractKeywordQuery = hint?.surname && hint?.year
-    ? buildFirstAuthorYearTitleAbstractKeywordQuery(hint.surname, hint.year, citationContext)
+  const primaryFirstAuthorYearTitleAbstractKeywordQuery = primarySurname && hint?.year
+    ? buildFirstAuthorYearTitleAbstractKeywordQuery(primarySurname, hint.year, citationContext)
     : null;
-  const primaryFirstAuthorYearInitialTitleAbstractKeywordQuery = hint?.surname && hint?.firstInitial && hint?.year
-    ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(hint.surname, hint.firstInitial, hint.year, citationContext)
+  const primaryFirstAuthorYearInitialTitleAbstractKeywordQuery = primarySurname && hint?.firstInitial && hint?.year
+    ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(primarySurname, hint.firstInitial, hint.year, citationContext)
     : null;
-  const primaryAuthorTitleAbstractKeywordQuery = hint?.surname
-    ? buildAuthorTitleAbstractKeywordQuery(hint.surname, citationContext)
+  const primaryAuthorTitleAbstractKeywordQuery = primarySurname
+    ? buildAuthorTitleAbstractKeywordQuery(primarySurname, citationContext)
     : null;
-  const primaryFirstAuthorQuery = hint?.surname
-    ? buildFirstAuthorOrCollaborationQuery(hint.surname)
+  const primaryFirstAuthorQuery = primarySurname
+    ? buildFirstAuthorOrCollaborationQuery(primarySurname)
     : null;
-  const primaryFirstAuthorPhraseQuery = hint?.surname
-    ? buildFirstAuthorSentencePhraseQuery(hint.surname, citationContext)
+  const primaryFirstAuthorPhraseQuery = primarySurname
+    ? buildFirstAuthorSentencePhraseQuery(primarySurname, citationContext)
     : null;
-  const primaryFirstAuthorTitleAbstractPhraseQuery = hint?.surname
-    ? buildFirstAuthorTitleAbstractPhraseQuery(hint.surname, citationContext)
+  const primaryFirstAuthorTitleAbstractPhraseQuery = primarySurname
+    ? buildFirstAuthorTitleAbstractPhraseQuery(primarySurname, citationContext)
     : null;
-  const primaryFirstAuthorLeadingTitleAbstractPhraseQuery = hint?.surname
-    ? buildFirstAuthorLeadingTitleAbstractPhraseQuery(hint.surname, citationContext)
+  const primaryFirstAuthorLeadingTitleAbstractPhraseQuery = primarySurname
+    ? buildFirstAuthorLeadingTitleAbstractPhraseQuery(primarySurname, citationContext)
     : null;
-  const primaryFirstAuthorTitleAbstractKeywordQuery = hint?.surname
-    ? buildFirstAuthorTitleAbstractKeywordQuery(hint.surname, citationContext)
+  const primaryFirstAuthorTitleAbstractKeywordQuery = primarySurname
+    ? buildFirstAuthorTitleAbstractKeywordQuery(primarySurname, citationContext)
     : null;
-  const primaryFirstAuthorContextQuery = hint?.surname
-    ? buildFirstAuthorContextQuery(hint.surname, citationContext)
+  const primaryFirstAuthorContextQuery = primarySurname
+    ? buildFirstAuthorContextQuery(primarySurname, citationContext)
     : null;
   const titleAbstractKeywordQuery = buildTitleAbstractKeywordQuery(citationContext);
 
@@ -831,6 +909,7 @@ export function buildAdsQueries(citationContext) {
 }
 
 export function mapAdsDocToCandidate(doc) {
+  const eprint = extractAdsArxivIdentifier(doc.identifier);
   return {
     bibcode: doc.bibcode,
     title: Array.isArray(doc.title) ? doc.title[0] : String(doc.title ?? ""),
@@ -838,10 +917,24 @@ export function mapAdsDocToCandidate(doc) {
     year: doc.year ? Number(doc.year) : null,
     abstract: String(doc.abstract ?? ""),
     doi: Array.isArray(doc.doi) ? doc.doi[0] : doc.doi ?? null,
+    eprint,
+    archivePrefix: eprint ? "arXiv" : "",
     citationCount: Number(doc.citation_count ?? 0) || 0,
     score: 0,
     generatedKey: null
   };
+}
+
+function extractAdsArxivIdentifier(identifiers) {
+  const values = Array.isArray(identifiers) ? identifiers : [];
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    const arxiv = text.match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i);
+    if (arxiv) {
+      return arxiv[1];
+    }
+  }
+  return "";
 }
 
 export function rerankAdsCandidates(citationContext, candidates) {
@@ -872,8 +965,8 @@ export function rerankAdsCandidates(citationContext, candidates) {
       if (hint?.surname) {
         const surnameVariants = buildHintSurnameMatchVariants(hint.surname);
         const baseSurname = normalizeText(parseCollaborationHint(hint.surname)?.base ?? hint.surname);
-        const matchesFirstAuthor = surnameVariants.some((surname) => firstAuthor.includes(surname));
-        const matchesAnyAuthor = surnameVariants.some((surname) => allAuthors.includes(surname));
+        const matchesFirstAuthor = authorNameMatchesSurnameVariants(firstAuthor, surnameVariants);
+        const matchesAnyAuthor = candidate.authors.some((author) => authorNameMatchesSurnameVariants(author, surnameVariants));
         if (matchesFirstAuthor) {
           score += 80;
         } else if (matchesAnyAuthor) {
@@ -886,7 +979,7 @@ export function rerankAdsCandidates(citationContext, candidates) {
 
       if (hint?.firstInitial) {
         const firstInitial = normalizeText(hint.firstInitial);
-        if (firstInitial && firstAuthor.startsWith(`${normalizeText(hint.surname)} ${firstInitial}`)) {
+        if (firstInitial && firstAuthorInitialMatches(firstAuthor, hint.surname, firstInitial)) {
           score += 22;
         } else if (firstInitial && firstAuthor.includes(` ${firstInitial}`)) {
           score += 8;
@@ -895,7 +988,7 @@ export function rerankAdsCandidates(citationContext, candidates) {
 
       if (citationContext?.parsedKeyHint?.surname && citationContext?.parsedKeyHint?.year) {
         const surnameVariants = buildHintSurnameMatchVariants(citationContext.parsedKeyHint.surname);
-        if (!surnameVariants.some((surname) => firstAuthor.includes(surname))) {
+        if (!authorNameMatchesSurnameVariants(firstAuthor, surnameVariants)) {
           score -= 25;
         }
       }
@@ -994,19 +1087,26 @@ function rerankDirectAdsCandidates(citationContext, candidates) {
 
 function rerankSimpleAdsCandidates(citationContext, candidates) {
   const hint = citationContext?.parsedKeyHint;
+  const token = normalizeText(citationContext?.token ?? "");
+  const tokenLooksLikeTitle = !hint?.year && token.split(" ").filter(Boolean).length >= 3;
   return candidates
     .map((candidate) => {
       let score = 0;
+      const titleText = normalizeText(candidate.title);
       const firstAuthor = normalizeText(candidate.authors[0] ?? "");
       const allAuthors = normalizeText(candidate.authors.join(" "));
       let satisfiesPrimaryAuthor = true;
       let satisfiesPrimaryYear = true;
 
+      if (tokenLooksLikeTitle) {
+        score += computeTitleTokenScore(token, titleText);
+      }
+
       if (hint?.surname) {
         const surname = normalizeText(hint.surname);
-        if (firstAuthor.includes(surname)) {
+        if (authorNameMatchesSurnameVariant(firstAuthor, surname)) {
           score += 120;
-        } else if (allAuthors.includes(surname)) {
+        } else if (candidate.authors.some((author) => authorNameMatchesSurnameVariant(author, surname))) {
           score += 40;
           satisfiesPrimaryAuthor = false;
         } else {
@@ -1016,7 +1116,7 @@ function rerankSimpleAdsCandidates(citationContext, candidates) {
 
       if (hint?.firstInitial) {
         const firstInitial = normalizeText(hint.firstInitial);
-        if (firstInitial && firstAuthor.startsWith(`${normalizeText(hint.surname)} ${firstInitial}`)) {
+        if (firstInitial && firstAuthorInitialMatches(firstAuthor, hint.surname, firstInitial)) {
           score += 20;
         } else {
           satisfiesPrimaryAuthor = false;
@@ -1046,6 +1146,24 @@ function rerankSimpleAdsCandidates(citationContext, candidates) {
       (right.citationCount || 0) - (left.citationCount || 0) ||
       compareYears(right.year, left.year)
     );
+}
+
+function computeTitleTokenScore(token, titleText) {
+  if (!token || !titleText) {
+    return 0;
+  }
+  if (titleText === token) {
+    return 5000;
+  }
+  if (!titleText.includes(token)) {
+    return 0;
+  }
+  const tokenWordCount = token.split(" ").length;
+  const extraTitleWords = titleText.split(" ").length - tokenWordCount;
+  if (titleText.startsWith(token)) {
+    return Math.max(1200 - extraTitleWords * 80, 700);
+  }
+  return Math.max(700 - extraTitleWords * 60, 350);
 }
 
 function compareYears(leftYear, rightYear) {

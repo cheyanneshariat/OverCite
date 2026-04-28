@@ -29,7 +29,7 @@ export function parseCitationKeyHint(rawToken) {
   const asciiToken = normalizeKeyText(normalized);
   const compact = asciiToken.replace(/[{}\s]/g, "");
   const spaced = asciiToken.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
-  const match = spaced.match(/^([A-Za-z'`.\-\s]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
+  const match = spaced.match(/^([A-Za-z'`.\-\s]+?)[_:]?(\d{2,4})([A-Za-z0-9_-]*)$/);
   if (!match) {
     const surnameOnlyMatch = spaced.match(/^[A-Za-z'`.\-\s]{2,}$/);
     return {

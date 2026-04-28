@@ -44,6 +44,16 @@ test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   assert.equal(longYear.year, 2025);
 });
 
+test("parseCitationKeyHint understands underscore and colon author-year keys", () => {
+  const underscore = parseCitationKeyHint("Shariat_2025");
+  const colon = parseCitationKeyHint("Shariat:2025");
+
+  assert.equal(underscore.surname, "Shariat");
+  assert.equal(underscore.year, 2025);
+  assert.equal(colon.surname, "Shariat");
+  assert.equal(colon.year, 2025);
+});
+
 test("parseCitationKeyHint normalizes diacritics in author-year keys", () => {
   const accented = parseCitationKeyHint("Hünsch98");
   const plain = parseCitationKeyHint("Hunsch98");

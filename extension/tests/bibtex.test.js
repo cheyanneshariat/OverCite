@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   applyBibInsertion,
+  generateAuthorYearColonKey,
   generateAuthorYearKey,
+  generateAuthorYearUnderscoreKey,
   generateBibcodeKey,
   buildTitleSlug,
   findBibMatch,
@@ -33,6 +35,24 @@ test("generateAuthorYearKey creates full-year author keys", () => {
     title: "10,000 Resolved Triples from Gaia"
   });
   assert.equal(key, "Shariat2025");
+});
+
+test("generateAuthorYearUnderscoreKey creates underscore author-year keys", () => {
+  const key = generateAuthorYearUnderscoreKey({
+    authors: ["Shariat, Cheyanne"],
+    year: 2025,
+    title: "10,000 Resolved Triples from Gaia"
+  });
+  assert.equal(key, "Shariat_2025");
+});
+
+test("generateAuthorYearColonKey creates colon author-year keys", () => {
+  const key = generateAuthorYearColonKey({
+    authors: ["Shariat, Cheyanne"],
+    year: 2025,
+    title: "10,000 Resolved Triples from Gaia"
+  });
+  assert.equal(key, "Shariat:2025");
 });
 
 test("generateBibcodeKey uses the ADS bibcode as the final key", () => {
@@ -145,6 +165,32 @@ test("generatePreferredKey defaults to author-year keys", () => {
     []
   );
   assert.equal(key, "Shariat2025");
+});
+
+test("generatePreferredKey can use underscore author-year keys", () => {
+  const key = generatePreferredKey(
+    {
+      authors: ["Shariat, Cheyanne"],
+      year: 2025,
+      title: "10,000 Resolved Triples from Gaia"
+    },
+    [],
+    { keyMode: "authoryear-underscore" }
+  );
+  assert.equal(key, "Shariat_2025");
+});
+
+test("generatePreferredKey can use colon author-year keys", () => {
+  const key = generatePreferredKey(
+    {
+      authors: ["Shariat, Cheyanne"],
+      year: 2025,
+      title: "10,000 Resolved Triples from Gaia"
+    },
+    [],
+    { keyMode: "authoryear-colon" }
+  );
+  assert.equal(key, "Shariat:2025");
 });
 
 test("applyBibInsertion can keep the typed key instead of adding a title slug", () => {

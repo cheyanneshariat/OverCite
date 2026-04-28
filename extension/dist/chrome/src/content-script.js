@@ -37,7 +37,7 @@
     }
     const compact = normalized.replace(/[{}\s]/g, "");
     const spaced = normalized.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
-    const match = spaced.match(/^([A-Za-z'`.\-\s]+?)(\d{2,4})([A-Za-z0-9_-]*)$/);
+    const match = spaced.match(/^([A-Za-z'`.\-\s]+?)[_:]?(\d{2,4})([A-Za-z0-9_-]*)$/);
     if (!match) {
       const surnameOnlyMatch = spaced.match(/^[A-Za-z'`.\-\s]{2,}$/);
       return {
@@ -541,6 +541,14 @@
         text-transform: uppercase;
       }
 
+      .ezcite-source {
+        color: var(--ez-muted);
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
       .ezcite-key {
         display: inline-block;
         padding: 4px 9px;
@@ -702,6 +710,7 @@
           <div class="ezcite-key">${escapeHtml(candidate.generatedKey || "citation")}</div>
           <div class="ezcite-year">${escapeHtml(formatYear(candidate.year))}</div>
         </div>
+        <div class="ezcite-source">${escapeHtml(candidate.sourceLabel || "Literature")}</div>
         <div class="ezcite-paper-title">${escapeHtml(candidate.title)}</div>
         <p class="ezcite-meta">${escapeHtml(formatAuthors(candidate.authors, candidate.year))}</p>
         <div class="ezcite-abstract-wrap">
@@ -767,10 +776,10 @@
     renderOverlay({
       subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
       status: resolvedSearchMode === "simple"
-        ? "Running simple ADS search..."
+        ? "Running simple search..."
         : resolvedSearchMode === "direct"
-          ? "Running ADS query..."
-          : "Searching NASA ADS...",
+          ? "Running raw query..."
+          : "Searching literature...",
       shortcutText: settings.shortcutHelpText,
       actions: buildSearchModeActions(citationContext, resolvedSearchMode)
     });
@@ -794,10 +803,10 @@
       renderOverlay({
         subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
         status: resolvedSearchMode === "simple"
-          ? "No ADS records matched the simple token-only search."
+          ? "No records matched the simple token-only search."
           : resolvedSearchMode === "direct"
-            ? "No ADS records matched the direct token query."
-            : "No ADS records matched the current citation token and context.",
+            ? "No records matched the raw token query."
+            : "No records matched the current citation token and context.",
         shortcutText: settings.shortcutHelpText,
         error: true,
         actions: buildSearchModeActions(citationContext, resolvedSearchMode)
@@ -835,7 +844,7 @@
           onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
         },
         {
-          label: "ADS query",
+          label: "Raw query",
           kind: "tertiary",
           onClick: () => startLookup("direct").catch((error) => toast(error.message, "error"))
         }
@@ -862,7 +871,7 @@
         onClick: () => startLookup("simple").catch((error) => toast(error.message, "error"))
       },
       {
-        label: "ADS query",
+        label: "Raw query",
         kind: "tertiary",
         onClick: () => startLookup("direct").catch((error) => toast(error.message, "error"))
       }
@@ -876,7 +885,8 @@
     debugTrace("candidate:selected", {
       title: candidate.title,
       generatedKey: candidate.generatedKey,
-      bibcode: candidate.bibcode
+      bibcode: candidate.bibcode,
+      sourceId: candidate.sourceId
     });
     const diagnostics = createDiagnostics(candidate.title, overlayState.settings.shortcutHelpText);
     diagnostics.step("Preparing insertion...");
@@ -890,7 +900,8 @@
       }), diagnostics),
       timed("exportBibtex", () => callRuntime({
         type: MESSAGE_TYPES.EXPORT_BIBTEX,
-        bibcode: candidate.bibcode
+        bibcode: candidate.bibcode,
+        candidate
       }), diagnostics)
     ]);
 

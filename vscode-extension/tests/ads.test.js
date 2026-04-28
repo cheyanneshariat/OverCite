@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildAdsQueries, buildAdsQuery, rerankAdsCandidates } from "../src/core/ads.js";
+import { buildAdsQueries, buildAdsQuery, mapAdsDocToCandidate, rerankAdsCandidates } from "../src/core/ads.js";
 
 test("buildAdsQuery prefers fielded author/year search from parsed key hints", () => {
   const query = buildAdsQuery({
@@ -47,6 +47,42 @@ test("direct search mode preserves fielded ADS queries with quotes exactly", () 
   assert.deepEqual(queries, ['author:"El-Badry" year:2022 title:"magnetic braking"']);
 });
 
+test("direct search mode fields DOI and bare arXiv identifiers for ADS", () => {
+  assert.deepEqual(buildAdsQueries({
+    token: "https://doi.org/10.1086/670067",
+    searchMode: "direct"
+  }), ['doi:"10.1086/670067"']);
+  assert.deepEqual(buildAdsQueries({
+    token: "doi:10.1023/a:1026654312961",
+    searchMode: "direct"
+  }), ['doi:"10.1023/a:1026654312961"']);
+  assert.deepEqual(buildAdsQueries({
+    token: "1202.3665",
+    searchMode: "direct"
+  }), ["identifier:1202.3665"]);
+  assert.deepEqual(buildAdsQueries({
+    token: "arXiv:1706.03762v7",
+    searchMode: "direct"
+  }), ["identifier:1706.03762"]);
+  assert.deepEqual(buildAdsQueries({
+    token: "math/0211159",
+    searchMode: "direct"
+  }), ["identifier:math/0211159"]);
+});
+
+test("ADS candidates retain arXiv identifiers for direct cross-source ranking", () => {
+  const candidate = mapAdsDocToCandidate({
+    bibcode: "2025arXiv250616513S",
+    title: ["10,000 Resolved Triples from Gaia"],
+    author: ["Shariat, Cheyanne"],
+    year: "2025",
+    identifier: ["arXiv:2506.16513", "2025arXiv250616513S"]
+  });
+
+  assert.equal(candidate.eprint, "2506.16513");
+  assert.equal(candidate.archivePrefix, "arXiv");
+});
+
 test("direct search mode returns no queries for empty-token lookups", () => {
   const queries = buildAdsQueries({
     token: "",
@@ -57,6 +93,38 @@ test("direct search mode returns no queries for empty-token lookups", () => {
   });
 
   assert.deepEqual(queries, []);
+});
+
+test("simple title search prefers exact title matches over high-overlap near matches", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: "10,000 Resolved Triples from Gaia: Empirical Constraints on Triple Star Populations",
+      searchMode: "simple",
+      parsedKeyHint: null
+    },
+    [
+      {
+        bibcode: "near",
+        title: "Black Hole Mergers from Hierarchical Triples in Dense Star Clusters",
+        authors: ["Martinez, Miguel A. S."],
+        year: 2020,
+        abstract: "",
+        doi: "10.3847/1538-4357/abba25",
+        citationCount: 500
+      },
+      {
+        bibcode: "exact",
+        title: "10,000 Resolved Triples from Gaia: Empirical Constraints on Triple Star Populations",
+        authors: ["Shariat, Cheyanne"],
+        year: 2025,
+        abstract: "",
+        doi: "10.1088/1538-3873/adfb30",
+        citationCount: 0
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "exact");
 });
 
 test("rerankAdsCandidates prefers matching author and year", () => {

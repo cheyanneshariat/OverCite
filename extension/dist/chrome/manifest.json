@@ -1,15 +1,21 @@
 {
   "manifest_version": 3,
   "name": "OverCite",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Search the literature from Overleaf and insert BibTeX entries directly into your project.",
   "permissions": [
     "storage",
     "tabs"
   ],
   "host_permissions": [
+    "https://overleaf.com/*",
     "https://www.overleaf.com/*",
-    "https://api.adsabs.harvard.edu/*"
+    "https://api.adsabs.harvard.edu/*",
+    "https://api.crossref.org/*",
+    "https://api.datacite.org/*",
+    "https://eutils.ncbi.nlm.nih.gov/*",
+    "https://export.arxiv.org/*",
+    "https://api.semanticscholar.org/*"
   ],
   "background": {
     "service_worker": "src/background.js",
@@ -46,6 +52,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://overleaf.com/*",
         "https://www.overleaf.com/*"
       ],
       "js": [
@@ -60,6 +67,7 @@
         "src/page-bridge.js"
       ],
       "matches": [
+        "https://overleaf.com/*",
         "https://www.overleaf.com/*"
       ]
     }

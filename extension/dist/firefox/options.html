@@ -7,34 +7,42 @@
     <style>
       :root {
         color-scheme: light;
-        --bg: #f5efe4;
-        --panel: rgba(255, 252, 247, 0.96);
-        --ink: #1f2a36;
-        --muted: #637086;
-        --accent: #a43c27;
-        --accent-2: #214f7a;
-        --border: rgba(31, 42, 54, 0.16);
-        --shadow: 0 20px 60px rgba(31, 42, 54, 0.12);
-        --field-bg: rgba(255, 255, 255, 0.9);
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --panel-soft: #f2f5f8;
+        --ink: #18212c;
+        --muted: #647386;
+        --label: #111827;
+        --accent: #b84f35;
+        --accent-2: #285f8f;
+        --border: #d9e0e8;
+        --section-bg: rgba(184, 79, 53, 0.11);
+        --section-border: rgba(184, 79, 53, 0.28);
+        --shadow: 0 18px 48px rgba(24, 33, 44, 0.12);
+        --field-bg: #ffffff;
         --field-ink: #1f2a36;
         --field-placeholder: #738097;
-        --field-focus: rgba(164, 60, 39, 0.22);
+        --field-focus: rgba(184, 79, 53, 0.24);
       }
 
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --bg: #11161d;
-        --panel: rgba(26, 33, 43, 0.96);
-        --ink: #f2efe6;
-        --muted: #b5c0d0;
-        --accent: #f18a62;
-        --accent-2: #8cb7e2;
-        --border: rgba(226, 233, 241, 0.14);
+        --bg: #0f141b;
+        --panel: #171e27;
+        --panel-soft: #111821;
+        --ink: #f4f6f8;
+        --muted: #aeb9c7;
+        --label: #ffffff;
+        --accent: #e28661;
+        --accent-2: #8fbde8;
+        --border: #2d3948;
+        --section-bg: rgba(226, 134, 97, 0.13);
+        --section-border: rgba(226, 134, 97, 0.34);
         --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
-        --field-bg: rgba(14, 19, 27, 0.92);
-        --field-ink: #eef3fa;
+        --field-bg: #0f151d;
+        --field-ink: #f3f7fb;
         --field-placeholder: #98a6b8;
-        --field-focus: rgba(241, 138, 98, 0.28);
+        --field-focus: rgba(226, 134, 97, 0.32);
       }
 
       * {
@@ -43,93 +51,102 @@
 
       body {
         margin: 0;
-        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
-        background:
-          radial-gradient(circle at top left, rgba(164, 60, 39, 0.11), transparent 30%),
-          radial-gradient(circle at bottom right, rgba(33, 79, 122, 0.12), transparent 35%),
-          var(--bg);
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg);
         color: var(--ink);
       }
 
       main {
-        max-width: 880px;
+        max-width: 900px;
         margin: 0 auto;
-        padding: 48px 24px 64px;
+        padding: 40px 24px 64px;
       }
 
       h1 {
-        margin: 0 0 8px;
-        font-size: clamp(2rem, 5vw, 3.4rem);
-        line-height: 0.95;
+        margin: 0 0 10px;
+        font-size: clamp(2.4rem, 6vw, 4.5rem);
+        line-height: 0.9;
+        letter-spacing: 0;
+        font-weight: 780;
       }
 
       .lede {
-        margin: 0 0 28px;
-        font-size: 1.05rem;
+        margin: 0 0 26px;
+        font-size: 1.12rem;
+        line-height: 1.45;
         color: var(--muted);
       }
 
       form {
         display: grid;
-        gap: 18px;
+        gap: 22px;
         padding: 28px;
         background: var(--panel);
         border: 1px solid var(--border);
-        border-radius: 20px;
+        border-radius: 14px;
         box-shadow: var(--shadow);
-        backdrop-filter: blur(12px);
       }
 
-      label {
+      label,
+      .field {
         display: grid;
-        gap: 8px;
-        font-weight: 700;
+        gap: 7px;
       }
 
-      .toggle-row {
-        grid-template-columns: 1fr auto;
-        align-items: start;
+      .section {
+        display: grid;
         gap: 16px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
       }
 
-      .toggle-copy {
-        display: grid;
-        gap: 6px;
+      .section:first-of-type {
+        padding-top: 0;
+        border-top: 0;
       }
 
-      .toggle-title {
-        font-weight: 700;
-        color: var(--ink);
+      h2 {
+        display: inline-flex;
+        width: fit-content;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        padding: 6px 10px;
+        color: var(--accent);
+        background: var(--section-bg);
+        border: 1px solid var(--section-border);
+        border-radius: 8px;
+        font-size: 0.92rem;
+        line-height: 1.2;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 800;
       }
 
-      .toggle-row input[type="checkbox"] {
-        inline-size: 22px;
-        block-size: 22px;
-        width: 22px;
-        margin-top: 3px;
-        padding: 0;
-        accent-color: var(--accent);
-        appearance: auto;
-        background: transparent;
-        border: 0;
-        border-radius: 0;
+      .label-text {
+        color: var(--label);
+        font-size: 1rem;
+        line-height: 1.25;
+        font-weight: 760;
       }
 
       .hint {
         font-weight: 400;
         color: var(--muted);
-        font-size: 0.94rem;
+        font-size: 0.93rem;
+        line-height: 1.45;
       }
 
       input:not([type="checkbox"]),
       textarea,
       select {
         width: 100%;
-        padding: 12px 14px;
+        padding: 12px 13px;
         font: inherit;
+        font-weight: 620;
         color: var(--field-ink);
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: 9px;
         background: var(--field-bg);
         appearance: none;
       }
@@ -156,6 +173,90 @@
         resize: vertical;
       }
 
+      .preset-summary {
+        margin-top: -8px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 0.93rem;
+        line-height: 1.45;
+      }
+
+      .field-example {
+        width: fit-content;
+        max-width: 100%;
+        padding: 6px 9px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.35;
+      }
+
+      details {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel-soft);
+      }
+
+      summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 14px;
+        color: var(--label);
+        cursor: pointer;
+        font-weight: 760;
+        list-style: none;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      summary::after {
+        content: "+";
+        color: var(--accent);
+        font-size: 1.1rem;
+        font-weight: 800;
+      }
+
+      details[open] summary::after {
+        content: "-";
+      }
+
+      .advanced-body {
+        display: grid;
+        gap: 16px;
+        padding: 0 14px 16px;
+      }
+
+      .source-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px 14px;
+      }
+
+      .source-option {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: start;
+        gap: 9px;
+        color: var(--label);
+        font-weight: 700;
+      }
+
+      .source-option input {
+        inline-size: 18px;
+        block-size: 18px;
+        margin-top: 2px;
+        accent-color: var(--accent);
+      }
+
       .actions {
         display: flex;
         align-items: center;
@@ -165,12 +266,12 @@
 
       button {
         border: 0;
-        border-radius: 999px;
-        padding: 12px 18px;
+        border-radius: 8px;
+        padding: 11px 16px;
         font: inherit;
         font-weight: 700;
         color: white;
-        background: linear-gradient(135deg, var(--accent), #cf7c4b);
+        background: var(--accent);
         cursor: pointer;
       }
 
@@ -195,71 +296,145 @@
         font-size: 0.92em;
         color: var(--field-ink);
       }
+
+      @media (max-width: 640px) {
+        main {
+          padding: 30px 14px 44px;
+        }
+
+        form {
+          padding: 20px;
+        }
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>OverCite</h1>
       <p class="lede">
-        Store your NASA ADS or SciX API token and project defaults here. OverCite uses these settings when you trigger it inside an Overleaf citation command.
+        Customize for your research area and preferences.
       </p>
       <form id="settings-form">
-        <label>
-          ADS/SciX API Token
-          <span class="hint">Used for ADS/SciX search and BibTeX export requests.</span>
-          <input id="ads-api-token" name="adsApiToken" type="password" autocomplete="off" spellcheck="false">
-        </label>
-        <label>
-          Theme
-          <span class="hint">Choose how OverCite should look in both the settings page and the Overleaf overlay.</span>
+        <section class="section">
+          <h2>Search</h2>
+          <label class="field">
+            <span class="label-text">Search coverage</span>
+            <span class="hint">Choose which databases OverCite searches.</span>
+            <select id="source-profile" name="sourceProfile">
+              <option value="ads-only">ADS/SciX only</option>
+              <option value="arxiv-only">arXiv only</option>
+              <option value="astrophysics">Astrophysics</option>
+              <option value="broad">Broad search</option>
+              <option value="astro-physics">Astro / Physics</option>
+              <option value="math-physics">Math / Physics</option>
+              <option value="life-sciences">Life Sciences</option>
+              <option value="computer-science">Computer Science</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <div class="preset-summary" id="source-profile-summary" aria-live="polite"></div>
+          <details>
+            <summary>Advanced source order</summary>
+            <div class="advanced-body">
+              <label class="field">
+                <span class="label-text">Search first</span>
+                <span class="hint">If this returns a strong match, OverCite stops here.</span>
+                <select id="primary-source" name="primarySource">
+                  <option value="ads">ADS/SciX</option>
+                  <option value="pubmed">PubMed</option>
+                  <option value="crossref">Crossref / DOI</option>
+                  <option value="arxiv">arXiv</option>
+                  <option value="inspire">INSPIRE</option>
+                  <option value="datacite">DataCite</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="label-text">Try if needed</span>
+                <span class="hint">1 database is usually enough. Add 1-2 backups only for cross-field work.</span>
+                <div class="source-grid" id="fallback-sources">
+                  <label class="source-option"><input type="checkbox" name="fallbackSources" value="ads">ADS/SciX</label>
+                  <label class="source-option"><input type="checkbox" name="fallbackSources" value="pubmed">PubMed</label>
+                  <label class="source-option"><input type="checkbox" name="fallbackSources" value="crossref">Crossref / DOI</label>
+                  <label class="source-option"><input type="checkbox" name="fallbackSources" value="arxiv">arXiv</label>
+                  <label class="source-option"><input type="checkbox" name="fallbackSources" value="inspire">INSPIRE</label>
+                  <label class="source-option"><input type="checkbox" name="fallbackSources" value="datacite">DataCite</label>
+                </div>
+              </label>
+            </div>
+          </details>
+        </section>
+        <section class="section">
+          <h2>API keys</h2>
+          <label class="field">
+            <span class="label-text">ADS/SciX token</span>
+            <span class="hint">Needed for ADS/SciX results.</span>
+            <input id="ads-api-token" name="adsApiToken" type="password" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field">
+            <span class="label-text">NCBI key</span>
+            <span class="hint">Optional. Improves PubMed rate limits.</span>
+            <input id="ncbi-api-token" name="ncbiApiToken" type="password" autocomplete="off" spellcheck="false">
+          </label>
+        </section>
+        <section class="section">
+          <h2>Appearance</h2>
+          <label class="field">
+          <span class="label-text">Theme</span>
+          <span class="hint">Used here and in the Overleaf popup.</span>
           <select id="theme-mode" name="themeMode">
             <option value="auto">Auto</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
         </label>
-        <label>
-          Citation Key Style
-          <span class="hint">Use <code>Author + Full Year</code> for keys like <code>Shariat2025</code>, <code>Informative</code> for keys like <code>Shariat25_10k</code>, <code>Bibcode</code> for keys like <code>2024MNRAS.52711719Y</code>, or <code>Keep Typed Key</code> to preserve what you entered when possible.</span>
+        </section>
+        <section class="section">
+          <h2>Citations</h2>
+        <label class="field">
+          <span class="label-text">Citation key style</span>
+          <span class="hint">Choose short author-year keys, richer keys, bibcodes, or the key you typed.</span>
           <select id="citation-key-mode" name="citationKeyMode">
             <option value="authoryear">Author + Full Year</option>
+            <option value="authoryear-underscore">Author_Year</option>
+            <option value="authoryear-colon">Author:Year</option>
             <option value="informative">Informative</option>
             <option value="bibcode">Bibcode</option>
             <option value="typed">Keep Typed Key</option>
           </select>
+          <span class="field-example" id="citation-key-example">Example: Shariat2025</span>
         </label>
-        <label>
-          Bibliography Entry Order
-          <span class="hint">Choose whether new BibTeX entries are added at the end of the file or inserted alphabetically by citation key.</span>
+        <label class="field">
+          <span class="label-text">Bibliography order</span>
+          <span class="hint">Append new entries or keep the bibliography sorted.</span>
           <select id="bibliography-insert-mode" name="bibliographyInsertMode">
-            <option value="append">Append At End</option>
-            <option value="alphabetical">Insert Alphabetically</option>
+            <option value="append">Append at end</option>
+            <option value="alphabetical">Insert alphabetically</option>
           </select>
         </label>
-        <label>
-          Default Search Mode
-          <span class="hint">Choose which mode opens first when you trigger OverCite. Contextual uses the local sentence by default. Simple search and ADS query remain available as small toggles in the popup for non-empty tokens.</span>
+        <label class="field">
+          <span class="label-text">Default search mode</span>
+          <span class="hint">Contextual is best for normal citation keys. Simple search and raw query stay available in the popup.</span>
           <select id="default-search-mode" name="defaultSearchMode">
             <option value="contextual">Contextual</option>
             <option value="simple">Simple Search</option>
-            <option value="direct">ADS Query</option>
+            <option value="direct">Raw Query</option>
           </select>
         </label>
-        <label>
-          Context Window Characters
-          <span class="hint">How many surrounding characters to use when reranking ADS matches. Recommended range: <code>400</code> to <code>600</code>.</span>
-          <input id="context-window-chars" name="contextWindowChars" type="number" min="200" max="1200" step="50">
+        </section>
+        <section class="section">
+          <h2>Project</h2>
+        <label class="field">
+          <span class="label-text">Context window</span>
+          <span class="hint">Recommended: <code>400</code>-<code>600</code> characters. Default: <code>500</code>.</span>
+          <input id="context-window-chars" name="contextWindowChars" type="number" min="200" max="1200" step="50" value="500" placeholder="500">
         </label>
-        <label>
-          Shortcut Help Text
-          <span class="hint">This is only shown in the overlay. Use Chrome's extension shortcuts page to remap the actual command if needed.</span>
-          <input id="shortcut-help-text" name="shortcutHelpText" type="text">
+        <label class="field">
+          <span class="label-text">Project bib file</span>
+          <span class="hint">Optional. Map an Overleaf project id from the project URL to the <code>.bib</code> file OverCite should use.</span>
+          <textarea id="project-overrides" name="defaultProjectBibFileOverride" spellcheck="false" placeholder='{"project-id":"references.bib"}'></textarea>
+          <span class="field-example">Example: <code>{"69c405a0":"references.bib"}</code></span>
         </label>
-        <label>
-          Project Bib File Overrides
-          <span class="hint">Optional JSON object keyed by Overleaf project id. Example: <code>{"abc123":"references.bib"}</code></span>
-          <textarea id="project-overrides" name="defaultProjectBibFileOverride" spellcheck="false"></textarea>
-        </label>
+        </section>
         <div class="actions">
           <button type="submit">Save Settings</button>
           <div id="status" aria-live="polite"></div>

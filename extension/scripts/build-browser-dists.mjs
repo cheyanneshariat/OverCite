@@ -116,6 +116,7 @@ async function bundleSafariBackground() {
     "src/core/settings.js",
     "src/core/bibtex.js",
     "src/core/ads.js",
+    "src/core/sources.js",
     "src/background.js"
   ];
 

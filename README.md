@@ -2,21 +2,33 @@
 
 Type rough citation key -> press shortcut -> choose paper -> OverCite inserts BibTeX.
 
-... without leaving the editor! Here's a [Demo](#demo).
-<!--By default, the tool queries NASA ADS/SciX, finds papers, and inserts the selected BibTeX entry into the project .bib file. You can keep that fast ADS/SciX-only behavior or turn on broader source presets for fields such as CS, math, physics, and life sciences. It's available as a browser extension (for Overleaf) or a VS Code extension (for local projects).-->
+... without leaving the editor. Here's a [demo](#demo).
+
+OverCite works in Overleaf and VS Code. It still keeps fast ADS/SciX-only search as the default, but `v0.3.0` adds broader source presets for arXiv, INSPIRE, Crossref, PubMed, and DataCite.
 
 To download,  
-1. search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VSCode](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)). 
-2.  paste your NASA ADS/SciX *API token* in the OverCite extension settings 
-    
-    (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token).
-3. Get citing! To get started, try citing one of your own (or your colleagues) papers; default command is `Alt+Shift+E`.
+1. Search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)).
+2. Open the OverCite settings.
+3. Keep `ADS/SciX only` for the fastest astronomy/physics workflow, or choose a broader preset for your subject area.
+4. Add a NASA ADS/SciX API token if you want ADS/SciX results.
+5. Get citing. To start, try one of your own papers or a colleague's paper; the default shortcut is `Alt+Shift+E`.
 
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
 - VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
 - Safari: local download (beta version only)
+
+## What's new in v0.3.0
+
+- Broader source presets for astronomy, physics, math, computer science, life sciences, and cross-field projects
+- New sources: arXiv, INSPIRE, Crossref, PubMed, and DataCite
+- Custom source routing: choose one primary database and, if needed, 1-2 backups
+- More citation-key styles, including `Author:Year`
+- Better ranking across repeated records, first-author matches, arXiv preprints, datasets, and software
+
+Usually, one database is enough for a field. Add 1-2 backups only for cross-field work.
+
 ## Attribution
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
@@ -58,21 +70,20 @@ It supports 3 search modes:
 
 1. `Contextual` uses typed citation key + local sentence context 
 2. `Simple search` searches author/year only and sorts by citation count
-3. `ADS query` sends the typed token directly to the ADS
-
-<!--Covered fields depend on the selected source preset. The default ADS/SciX-only mode is the fastest path for astronomy and physics; optional broader presets add sources such as arXiv, Crossref, DataCite, OpenAlex, PubMed, and Semantic Scholar for CS, math, biology, and cross-field papers.-->
+3. `Raw query` sends the typed token directly to the configured source route
 
 ## Demo
-Note: the default command is `Alt+Shift+E` (can be changed in settings). Mac users: `Alt` = `option`
+Note: the default command is `Alt+Shift+E` and can be changed in settings. Mac users: `Alt` = `Option` / `⌥`.
 [![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
 
 ## Install
 
 For most users, installation is just:
 
-1. Install OverCite from [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), or [VSCode](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode))
-2. Paste your NASA ADS/SciX API token in OverCite's settings (to get your token, sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/),  Settings -> API token)
-3. Get citing!
+1. Install OverCite from [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), or [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode).
+2. Open OverCite settings and choose your source preset.
+3. Add a NASA ADS/SciX API token if you want ADS/SciX search.
+4. Get citing.
 
 You do **not** need to clone or download this repository unless you want a local developer copy.
 
@@ -82,9 +93,10 @@ You do **not** need to clone or download this repository unless you want a local
 1. Install OverCite from the [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
    - Click `Add to Chrome`
 2. Open the OverCite options page (`Details` --> `Extension options`)
-3. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
-4. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-5. Put the cursor inside the citation key and press `Alt+Shift+E`
+3. Choose a source preset
+4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save Settings`
+5. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+6. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
 
 </details>
@@ -95,9 +107,10 @@ You do **not** need to clone or download this repository unless you want a local
 1. Install OverCite from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
    - Click `Add to Firefox`
 2. Open the OverCite options page (`about:addons` -> `OverCite` -> `Preferences`)
-3. Paste your NASA ADS or SciX API token*, click `Save Settings` at the bottom
-4. Open an Overleaf project and trigger OverCite inside `\cite{...}`
-5. Put the cursor inside the citation key and press `Alt+Shift+E`
+3. Choose a source preset
+4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save Settings`
+5. Open an Overleaf project and trigger OverCite inside `\cite{...}`
+6. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
 
 </details>
@@ -113,13 +126,13 @@ You do **not** need to clone or download this repository unless you want a local
    - Mac shortcut: `Command+,`
    - or open the Command Palette with `Command+Shift+P` and run `Preferences: Open Settings (UI)`
 5. In the Settings search bar, type `OverCite`
-6. Under the `Extensions` --> `OverCite` section, find `OverCite: Ads Api Token`
-7. Paste your NASA ADS or SciX API token* into that field
+6. Choose a source preset
+7. Paste your NASA ADS or SciX API token* if you want ADS/SciX search
 8. Open a `.tex` file, put the cursor inside the citation key, and press `Alt+Shift+E`
 9. Or use the Command Palette and run one of:
    - `OverCite: Resolve Citation`
    - `OverCite: Resolve Citation (Simple Search)`
-   - `OverCite: Resolve Citation (ADS Query)`
+   - `OverCite: Resolve Citation (Raw Query)`
 10. Review the dropdown results and choose the paper you want
 
 For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-extension/README.md](vscode-extension/README.md).
@@ -184,11 +197,10 @@ OverCite keeps the UI simple and puts the main behavior controls in the extensio
 Current settings include:
 
 - ADS/SciX API token
-- Optional Semantic Scholar API key
 - Optional NCBI API key for higher-rate PubMed requests
 - Source preset, primary source, and optional fallback sources. `ADS/SciX only` is the default and fastest legacy behavior; broader presets search the primary source first and only use fallbacks when the top hit is not strong enough.
 - Theme selection
-- Citation key style, including plain author-year keys like `Perlmutter1999`, underscore keys like `Perlmutter_1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
+- Citation key style, including plain author-year keys like `Perlmutter1999`, underscore keys like `Perlmutter_1999`, colon keys like `Perlmutter:1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
@@ -198,6 +210,7 @@ For non-empty citation keys, the popup also includes small `Simple search` and `
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Release notes: [v0.3.0](docs/releases/v0.3.0.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)
 - Paper PDF: [docs/papers/OverCite_RNAAS_2026.pdf](docs/papers/OverCite_RNAAS_2026.pdf)
 - Logic flow: [docs/OverCite_logic_flow.md](docs/OverCite_logic_flow.md)

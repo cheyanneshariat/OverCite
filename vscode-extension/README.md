@@ -2,7 +2,7 @@
 
 OverCite helps you add LaTeX citations in VS Code without leaving the editor.
 
-Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches from NASA ADS/SciX, and insert the selected BibTeX entry directly into your project bibliography.
+Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches, and insert the selected BibTeX entry directly into your project bibliography. The default is fast ADS/SciX-only lookup; broader source presets can add arXiv, INSPIRE, Crossref, DataCite, and PubMed.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
@@ -13,19 +13,21 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 ## Getting Started
 
 1. Install by searching for `OverCite` in VS Code Extensions.
-2. Open Settings, search for `OverCite`, and paste your NASA ADS or SciX API token into `OverCite: Ads Api Token`.
-3. That's it. Open a `.tex` file, place the cursor inside a `\cite{...}` command, and press `Alt+Shift+E` to get started.
+2. Open Settings and search for `OverCite`.
+3. Choose a source preset.
+4. Paste your NASA ADS or SciX API token into `OverCite: Ads Api Token` if you want ADS/SciX search.
+5. That's it. Open a `.tex` file, place the cursor inside a `\cite{...}` command, and press `Alt+Shift+E` to get started.
 
-To get an API token, sign in to NASA ADS or SciX and go to `Settings -> API Token`.
+To get an ADS/SciX token, sign in to NASA ADS or SciX and go to `Settings -> API Token`.
 
 More details: https://github.com/cheyanneshariat/OverCite
 
 ## What It Does
 
 - Detects the active `\cite{...}` token under the cursor
-- Uses local sentence and context text to search ADS/SciX
+- Uses local sentence and context text to search the configured literature sources
 - Also supports a simple author/year-only fallback mode
-- Also supports a direct ADS query mode for the raw token inside `\cite{...}`
+- Also supports a raw query mode for the token inside `\cite{...}`
 - Shows ranked paper matches in a VS Code quick-pick list
 - Inserts or reuses the matching BibTeX entry in the target `.bib` file
 - Rewrites the active citation key in the source `.tex` file
@@ -34,13 +36,16 @@ More details: https://github.com/cheyanneshariat/OverCite
 
 - Focus stays in the source `.tex` editor after insertion
 - BibTeX updates happen directly through the VS Code workspace API
-- The same citation parsing, ADS query logic, and BibTeX insertion logic used in the Overleaf extension are copied into this package so the two versions stay isolated
+- The same citation parsing, source routing, raw-query logic, and BibTeX insertion logic used in the Overleaf extension are copied into this package so the two versions stay isolated
 
 ## Settings
 
 - `overcite.adsApiToken` (accepts either a NASA ADS or SciX API token)
+- `overcite.sourceProfile` (`ads-only`, `astrophysics`, `broad`, `astro-physics`, `math-physics`, `life-sciences`, `computer-science`, or `custom`)
+- `overcite.primarySource` and `overcite.fallbackSources` for custom routing
+- `overcite.ncbiApiKey`
 - `overcite.contextWindowChars`
-- `overcite.citationKeyMode` (`authoryear`, `informative`, `bibcode`, or `typed`)
+- `overcite.citationKeyMode` (`authoryear`, `authoryear-underscore`, `authoryear-colon`, `informative`, `bibcode`, or `typed`)
 - `overcite.bibliographyInsertMode`
 - `overcite.defaultSearchMode`
 - `overcite.projectBibFileOverrides`
@@ -49,12 +54,12 @@ More details: https://github.com/cheyanneshariat/OverCite
 
 - `OverCite: Resolve Citation` (`Alt+Shift+E`)
 - `OverCite: Resolve Citation (Simple Search)` (`Alt+Shift+S`)
-- `OverCite: Resolve Citation (ADS Query)`
+- `OverCite: Resolve Citation (Raw Query)`
 - `OverCite: Show Diagnostics`
 
-## ADS Query Mode
+## Raw Query Mode
 
-`OverCite: Resolve Citation (ADS Query)` sends the active token inside `\cite{...}` directly to ADS/SciX as the query string.
+`OverCite: Resolve Citation (Raw Query)` sends the active token inside `\cite{...}` directly to the configured source route. Fielded ADS/SciX queries such as `title:"emcee"` stay on ADS/SciX.
 
 Examples:
 
@@ -64,11 +69,11 @@ Examples:
 - `\citep{author:"El-Badry" year:2022 title:"magnetic braking"}`
 - `\citep{first_author:"Hunsch" year:1998}`
 
-This mode is useful when you already know the literal ADS query you want to run and do not want contextual expansion from the surrounding sentence.
+This mode is useful when you already know the literal query, DOI, arXiv identifier, or ADS/SciX fielded query you want to run and do not want contextual expansion from the surrounding sentence.
 
 ## Custom Shortcut
 
-There is no default keybinding for `ADS Query`, to keep the default shortcut set small. If you want one, add a VS Code keyboard shortcut for `overcite.resolveCitationDirect`, for example:
+There is no default keybinding for `Raw Query`, to keep the default shortcut set small. If you want one, add a VS Code keyboard shortcut for `overcite.resolveCitationDirect`, for example:
 
 ```json
 {

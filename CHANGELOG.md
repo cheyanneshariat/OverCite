@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0
+
+- Added configurable source routing with ADS/SciX-only default mode, field presets, custom primary/fallback sources, and broad-source BibTeX export.
+- Added arXiv, Crossref, DataCite, INSPIRE, and PubMed broad-source support in the browser extension and VS Code extension.
+- Added production coverage for physicist, biologist, CS, and astro+CS source personas across contextual, simple, raw-title, raw-identifier, dataset, software, and surname edge cases.
+- Renamed direct lookup wording to `Raw query` for broad source routes.
+
 ## 0.2.0
 
 - Added Safari support via a Safari Web Extension wrapper and Xcode project for local installs from this repo.

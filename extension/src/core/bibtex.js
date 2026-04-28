@@ -113,6 +113,20 @@ export function generateAuthorYearKey(candidate, existingKeys = []) {
   return ensureUniqueKey(base, existingKeys);
 }
 
+export function generateAuthorYearUnderscoreKey(candidate, existingKeys = []) {
+  const family = extractFirstAuthorFamily(candidate?.authors).replace(/[^A-Za-z0-9]/g, "") || "Citation";
+  const year = candidate?.year ? String(candidate.year) : "";
+  const base = year ? `${family}_${year}` : family;
+  return ensureUniqueKey(base || "Citation", existingKeys);
+}
+
+export function generateAuthorYearColonKey(candidate, existingKeys = []) {
+  const family = extractFirstAuthorFamily(candidate?.authors).replace(/[^A-Za-z0-9]/g, "") || "Citation";
+  const year = candidate?.year ? String(candidate.year) : "";
+  const base = year ? `${family}:${year}` : family;
+  return ensureUniqueKey(base || "Citation", existingKeys);
+}
+
 export function generateBibcodeKey(candidate, existingKeys = []) {
   const bibcode = String(candidate?.bibcode ?? "").trim();
   if (!bibcode) {
@@ -144,6 +158,12 @@ export function generatePreferredKey(candidate, existingKeys = [], options = {})
   }
   if (keyMode === "authoryear") {
     return generateAuthorYearKey(candidate, existingKeys);
+  }
+  if (keyMode === "authoryear-underscore") {
+    return generateAuthorYearUnderscoreKey(candidate, existingKeys);
+  }
+  if (keyMode === "authoryear-colon") {
+    return generateAuthorYearColonKey(candidate, existingKeys);
   }
   return generateInformativeKey(candidate, existingKeys);
 }

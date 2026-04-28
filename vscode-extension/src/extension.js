@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { normalizeVsCodeSettings, workspaceKeyFromFolder } from "./config.js";
 import { buildAdsQueries } from "./core/ads.js";
 import { findCitationAtCursor } from "./core/citation.js";
-import { applyInsertion, buildQuickPickItems, exportBibtex, resolveBibTarget, searchAds } from "./service.js";
+import { applyInsertion, buildQuickPickItems, exportBibtex, resolveBibTarget, searchLiterature } from "./service.js";
 
 let outputChannel;
 
@@ -58,7 +58,7 @@ async function runResolveCitation(searchModeOverride) {
   let resolvedSearchMode = normalizeSearchMode(searchModeOverride, settings.defaultSearchMode);
   if (resolvedSearchMode === "direct" && !citationContext.token.trim()) {
     if (normalizeSearchMode(searchModeOverride) === "direct") {
-      throw new Error("ADS query mode requires a non-empty citation token.");
+      throw new Error("Raw query mode requires a non-empty citation token.");
     }
     resolvedSearchMode = "contextual";
   }
@@ -85,7 +85,7 @@ async function runResolveCitation(searchModeOverride) {
         message: resolvedSearchMode === "simple"
           ? "Running simple ADS search..."
           : resolvedSearchMode === "direct"
-            ? "Running ADS query..."
+            ? "Running raw query..."
             : "Searching NASA ADS..."
       });
 
@@ -104,7 +104,7 @@ async function runResolveCitation(searchModeOverride) {
         bibResolution = { status: "resolved", target: chosen, candidates: bibResolution.candidates };
       }
 
-      const candidates = await searchAds(citationContext, settings);
+      const candidates = await searchLiterature(citationContext, settings);
       channel.appendLine("Top candidates:");
       for (const candidate of candidates.slice(0, 10)) {
         channel.appendLine(
@@ -115,10 +115,10 @@ async function runResolveCitation(searchModeOverride) {
       if (!candidates.length) {
         throw new Error(
           resolvedSearchMode === "simple"
-            ? "No ADS records matched the current citation token in simple search mode."
+            ? "No records matched the current citation token in simple search mode."
             : resolvedSearchMode === "direct"
-              ? "No ADS records matched the direct token query."
-              : "No ADS records matched the current citation token and context."
+              ? "No records matched the raw query."
+              : "No records matched the current citation token and context."
         );
       }
 
@@ -138,8 +138,7 @@ async function runResolveCitation(searchModeOverride) {
       }
 
       progress.report({ message: "Exporting BibTeX and updating files..." });
-      const bibcode = picked.candidate.bibcode;
-      const bibtex = await exportBibtex(bibcode, settings);
+      const bibtex = await exportBibtex(picked.candidate, settings);
       const bibDoc = await openWorkspaceFile(projectState.workspaceFolder, bibResolution.target);
       const insertion = applyInsertion({
         bibText: bibDoc.getText(),
@@ -188,6 +187,13 @@ function readSettings() {
   const config = vscode.workspace.getConfiguration("overcite");
   return normalizeVsCodeSettings({
     adsApiToken: config.get("adsApiToken"),
+    sourceProfile: config.get("sourceProfile"),
+    primarySource: config.get("primarySource"),
+    fallbackSources: config.get("fallbackSources"),
+    sourceApiTokens: {
+      ads: config.get("adsApiToken"),
+      ncbi: config.get("ncbiApiKey")
+    },
     contextWindowChars: config.get("contextWindowChars"),
     citationKeyMode: config.get("citationKeyMode"),
     bibliographyInsertMode: config.get("bibliographyInsertMode"),

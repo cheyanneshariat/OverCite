@@ -1,8 +1,8 @@
 {
   "name": "overcite-vscode",
   "displayName": "OverCite",
-  "description": "Search ADS/SciX from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.1.5",
+  "description": "Search literature sources from LaTeX citation commands and insert BibTeX into local projects.",
+  "version": "0.3.0",
   "publisher": "CheyanneShariat",
   "icon": "icon.png",
   "homepage": "https://github.com/cheyanneshariat/OverCite",
@@ -40,7 +40,7 @@
       },
       {
         "command": "overcite.resolveCitationDirect",
-        "title": "OverCite: Resolve Citation (ADS Query)"
+        "title": "OverCite: Resolve Citation (Raw Query)"
       },
       {
         "command": "overcite.showDiagnostics",
@@ -67,6 +67,67 @@
           "default": "",
           "markdownDescription": "ADS/SciX API token used for search and BibTeX export."
         },
+        "overcite.sourceProfile": {
+          "type": "string",
+          "default": "ads-only",
+          "enum": [
+            "ads-only",
+            "arxiv-only",
+            "astrophysics",
+            "broad",
+            "astro-physics",
+            "math-physics",
+            "life-sciences",
+            "computer-science",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Fast legacy ADS/SciX-only mode.",
+            "arXiv-only. Good for arXiv-heavy fields and preprints.",
+            "Astrophysics preset using ADS/SciX only.",
+            "Crossref primary with arXiv, PubMed, and DataCite fallbacks.",
+            "ADS/SciX primary with arXiv, INSPIRE, and Crossref fallbacks.",
+            "arXiv primary with INSPIRE, Crossref, and ADS/SciX fallbacks.",
+            "PubMed primary with Crossref and DataCite fallbacks.",
+            "arXiv primary with Crossref fallback.",
+            "Use overcite.primarySource and overcite.fallbackSources."
+          ],
+          "markdownDescription": "Choose a source preset. `ads-only` keeps the fastest legacy behavior."
+        },
+        "overcite.primarySource": {
+          "type": "string",
+          "default": "ads",
+          "enum": [
+            "ads",
+            "pubmed",
+            "crossref",
+            "arxiv",
+            "inspire",
+            "datacite"
+          ],
+          "markdownDescription": "Primary source searched first when `overcite.sourceProfile` is `custom`."
+        },
+        "overcite.fallbackSources": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "enum": [
+              "ads",
+              "pubmed",
+              "crossref",
+              "arxiv",
+              "inspire",
+              "datacite"
+            ]
+          },
+          "markdownDescription": "Fallback sources searched when the primary source does not produce a strong match. Used when `overcite.sourceProfile` is `custom`. 1 database is usually enough. Add 1-2 backups only for cross-field work."
+        },
+        "overcite.ncbiApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional NCBI API key for higher-rate PubMed requests."
+        },
         "overcite.contextWindowChars": {
           "type": "number",
           "default": 500,
@@ -79,11 +140,13 @@
           "default": "authoryear",
           "enum": [
             "authoryear",
+            "authoryear-underscore",
+            "authoryear-colon",
             "informative",
             "bibcode",
             "typed"
           ],
-          "markdownDescription": "Use a plain author-year key like `Shariat2025`, an informative key like `Shariat25_10k`, an ADS bibcode like `2024MNRAS.52711719Y`, or preserve the typed key when possible."
+          "markdownDescription": "Use a plain author-year key like `Shariat2025`, an underscore key like `Shariat_2025`, a colon key like `Shariat:2025`, an informative key like `Shariat25_10k`, an ADS bibcode like `2025PASP..137i4201S`, or preserve the typed key when possible."
         },
         "overcite.bibliographyInsertMode": {
           "type": "string",
@@ -102,7 +165,7 @@
             "simple",
             "direct"
           ],
-          "markdownDescription": "Choose whether `OverCite: Resolve Citation` starts in contextual mode, simple search mode, or ADS query mode. The separate simple-search and ADS-query commands are still always available."
+          "markdownDescription": "Choose whether `OverCite: Resolve Citation` starts in contextual mode, simple search mode, or raw query mode. The separate simple-search and raw-query commands are still always available."
         },
         "overcite.projectBibFileOverrides": {
           "type": "object",

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { findCitationAtCursor } from "../src/core/citation.js";
 import { applyBibInsertion } from "../src/core/bibtex.js";
 import { resolveBibTargetFromProjectState } from "../src/core/project.js";
+import { exportCandidateBibtex } from "../src/core/sources.js";
 
 test("example TeX harness resolves references.bib and generates the default author-year Shariat key", async () => {
   const mainText = String.raw`\documentclass{article}
@@ -52,4 +53,44 @@ Triples are common in the Galaxy, as shown by Gaia.
 
   assert.equal(insertion.finalKey, "Shariat2025");
   assert.match(insertion.updatedBibText, /@ARTICLE\{Shariat2025,/);
+});
+
+test("broad provider candidate can generate BibTeX and insert without ADS", async () => {
+  const mainText = String.raw`\documentclass{article}
+\begin{document}
+Transformers changed sequence modeling \citep{Vaswani17}.
+\bibliography{references}
+\end{document}`;
+  const cursorIndex = mainText.indexOf("Vaswani17") + "Vaswani17".length;
+  const citationContext = findCitationAtCursor(mainText, cursorIndex, 500);
+  assert.ok(citationContext);
+
+  const bibTarget = resolveBibTargetFromProjectState({
+    mainText,
+    activeFileName: "main.tex",
+    projectFiles: ["main.tex", "references.bib"]
+  });
+  assert.equal(bibTarget.status, "resolved");
+
+  const candidate = {
+    sourceId: "crossref",
+    sourceLabel: "Crossref",
+    generatedKey: "Vaswani2017",
+    title: "Attention Is All You Need",
+    authors: ["Vaswani, Ashish", "Shazeer, Noam"],
+    year: 2017,
+    booktitle: "Advances in Neural Information Processing Systems",
+    doi: "10.5555/3295222.3295349",
+    type: "proceedings-article"
+  };
+  const bibtex = exportCandidateBibtex(candidate);
+  const insertion = applyBibInsertion({
+    bibText: "",
+    bibtex,
+    candidate
+  });
+
+  assert.equal(insertion.finalKey, "Vaswani2017");
+  assert.match(insertion.updatedBibText, /@inproceedings\{Vaswani2017,/);
+  assert.match(insertion.updatedBibText, /doi = \{10.5555\/3295222.3295349\}/);
 });
