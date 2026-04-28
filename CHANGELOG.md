@@ -2,12 +2,14 @@
 
 ## Unreleased
 
-## 0.3.0
+## ✨ 0.3.0
 
-- Added configurable source routing with ADS/SciX-only default mode, field presets, custom primary/fallback sources, and broad-source BibTeX export.
-- Added arXiv, Crossref, DataCite, INSPIRE, and PubMed broad-source support in the browser extension and VS Code extension.
-- Added production coverage for physicist, biologist, CS, and astro+CS source personas across contextual, simple, raw-title, raw-identifier, dataset, software, and surname edge cases.
-- Renamed direct lookup wording to `Raw query` for broad source routes.
+- Added broader source presets with arXiv, INSPIRE, Crossref, PubMed, and DataCite.
+- Kept `ADS/SciX only` as the default fast path.
+- Added custom source routing with one primary database and optional backups.
+- Added `Author:Year` citation keys.
+- Improved broad-source ranking for first authors, duplicate records, arXiv preprints, datasets, and software.
+- Renamed direct lookup wording to `Raw query`.
 
 ## 0.2.0
 
