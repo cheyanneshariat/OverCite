@@ -4,13 +4,18 @@ Type rough citation key -> press shortcut -> choose paper -> OverCite inserts Bi
 
 ... without leaving the editor. Here's a [demo](#demo).
 
+## Supported Fields
+
+OverCite works across astronomy, astrophysics, physics, math, computer science, biology, medicine, chemistry, statistics, data/software citations, and cross-field projects.
+
 ## Quick Install
 
 1. Search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)).
 2. Open the OverCite settings.
 3. Choose your subject area.
     Optional: add a NASA ADS/SciX API token. Recommended for astrophysics.
-4. Get citing! To start, try one of your own papers or a colleague's paper; the default shortcut is `Alt+Shift+E`.
+4. Get citing!
+    To start, try one of your own papers or a colleague's paper; the default shortcut is `Alt+Shift+E`.
 
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
@@ -25,7 +30,7 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
 This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
 ```
 
-To get the BibTex, you can just activate Overcite on `\citep{Shariat2026}` ;)
+To get the BibTeX, you can just activate OverCite on `\citep{Shariat2026}` ;)
 
 ...or you can copy it here:
 
@@ -147,7 +152,7 @@ For full local-build instructions, see [safari/README.md](safari/README.md).
 
 ## How to use OverCite
 
-1. Type a rough citation key like `\citep{Perlmutter99}` or `\citep{Schlegel}`.
+1. Type a rough citation key like `\citep{Doudna12}`, `\citep{Vaswani17}`, or `\citep{Foreman-Mackey2013}`. You can also paste a DOI or arXiv id directly.
 2. Put the cursor on the key you want to resolve.
 3. Press `Alt+Shift+E` (or remap this in your settings).
 4. Review the OverCite results popup, click the paper you want.
@@ -157,19 +162,31 @@ For full local-build instructions, see [safari/README.md](safari/README.md).
 
 ## Examples
 
-Recommended citation patterns:
+Rough keys:
 
-- `\citep{Shariat25}`: best default, combining first author and year
-- `\citep{Abbott2016}`: also supported if you prefer a four-digit year
-- `\citep{title:"emcee"}`: supports raw ADS/SciX queries when ADS is configured, just use `Raw query` mode
-- `\citep{Schlegel}`: useful when you know the author but not the year
+- `\citep{Doudna12}`: CRISPR-Cas9
+- `\citep{Vaswani17}`: "Attention Is All You Need"
+- `\citep{Hochreiter97}`: LSTM
+- `\citep{Foreman-Mackey2013}`: emcee
+- `\citep{Schlegel}`: dust maps
+
+Exact lookups:
+
+- `\citep{10.1038/s41586-021-03819-2}`: AlphaFold DOI
+- `\citep{10.1126/science.1225829}`: CRISPR-Cas9 DOI
+- `\citep{10.1111/j.2517-6161.1996.tb02080.x}`: LASSO DOI
+- `\citep{arXiv:1706.03762}`: "Attention Is All You Need" arXiv id
+- `\citep{hep-th/9711200}`: AdS/CFT arXiv id
+- `\citep{10.57702/vmvbuu5i}`: MNIST DataCite DOI
 
 Mode examples:
 
-- `Contextual`: `Cosmic acceleration from Type Ia supernovae remains foundational \citep{Perlmutter99}.`
-- `Simple search`: `Galactic dust corrections often begin with \citep{Schlegel}.`
-- `Raw query`: `Sometimes, you just need to boot up MCMC \citep{title:"emcee"}.`
-- `Raw query` with ADS fields: `It's a hard day to be a primordial black hole \citep{author:"Shariat" year:2025 title:"dark matter"}.`
+- `Contextual`: `RNA-guided genome editing uses CRISPR-Cas9 \citep{Doudna12}.`
+- `Contextual`: `Transformers made attention central in language modeling \citep{Vaswani17}.`
+- `Simple search`: `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.`
+- `Raw query`: `\citep{10.1111/j.2517-6161.1996.tb02080.x}`
+- `Raw query`: `\citep{arXiv:1706.03762}`
+- `Raw query` with ADS/SciX fields: `\citep{author:"Schlegel" year:1998 title:"dust infrared"}.`
 
 Note that you can set the `Default Search Mode` in the extension settings.
 
@@ -189,7 +206,7 @@ Current settings include:
 - Optional NCBI API key for higher-rate PubMed requests
 - Source preset, primary source, and optional fallback sources. One database is usually enough; add 1-2 backups only for cross-field work.
 - Theme selection
-- Citation key style, including plain author-year keys like `Perlmutter1999`, underscore keys like `Perlmutter_1999`, colon keys like `Perlmutter:1999`, informative keys like `Perlmutter99_supernovae`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
+- Citation key style, including plain author-year keys like `Jumper2021`, underscore keys like `Jumper_2021`, colon keys like `Jumper:2021`, informative keys like `Jumper21_alphafold`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
@@ -244,9 +261,9 @@ If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Market
 - OverCite *does not* use an LLM during any part of the search/ranking.
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
 - The current implementation is deterministic and does not require an LLM.
-- For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `JSmith05`, `SmithJ05`, or `LiW25`.
-- Multi-word surnames such as `Smith Jane` and `Smith Jane25` are supported.
-- Collaborations such as `Planck Collaboration` and `The LIGO Collaboration25` are supported.
+- For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `LiM25`, `WangY2020`, or `SmithJ05`.
+- Multi-word surnames such as `Van der Waals1910`, `De Mink2014`, and `Bailer Jones2018` are supported.
+- Collaborations such as `Planck Collaboration`, `ATLAS Collaboration`, and `The LIGO Collaboration25` are supported.
 - Chrome and Firefox should be loaded from the generated `extension/dist/` folders, not directly from the source `extension/` manifest.
 - Maintainers can regenerate those browser-specific `dist/` folders with `cd extension && npm run build`.
 - If the popup gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
