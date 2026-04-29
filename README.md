@@ -9,8 +9,8 @@ Type rough citation key -> press shortcut -> choose paper -> OverCite inserts Bi
 1. Search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)).
 2. Open the OverCite settings.
 3. Choose your subject area.
-4. Optional: add a NASA ADS/SciX API token. Recommended for astrophysics.
-5. Get citing! To start, try one of your own papers or a colleague's paper; the default shortcut is `Alt+Shift+E`.
+    Optional: add a NASA ADS/SciX API token. Recommended for astrophysics.
+4. Get citing! To start, try one of your own papers or a colleague's paper; the default shortcut is `Alt+Shift+E`.
 
 - Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
 - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
