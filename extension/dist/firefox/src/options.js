@@ -32,6 +32,14 @@ const SOURCE_PRESETS = Object.freeze({
     primarySource: "ads",
     fallbackSources: []
   },
+  physics: {
+    primarySource: "inspire",
+    fallbackSources: ["crossref"]
+  },
+  math: {
+    primarySource: "arxiv",
+    fallbackSources: ["crossref"]
+  },
   broad: {
     primarySource: "crossref",
     fallbackSources: ["arxiv", "pubmed", "datacite"]
@@ -46,11 +54,19 @@ const SOURCE_PRESETS = Object.freeze({
   },
   "life-sciences": {
     primarySource: "pubmed",
-    fallbackSources: ["crossref", "datacite"]
+    fallbackSources: ["crossref"]
   },
   "computer-science": {
     primarySource: "arxiv",
     fallbackSources: ["crossref"]
+  },
+  chemistry: {
+    primarySource: "crossref",
+    fallbackSources: []
+  },
+  general: {
+    primarySource: "crossref",
+    fallbackSources: ["datacite"]
   },
   custom: {
     primarySource: "ads",
@@ -59,15 +75,27 @@ const SOURCE_PRESETS = Object.freeze({
 });
 
 const SOURCE_SUMMARIES = Object.freeze({
-  "ads-only": "ADS/SciX only. Fastest for astronomy and physics. Needs an ADS/SciX token.",
-  "arxiv-only": "arXiv only. Good for arXiv-heavy fields and preprints.",
-  astrophysics: "Astrophysics. Uses ADS/SciX only.",
-  broad: "Broad search. Starts with Crossref, then uses arXiv, PubMed, and DataCite when available.",
-  "astro-physics": "Astro / Physics. Uses ADS/SciX first, with arXiv, INSPIRE, and Crossref as backup.",
-  "math-physics": "Math / Physics. Uses arXiv first, then INSPIRE, Crossref, and ADS/SciX.",
-  "life-sciences": "Life Sciences. Uses PubMed first, then Crossref and DataCite.",
-  "computer-science": "Computer Science. Uses arXiv first, then Crossref.",
+  "ads-only": "Astrophysics. Uses ADS/SciX only. Needs an ADS/SciX token.",
+  "arxiv-only": "Math. Uses arXiv only.",
+  astrophysics: "Astrophysics. Uses ADS/SciX only. Needs an ADS/SciX token.",
+  physics: "Physics. Uses INSPIRE, then Crossref if needed.",
+  math: "Math. Uses arXiv, then Crossref if needed.",
+  broad: "General. Uses Crossref / DOI first.",
+  "astro-physics": "Astrophysics. Uses ADS/SciX only. Needs an ADS/SciX token.",
+  "math-physics": "Math. Uses arXiv, then Crossref if needed.",
+  "life-sciences": "Biology / Medicine. Uses PubMed, then Crossref if needed.",
+  "computer-science": "Computer Science. Uses arXiv, then Crossref if needed.",
+  chemistry: "Chemistry. Uses Crossref / DOI only.",
+  general: "General. Uses Crossref, with DataCite for dataset DOIs.",
   custom: "Custom. Use the advanced source order below."
+});
+
+const SOURCE_OPTIONAL_ORIGINS = Object.freeze({
+  arxiv: ["https://export.arxiv.org/*"],
+  crossref: ["https://api.crossref.org/*"],
+  datacite: ["https://api.datacite.org/*"],
+  inspire: ["https://inspirehep.net/*"],
+  pubmed: ["https://eutils.ncbi.nlm.nih.gov/*"]
 });
 
 const CITATION_KEY_EXAMPLES = Object.freeze({
@@ -97,7 +125,7 @@ async function loadSettings() {
 
 function applySettings(settings) {
   tokenInput.value = settings.adsApiToken ?? "";
-  sourceProfileInput.value = settings.sourceProfile ?? "ads-only";
+  sourceProfileInput.value = settings.sourceProfile ?? "astrophysics";
   primarySourceInput.value = settings.primarySource ?? "ads";
   setFallbackSources(settings.fallbackSources ?? []);
   ncbiTokenInput.value = settings.sourceApiTokens?.ncbi ?? "";
@@ -138,6 +166,8 @@ form.addEventListener("submit", async (event) => {
       contextWindowChars: contextInput.value,
       defaultProjectBibFileOverride: overrides
     });
+
+    await ensureOptionalSourcePermissions(settings);
 
     await callRuntime({
       type: MESSAGE_TYPES.SAVE_SETTINGS,
@@ -213,6 +243,55 @@ function updateSourceProfileSummary() {
 function updateCitationKeyExample() {
   if (citationKeyExample) {
     citationKeyExample.textContent = CITATION_KEY_EXAMPLES[citationKeyModeInput.value] ?? CITATION_KEY_EXAMPLES.authoryear;
+  }
+}
+
+async function ensureOptionalSourcePermissions(settings) {
+  const origins = optionalOriginsForSettings(settings);
+  if (!origins.length || !extensionApi?.permissions?.request) {
+    return;
+  }
+  const granted = await requestPermissions({ origins });
+  if (!granted) {
+    throw new Error("Browser permission was not granted for the selected databases.");
+  }
+}
+
+function optionalOriginsForSettings(settings) {
+  const sourceIds = [
+    settings.primarySource,
+    ...(Array.isArray(settings.fallbackSources) ? settings.fallbackSources : [])
+  ];
+  const origins = [];
+  for (const sourceId of sourceIds) {
+    origins.push(...(SOURCE_OPTIONAL_ORIGINS[sourceId] ?? []));
+  }
+  return [...new Set(origins)];
+}
+
+async function requestPermissions(details) {
+  const permissionsApi = extensionApi?.permissions;
+  try {
+    const maybePromise = permissionsApi.request(details);
+    if (maybePromise?.then) {
+      return Boolean(await maybePromise);
+    }
+    return Boolean(maybePromise);
+  } catch {
+    return new Promise((resolve, reject) => {
+      try {
+        permissionsApi.request(details, (granted) => {
+          const lastError = extensionApi?.runtime?.lastError;
+          if (lastError) {
+            reject(new Error(lastError.message));
+            return;
+          }
+          resolve(Boolean(granted));
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 }
 

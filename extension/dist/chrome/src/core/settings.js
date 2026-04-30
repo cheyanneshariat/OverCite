@@ -84,6 +84,14 @@ const SOURCE_PRESETS = Object.freeze({
     primarySource: "ads",
     fallbackSources: []
   },
+  physics: {
+    primarySource: "inspire",
+    fallbackSources: ["crossref"]
+  },
+  math: {
+    primarySource: "arxiv",
+    fallbackSources: ["crossref"]
+  },
   broad: {
     primarySource: "crossref",
     fallbackSources: ["arxiv", "pubmed", "datacite"]
@@ -98,11 +106,19 @@ const SOURCE_PRESETS = Object.freeze({
   },
   "life-sciences": {
     primarySource: "pubmed",
-    fallbackSources: ["crossref", "datacite"]
+    fallbackSources: ["crossref"]
   },
   "computer-science": {
     primarySource: "arxiv",
     fallbackSources: ["crossref"]
+  },
+  chemistry: {
+    primarySource: "crossref",
+    fallbackSources: []
+  },
+  general: {
+    primarySource: "crossref",
+    fallbackSources: ["datacite"]
   },
   custom: {
     primarySource: "ads",
@@ -112,6 +128,15 @@ const SOURCE_PRESETS = Object.freeze({
 
 function normalizeSourceProfile(sourceProfile) {
   const normalized = String(sourceProfile ?? DEFAULT_SETTINGS.sourceProfile).trim().toLowerCase();
+  if (normalized === "ads-only" || normalized === "astro-physics") {
+    return "astrophysics";
+  }
+  if (normalized === "arxiv-only" || normalized === "math-physics") {
+    return "math";
+  }
+  if (normalized === "broad") {
+    return "general";
+  }
   return SOURCE_PRESETS[normalized] ? normalized : DEFAULT_SETTINGS.sourceProfile;
 }
 

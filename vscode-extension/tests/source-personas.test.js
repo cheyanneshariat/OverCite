@@ -10,24 +10,24 @@ import {
 
 const PERSONAS = [
   {
-    id: "astro_physics",
+    id: "physics",
     settings: {
-      sourceProfile: "astro-physics",
-      sourceApiTokens: { ads: "ads-token" }
+      sourceProfile: "physics",
+      sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.ADS,
-    expectedFallbacks: [SOURCE_IDS.ARXIV, SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.INSPIRE,
+    expectedFallbacks: [SOURCE_IDS.CROSSREF],
+    sources: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
   },
   {
-    id: "math_physics",
+    id: "math",
     settings: {
-      sourceProfile: "math-physics",
-      sourceApiTokens: { ads: "ads-token" }
+      sourceProfile: "math",
+      sourceApiTokens: {}
     },
     expectedPrimary: SOURCE_IDS.ARXIV,
-    expectedFallbacks: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF, SOURCE_IDS.ADS],
-    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
+    expectedFallbacks: [SOURCE_IDS.CROSSREF],
+    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.CROSSREF]
   },
   {
     id: "life_sciences",
@@ -36,8 +36,8 @@ const PERSONAS = [
       sourceApiTokens: { ncbi: "ncbi-token" }
     },
     expectedPrimary: SOURCE_IDS.PUBMED,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE],
-    sources: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE]
+    expectedFallbacks: [SOURCE_IDS.CROSSREF],
+    sources: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF]
   },
   {
     id: "computer_science",
@@ -48,6 +48,16 @@ const PERSONAS = [
     expectedPrimary: SOURCE_IDS.ARXIV,
     expectedFallbacks: [SOURCE_IDS.CROSSREF],
     sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.CROSSREF]
+  },
+  {
+    id: "chemistry",
+    settings: {
+      sourceProfile: "chemistry",
+      sourceApiTokens: {}
+    },
+    expectedPrimary: SOURCE_IDS.CROSSREF,
+    expectedFallbacks: [],
+    sources: [SOURCE_IDS.CROSSREF]
   },
   {
     id: "interdisciplinary",
@@ -734,5 +744,11 @@ function topicSet(personaId) {
       ["Skrutskie", "2MASS survey", "near infrared astronomy catalog", "Astronomy Data Tests", "Dataset", "dataset"]
     ]
   };
-  return [...shared, ...personaTopics[personaId]];
+  const topicKey = {
+    astrophysics: "astro_physics",
+    physics: "math_physics",
+    math: "math_physics",
+    chemistry: "computer_science"
+  }[personaId] ?? personaId;
+  return [...shared, ...(personaTopics[topicKey] ?? [])];
 }

@@ -1,15 +1,15 @@
 # OverCite
 
-OverCite is a browser extension for Overleaf that searches literature sources from inside a `\cite{...}` command, previews likely matches, and inserts BibTeX into your project. It defaults to fast ADS/SciX-only search and can opt into broader source presets or custom primary/fallback sources.
+OverCite is a browser extension for Overleaf that searches literature sources from inside a `\cite{...}` command, previews likely matches, and inserts BibTeX into your project. It defaults to fast ADS/SciX-only search and can use subject-area presets or custom primary/fallback sources.
 
 ## What is implemented
 
 - Manifest V3 extension scaffold
 - Overleaf content script with an OverCite overlay
 - Configurable source routing with ADS/SciX, arXiv, INSPIRE, Crossref, DataCite, and PubMed support
-- Three search modes: contextual, simple search, and direct `Raw query`
+- Three search modes: contextual, simple search, and raw query
 - Citation parsing, key generation (including ADS bibcodes), BibTeX dedupe, and bibliography resolution
-- Options page for source preset, primary/fallback sources, optional source tokens, theme preference, and project-level `.bib` overrides
+- Options page for subject-area preset, primary/fallback sources, optional source tokens, theme preference, and project-level `.bib` overrides
 - Node test suite covering parser, ranking, key generation, dedupe, and an example-TeX harness
 
 ## Current editor strategy
@@ -29,14 +29,14 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 2. Enable Developer mode
 3. Click `Load unpacked`
 4. Select the local `extension/dist/chrome/` folder from this repository
-5. Open the extension options page, choose a source preset, and paste your ADS/SciX API token if you want ADS/SciX results or ADS/SciX-only mode
+5. Open the extension options page, choose your subject area, and paste your ADS/SciX API token if you want ADS/SciX results or ADS/SciX-only mode
 
 ### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
 3. Select `manifest.json` from the local `extension/dist/firefox/` folder
-4. Open the extension options page, choose a source preset, and paste your ADS/SciX API token if you want ADS/SciX results or ADS/SciX-only mode
+4. Open the extension options page, choose your subject area, and paste your ADS/SciX API token if you want ADS/SciX results or ADS/SciX-only mode
 
 ### Safari
 

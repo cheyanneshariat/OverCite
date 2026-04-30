@@ -70,7 +70,7 @@ async function runResolveCitation(searchModeOverride) {
   channel.appendLine(`mode: ${resolvedSearchMode}`);
   channel.appendLine(`token: ${citationContext.token || "<empty>"}`);
   channel.appendLine(`sentence: ${citationContext.sentenceText || "<none>"}`);
-  channel.appendLine("ADS queries:");
+  channel.appendLine("ADS-style query hints:");
   for (const query of buildAdsQueries(citationContext)) {
     channel.appendLine(`- ${query}`);
   }
@@ -84,10 +84,10 @@ async function runResolveCitation(searchModeOverride) {
     async (progress) => {
       progress.report({
         message: resolvedSearchMode === "simple"
-          ? "Running simple ADS search..."
+          ? "Running simple search..."
           : resolvedSearchMode === "direct"
             ? "Running raw query..."
-            : "Searching NASA ADS..."
+            : "Searching literature..."
       });
 
       const projectState = await collectProjectState(editor.document, settings);

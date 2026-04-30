@@ -63,7 +63,11 @@ function escapeQueryValue(value) {
 }
 
 function isAuthorLikeToken(token) {
-  const normalized = String(token ?? "").trim().replace(/[{}\s]/g, "");
+  const trimmed = String(token ?? "").trim();
+  if (/\s/.test(trimmed)) {
+    return false;
+  }
+  const normalized = trimmed.replace(/[{}]/g, "");
   return /^[A-Za-z'`.-]{3,}$/.test(normalized);
 }
 
@@ -920,6 +924,11 @@ export function mapAdsDocToCandidate(doc) {
     eprint,
     archivePrefix: eprint ? "arXiv" : "",
     citationCount: Number(doc.citation_count ?? 0) || 0,
+    property: Array.isArray(doc.property) ? doc.property : [],
+    doctype: String(doc.doctype ?? ""),
+    pub: String(doc.pub ?? ""),
+    bibstem: Array.isArray(doc.bibstem) ? doc.bibstem : [],
+    database: Array.isArray(doc.database) ? doc.database : [],
     score: 0,
     generatedKey: null
   };
@@ -1050,6 +1059,7 @@ export function rerankAdsCandidates(citationContext, candidates) {
         }
       }
 
+      score += adsPublicationQualityScore(candidate);
       return { ...candidate, score };
     })
     .sort((left, right) => right.score - left.score || compareYears(right.year, left.year));
@@ -1137,6 +1147,7 @@ function rerankSimpleAdsCandidates(citationContext, candidates) {
         score -= 5000;
       }
 
+      score += adsPublicationQualityScore(candidate);
       score += Math.min(candidate.citationCount || 0, 2000);
       return { ...candidate, score, matchesPrimaryConstraints };
     })
@@ -1170,4 +1181,39 @@ function compareYears(leftYear, rightYear) {
   const left = Number(leftYear) || 0;
   const right = Number(rightYear) || 0;
   return left - right;
+}
+
+function adsPublicationQualityScore(candidate) {
+  const properties = new Set((candidate?.property ?? []).map((value) => normalizeText(value)));
+  const doctype = normalizeText(candidate?.doctype ?? "");
+  const pub = normalizeText(candidate?.pub ?? "");
+  const bibstem = normalizeText((candidate?.bibstem ?? []).join(" "));
+  let score = 0;
+
+  if (properties.has("refereed")) {
+    score += 260;
+  }
+  if (properties.has("article")) {
+    score += 90;
+  }
+  if (doctype === "article") {
+    score += 80;
+  }
+  if (properties.has("not refereed")) {
+    score -= 350;
+  }
+  if (properties.has("nonarticle")) {
+    score -= 320;
+  }
+  if (/abstract|meeting|conference|proceeding|bulletin|proposal|grant|award/.test(doctype)) {
+    score -= 350;
+  }
+  if (/\b(aas|american astronomical society|meeting abstracts?|bulletin|conference|proceedings?|nsf award|grant|proposal)\b/.test(pub)) {
+    score -= 400;
+  }
+  if (/\b(aas|baas|cosp|dps|epsc|nsf)\b/.test(bibstem)) {
+    score -= 320;
+  }
+
+  return score;
 }

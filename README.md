@@ -2,73 +2,111 @@
 
 Type rough citation key -> press shortcut -> choose paper -> OverCite inserts BibTeX.
 
-... without leaving the editor. Here's a [demo](#demo).
+... without leaving the editor.
 
-## Supported Fields
+Supported areas: astrophysics, physics, math, computer science, biology, medicine, chemistry, statistics, data/software citations, and cross-field projects.
 
-OverCite works across astronomy, astrophysics, physics, math, computer science, biology, medicine, chemistry, statistics, data/software citations, and cross-field projects.
+Used OverCite in a manuscript? See [Acknowledge](#acknowledge).
+
+## Demo
+
+The default command is `Alt+Shift+E` and can be changed in settings. Mac users: `Alt` = `Option` / `⌥`.
+
+[![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
 
 ## Quick Install
 
 1. Search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)).
 2. Open the OverCite settings.
 3. Choose your subject area.
-    Optional: add a NASA ADS/SciX API token. Recommended for astrophysics.
-4. Get citing!
-    To start, try one of your own papers or a colleague's paper; the default shortcut is `Alt+Shift+E`.
+    Optional: add a NASA ADS/SciX API token. Recommended for astrophysics users.
+4. Get citing! To start, try one of your own papers (or a colleague's).
 
-- Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
-- Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
-- VS Code: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
-- Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
-- Safari: local download (beta version only)
+Links: [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo) | [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search) | [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) | [Paper](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
 
-## Acknowledge
-If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
+## How to Use
 
-```tex
-This work made use of \texttt{\href{https://github.com/cheyanneshariat/OverCite}{OverCite}} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
-```
+1. Type a rough citation key like `\citep{Dirac1928}`, `\citep{Watson1953}`, or `\citep{Doudna14}`. You can also leave out the year, search for a title, or paste a DOI/arXiv id (see [Examples](#examples)).
+2. Put the cursor on the key you want to resolve.
+3. Press `Alt+Shift+E` (or remap this).
+4. Review the OverCite results popup, click the paper you want.
+5. That's it! OverCite will update the cite key and insert the BibTeX entry into your `.bib` file.
 
-To get the BibTeX, you can just activate OverCite on `\citep{Shariat2026}` ;)
+![OverCite workflow](docs/assets/outline.png)
 
-...or you can copy it here:
+## Examples
 
-<details>
+Search modes:
 
-
-```bibtex
-@ARTICLE{Shariat2026,
-       author = {{Shariat}, Cheyanne},
-        title = "{OverCite: Add Citations in LaTeX without Leaving the Editor}",
-      journal = {Research Notes of the American Astronomical Society},
-     keywords = {Astronomy software, Open source software, 1855, 1866, Digital Libraries, Instrumentation and Methods for Astrophysics, Human-Computer Interaction, Information Retrieval},
-         year = 2026,
-        month = apr,
-       volume = {10},
-       number = {4},
-          eid = {86},
-        pages = {86},
-          doi = {10.3847/2515-5172/ae5dbc},
-archivePrefix = {arXiv},
-       eprint = {2604.15366},
- primaryClass = {cs.DL},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2026RNAAS..10...86S},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
-}
-```
-
-</details>
-
-It supports 3 search modes:
-
-1. `Contextual` uses typed citation key + local sentence context 
+1. `Contextual` uses typed citation key + local sentence context
 2. `Simple search` searches author/year only and sorts by citation count
 3. `Raw query` sends the typed token directly to the configured source route
 
-## Demo
-Note: the default command is `Alt+Shift+E` and can be changed in settings. Mac users: `Alt` = `Option` / `⌥`.
-[![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
+Mode examples:
+
+- `Contextual`: `CRISPR-Cas9 genome engineering became broadly programmable after \citep{Doudna14}.`
+- `Contextual`: `Transformers made attention central in language modeling \citep{Vaswani17}.`
+- `Contextual`: `Molecular Structure of Nucleic Acids introduced the double helix model \citep{Watson1953}.`
+- `Simple search`: `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.`
+- `Simple search`: `Relativistic quantum mechanics follows from \citep{Dirac1928}.`
+- `Simple search`: `Gaia revealed the closest known black hole \citep{El-Badry2023}.`
+- `Raw query`: use a DOI, arXiv id, or ADS/SciX fielded query directly
+
+Note that you can set the `Default Search Mode` in the extension settings.
+
+Rough keys:
+
+- `\citep{Doudna14}`: CRISPR-Cas9 genome engineering
+- `\citep{Higgs1964}`: Higgs mechanism
+- `\citep{Dirac1928}`: quantum theory of the electron
+- `\citep{Watson1953}`: DNA double helix
+- `\citep{El-Badry2023}`: closest black hole
+- `\citep{Hochreiter97}`: LSTM
+- `\citep{Foreman-Mackey2013}`: emcee
+- `\citep{Schlegel}`: dust maps
+
+Exact lookups:
+
+- `\citep{10.1126/science.1258096}`: Doudna/Charpentier CRISPR-Cas9
+- `\citep{10.1038/s41586-021-03819-2}`: AlphaFold
+- `\citep{arXiv:2303.08774}`: OpenAI GPT-4 report
+- `\citep{arXiv:1706.03762}`: "Attention Is All You Need"
+- `\citep{10.1038/171737a0}`: Watson-Crick DNA structure
+- `\citep{10.1098/rspa.1928.0023}`: Dirac equation
+- `\citep{10.1002/j.1538-7305.1948.tb01338.x}`: information theory
+- `\citep{10.1103/PhysRevLett.13.508}`: Higgs mechanism
+- `\citep{10.1093/mnras/stac3140}`: closest black hole
+- `\citep{10.1103/PhysRev.140.A1133}`: Kohn-Sham equations
+- `\citep{10.1086/260062}`: Black-Scholes
+- `\citep{10.1111/j.2517-6161.1996.tb02080.x}`: LASSO
+- `\citep{hep-th/9711200}`: AdS/CFT
+- `\citep{10.57702/vmvbuu5i}`: MNIST dataset
+- `\citep{author:"Schlegel" title:"dust"}`: ADS/SciX fielded query
+
+## Scope
+
+OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching, copying BibTeX, renaming the citation key, and then returning to writing.
+
+*OverCite is not meant to replace broader literature exploration or paper discovery.*
+
+## Settings
+
+OverCite keeps the UI simple and puts the main behavior controls in the extension settings page.
+
+![OverCite source settings](docs/assets/overcite-settings-sources.png)
+
+Current settings include:
+
+- ADS/SciX API token
+- Optional NCBI API key for higher-rate PubMed requests
+- Subject-area search coverage, primary source, and optional fallback sources. One database is usually enough; add 1-2 backups only for cross-field work.
+- Theme selection
+- Citation key style, including plain author-year keys like `Jumper2021`, underscore keys like `Jumper_2021`, colon keys like `Jumper:2021`, informative keys like `Jumper21_alphafold`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
+- Bibliography entry order, including alphabetical insertion by citation key
+- Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
+- Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
+
+For non-empty citation keys, the popup also includes small `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources.
 
 ## Install
 
@@ -77,7 +115,7 @@ For most users, installation is just:
 1. Install OverCite from [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), or [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode).
 2. Open OverCite settings and choose your subject area.
 3. Add a NASA ADS/SciX API token if you want ADS/SciX search.
-4. Get citing.
+4. Get citing!
 
 You do **not** need to clone or download this repository unless you want a local developer copy.
 
@@ -88,7 +126,7 @@ You do **not** need to clone or download this repository unless you want a local
    - Click `Add to Chrome`
 2. Open the OverCite options page (`Details` --> `Extension options`)
 3. Choose your subject area
-4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save Settings`
+4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save settings`
 5. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 6. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
@@ -102,7 +140,7 @@ You do **not** need to clone or download this repository unless you want a local
    - Click `Add to Firefox`
 2. Open the OverCite options page (`about:addons` -> `OverCite` -> `Preferences`)
 3. Choose your subject area
-4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save Settings`
+4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save settings`
 5. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 6. Put the cursor inside the citation key and press `Alt+Shift+E`
    - Mac users: `Alt` means the `Option` key
@@ -149,69 +187,42 @@ For full local-build instructions, see [safari/README.md](safari/README.md).
 
 *sign in to [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/), then go to your account settings and copy an API token
 
+## Acknowledge
 
-## How to use OverCite
+If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
-1. Type a rough citation key like `\citep{Doudna12}`, `\citep{Vaswani17}`, or `\citep{Foreman-Mackey2013}`. You can also paste a DOI or arXiv id directly.
-2. Put the cursor on the key you want to resolve.
-3. Press `Alt+Shift+E` (or remap this in your settings).
-4. Review the OverCite results popup, click the paper you want.
-5. That's it! OverCite will update the cite key and insert the BibTeX entry into your .bib file.
+```tex
+This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
+```
 
-![OverCite workflow](docs/assets/outline.png)
+To get the BibTeX, you can just activate OverCite on `\citep{Shariat2026}` ;)
 
-## Examples
+...or you can copy it here:
 
-Rough keys:
+<details>
 
-- `\citep{Doudna12}`: CRISPR-Cas9
-- `\citep{Vaswani17}`: "Attention Is All You Need"
-- `\citep{Hochreiter97}`: LSTM
-- `\citep{Foreman-Mackey2013}`: emcee
-- `\citep{Schlegel}`: dust maps
+```bibtex
+@ARTICLE{Shariat2026,
+       author = {{Shariat}, Cheyanne},
+        title = "{OverCite: Add Citations in LaTeX without Leaving the Editor}",
+      journal = {Research Notes of the American Astronomical Society},
+     keywords = {Astronomy software, Open source software, 1855, 1866, Digital Libraries, Instrumentation and Methods for Astrophysics, Human-Computer Interaction, Information Retrieval},
+         year = 2026,
+        month = apr,
+       volume = {10},
+       number = {4},
+          eid = {86},
+        pages = {86},
+          doi = {10.3847/2515-5172/ae5dbc},
+archivePrefix = {arXiv},
+       eprint = {2604.15366},
+ primaryClass = {cs.DL},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2026RNAAS..10...86S},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
+```
 
-Exact lookups:
-
-- `\citep{10.1038/s41586-021-03819-2}`: AlphaFold DOI
-- `\citep{10.1126/science.1225829}`: CRISPR-Cas9 DOI
-- `\citep{10.1111/j.2517-6161.1996.tb02080.x}`: LASSO DOI
-- `\citep{arXiv:1706.03762}`: "Attention Is All You Need" arXiv id
-- `\citep{hep-th/9711200}`: AdS/CFT arXiv id
-- `\citep{10.57702/vmvbuu5i}`: MNIST DataCite DOI
-
-Mode examples:
-
-- `Contextual`: `RNA-guided genome editing uses CRISPR-Cas9 \citep{Doudna12}.`
-- `Contextual`: `Transformers made attention central in language modeling \citep{Vaswani17}.`
-- `Simple search`: `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.`
-- `Raw query`: `\citep{10.1111/j.2517-6161.1996.tb02080.x}`
-- `Raw query`: `\citep{arXiv:1706.03762}`
-- `Raw query` with ADS/SciX fields: `\citep{author:"Schlegel" year:1998 title:"dust infrared"}.`
-
-Note that you can set the `Default Search Mode` in the extension settings.
-
-## Scope
-
-OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching ADS/SciX, copying BibTeX, renaming the citation key, and then returning to writing. 
-
-*OverCite is not meant to replace broader literature exploration or paper discovery.*
-
-## Settings
-
-OverCite keeps the UI simple and puts the main behavior controls in the extension settings page.
-
-Current settings include:
-
-- ADS/SciX API token
-- Optional NCBI API key for higher-rate PubMed requests
-- Source preset, primary source, and optional fallback sources. One database is usually enough; add 1-2 backups only for cross-field work.
-- Theme selection
-- Citation key style, including plain author-year keys like `Jumper2021`, underscore keys like `Jumper_2021`, colon keys like `Jumper:2021`, informative keys like `Jumper21_alphafold`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
-- Bibliography entry order, including alphabetical insertion by citation key
-- Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
-- Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
-
-For non-empty citation keys, the popup also includes small `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources.
+</details>
 
 ## Documentation
 
@@ -227,6 +238,8 @@ For non-empty citation keys, the popup also includes small `Simple search` and `
 
 If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Marketplace, updates come through those channels automatically. Manual repo updates are only relevant for local developer installs.
 
+Existing settings are preserved when OverCite updates. Browser users may see a one-time permission prompt only if they choose one of the new non-ADS databases.
+
 <details>
   <summary>Chrome</summary>
 
@@ -239,12 +252,11 @@ If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Market
 <details>
   <summary>Firefox</summary>
 
-1. Replace your local repo copy with the newer one, or `git pull`
-2. Open `about:debugging#/runtime/this-firefox`
-3. Remove the old temporary add-on if needed
-4. Click `Load Temporary Add-on...`
-5. Select `extension/dist/firefox/manifest.json` again
-6. Refresh your Overleaf tab
+1. Open the Firefox Add-ons page for OverCite
+2. Let Firefox pick up the latest published version automatically
+3. If needed, refresh your Overleaf tab
+
+For a local developer install, reload `extension/dist/firefox/manifest.json` from `about:debugging#/runtime/this-firefox`.
 
 </details>
 
@@ -258,9 +270,9 @@ If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Market
 </details>
 
 ## Notes
+
 - OverCite *does not* use an LLM during any part of the search/ranking.
 - OverCite works with arbitrary `.bib` file names and is not limited to `references.bib`.
-- The current implementation is deterministic and does not require an LLM.
 - For common surnames, you can optionally include a first initial in the cite key to narrow results, for example `LiM25`, `WangY2020`, or `SmithJ05`.
 - Multi-word surnames such as `Van der Waals1910`, `De Mink2014`, and `Bailer Jones2018` are supported.
 - Collaborations such as `Planck Collaboration`, `ATLAS Collaboration`, and `The LIGO Collaboration25` are supported.
@@ -269,4 +281,5 @@ If you install from the Chrome Web Store, Firefox Add-on page, or VS Code Market
 - If the popup gets stuck, try refreshing Overleaf and/or clicking `Reload` on the OverCite extension at `chrome://extensions/`.
 
 ## Contact
+
 I am always happy to hear your thoughts or get any feedback! You can contact [me](https://cheyanneshariat.github.io/) at **cshariat@caltech.edu**.

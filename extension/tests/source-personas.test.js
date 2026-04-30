@@ -12,12 +12,12 @@ const PERSONAS = [
   {
     id: "physicist",
     settings: {
-      sourceProfile: "astro-physics",
-      sourceApiTokens: { ads: "ads-token" }
+      sourceProfile: "physics",
+      sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.ADS,
-    expectedFallbacks: [SOURCE_IDS.ARXIV, SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.INSPIRE,
+    expectedFallbacks: [SOURCE_IDS.CROSSREF],
+    sources: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
   },
   {
     id: "biologist",
@@ -26,8 +26,8 @@ const PERSONAS = [
       sourceApiTokens: {}
     },
     expectedPrimary: SOURCE_IDS.PUBMED,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE],
-    sources: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE]
+    expectedFallbacks: [SOURCE_IDS.CROSSREF],
+    sources: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF]
   },
   {
     id: "cs_researcher",

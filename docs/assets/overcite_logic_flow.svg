@@ -43,13 +43,13 @@
   <text class="subtext" x="960" y="502" text-anchor="middle">first author, year, initials</text>
 
   <rect class="accent" x="180" y="594" width="840" height="146" rx="18"/>
-  <text class="text" x="600" y="654" text-anchor="middle">Build ADS Query Ladder</text>
-  <text class="subtext-small" x="600" y="686" text-anchor="middle">first_author + phrase, keyword conjunctions, author fallbacks, nearby years</text>
+  <text class="text" x="600" y="654" text-anchor="middle">Build Source Query Plan</text>
+  <text class="subtext-small" x="600" y="686" text-anchor="middle">first-author + year, phrase, keyword, DOI, arXiv, PubMed, and raw-query paths</text>
   <text class="subtext-small" x="600" y="710" text-anchor="middle">plus conservative morphology like binaries→binary, mergers→merger, lensing→lens</text>
 
   <rect class="box" x="420" y="790" width="360" height="88" rx="16"/>
-  <text class="text" x="600" y="832" text-anchor="middle">Fetch ADS Candidates</text>
-  <text class="subtext" x="600" y="860" text-anchor="middle">merge unique bibcodes across queries</text>
+  <text class="text" x="600" y="832" text-anchor="middle">Fetch Literature Candidates</text>
+  <text class="subtext" x="600" y="860" text-anchor="middle">merge duplicates across sources</text>
 
   <rect class="box" x="320" y="928" width="560" height="126" rx="16"/>
   <text class="text" x="600" y="972" text-anchor="middle">Rerank Results</text>

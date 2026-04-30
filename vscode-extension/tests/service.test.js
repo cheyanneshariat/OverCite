@@ -294,6 +294,46 @@ test("searchAds stops explicit-year contextual lookups after first-author year r
   assert.match(calls[3], /\(\(first_author:"Shariat"\) OR \(author:"Shariat Collaboration"\) OR \(author:"Shariat Scientific Collaboration"\)\) year:2025|first_author:"Shariat" year:2025/);
 });
 
+test("searchAds duplicate merge keeps the refereed ADS paper over software records", async () => {
+  const results = await searchAds(
+    {
+      token: "Foreman-Mackey2013",
+      searchMode: "contextual",
+      sentenceText: "emcee: The MCMC Hammer is used for affine invariant MCMC.",
+      contextText: "emcee MCMC Hammer affine invariant ensemble sampler astronomy.",
+      parsedKeyHint: { surname: "Foreman-Mackey", year: 2013, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "astrophysics",
+      adsApiToken: "token",
+      citationKeyMode: "authoryear"
+    },
+    async () => okResponse([
+      makeDoc("2013ascl.soft03002F", {
+        title: "emcee: The MCMC Hammer",
+        author: ["Foreman-Mackey, Daniel", "Conley, Alex"],
+        year: "2013",
+        doi: "10.1086/670067",
+        property: ["NONARTICLE"],
+        doctype: "software",
+        pub: "Astrophysics Source Code Library"
+      }),
+      makeDoc("2013PASP..125..306F", {
+        title: "emcee: The MCMC Hammer",
+        author: ["Foreman-Mackey, Daniel", "Hogg, David W."],
+        year: "2013",
+        doi: "10.1086/670067",
+        property: ["REFEREED", "ARTICLE"],
+        doctype: "article",
+        pub: "Publications of the Astronomical Society of the Pacific"
+      })
+    ])
+  );
+
+  assert.equal(results[0].bibcode, "2013PASP..125..306F");
+  assert.equal(results[0].pub, "Publications of the Astronomical Society of the Pacific");
+});
+
 test("searchLiterature can use a broad VS Code source without ADS", async () => {
   const calls = [];
   const results = await searchLiterature(
@@ -424,6 +464,64 @@ test("searchLiterature stops simple title search after an exact primary match", 
   assert.equal(calls.length, 1);
   assert.equal(results[0].sourceId, "crossref");
   assert.equal(results[0].doi, "10.5555/attention-journal");
+});
+
+test("searchLiterature falls back when a long title lead only matches a short prefix", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Gaia2018",
+      searchMode: "contextual",
+      sentenceText: "Gaia Data Release 2. Summary of the contents and survey properties is the paper cited here.",
+      contextText: "Gaia Data Release 2 astrometry survey contents properties.",
+      parsedKeyHint: { surname: "Gaia", year: 2018, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              crossrefWork({
+                doi: "10.1051/0004-6361/201832843",
+                title: "Gaia Data Release 2",
+                authors: ["Gaia Collaboration"],
+                year: 2018,
+                abstract: "A related Gaia DR2 paper."
+              })
+            ]
+          }
+        });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/1804.09365v2</id>
+              <published>2018-04-25T00:00:00Z</published>
+              <title>Gaia Data Release 2. Summary of the contents and survey properties</title>
+              <summary>Gaia DR2 contents and survey properties.</summary>
+              <author><name>Gaia Collaboration</name></author>
+              <arxiv:doi xmlns:arxiv="http://arxiv.org/schemas/atom">10.1051/0004-6361/201833051</arxiv:doi>
+              <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="astro-ph.GA"/>
+            </entry>
+          </feed>`);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
+  assert.equal(results[0].title, "Gaia Data Release 2. Summary of the contents and survey properties");
+  assert.equal(results[0].eprint, "1804.09365");
 });
 
 test("searchLiterature routes dataset-like contextual lookups to DataCite first", async () => {
@@ -596,6 +694,213 @@ test("broad ranking uses contextual title leads over same-author distractors", a
   assert.equal(results[0].title, "Formation of Galaxies and Clusters of Galaxies by Self-Similar Gravitational Condensation");
 });
 
+test("broad ranking keeps exact author-year matches above wrong-year title matches", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Godel1931",
+      searchMode: "contextual",
+      sentenceText: "The Godel incompleteness paper should retrieve the formally undecidable propositions paper.",
+      contextText: "Godel incompleteness theorem formally undecidable propositions Principia Mathematica.",
+      parsedKeyHint: { surname: "Godel", year: 1931, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      if (url.searchParams.get("query.title") === "formal unentscheidbare satze principia mathematica") {
+        return jsonResponse({
+          message: {
+            items: [
+              crossrefWork({
+                doi: "10.5555/godel-1931",
+                title: "Uber formal unentscheidbare Satze der Principia Mathematica und verwandter Systeme I",
+                authors: ["Kurt Godel"],
+                year: 1931,
+                abstract: "The original incompleteness paper on formal undecidability."
+              })
+            ]
+          }
+        });
+      }
+      if (url.searchParams.get("query.author") === "Godel" && String(url.searchParams.get("filter") ?? "").includes("from-pub-date:1931")) {
+        return jsonResponse({
+          message: {
+            items: [
+              crossrefWork({
+                doi: "10.5555/godel-other-1931",
+                title: "Die Grundlagenkrisis der griechischen Mathematik",
+                authors: ["Kurt Godel"],
+                year: 1931,
+                abstract: "A different 1931 Godel record."
+              })
+            ]
+          }
+        });
+      }
+      return jsonResponse({
+        message: {
+          items: [
+            crossrefWork({
+              doi: "10.5555/godel-translation",
+              title: "<i>On Formally Undecidable Propositions of Principia Mathematica and Related Systems</i>",
+              authors: ["Kurt Godel", "B. Meltzer"],
+              year: 1964,
+              abstract: "Formally undecidable propositions of Principia Mathematica and related systems."
+            })
+          ]
+        }
+      });
+    }
+  );
+
+  assert.equal(results[0].doi, "10.5555/godel-1931");
+  assert.equal(results[0].title, "Uber formal unentscheidbare Satze der Principia Mathematica und verwandter Systeme I");
+  assert.ok(calls.some((url) => url.searchParams.get("query.title") === "formal unentscheidbare satze principia mathematica"));
+  assert.ok(calls.some((url) => url.searchParams.get("query.author") === "Godel"));
+  assert.equal(results.find((result) => result.doi === "10.5555/godel-translation")?.title, "On Formally Undecidable Propositions of Principia Mathematica and Related Systems");
+});
+
+test("broad ranking lets an explicit exact title beat weak author-year coincidences", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Shannon1948",
+      searchMode: "contextual",
+      sentenceText: "A Mathematical Theory of Communication is discussed as the target paper.",
+      contextText: "Information theory Bell System Technical Journal Shannon 1948.",
+      parsedKeyHint: { surname: "Shannon", year: 1948, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          crossrefWork({
+            doi: "10.1215/00382876-47-4-459",
+            title: "A Political Philosophy for an Industrial South",
+            authors: ["J. B. Shannon"],
+            year: 1948
+          }),
+          crossrefWork({
+            doi: "10.1002/j.1538-7305.1948.tb01338.x",
+            title: "A Mathematical Theory of Communication",
+            authors: ["C. E. Shannon"],
+            year: 2001
+          })
+        ]
+      }
+    })
+  );
+
+  assert.equal(results[0].doi, "10.1002/j.1538-7305.1948.tb01338.x");
+});
+
+test("direct title-year search ranks exact title and year above partial-title distractors", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Nonparametric Estimation from Incomplete Observations 1958",
+      searchMode: "direct",
+      sentenceText: "",
+      contextText: "",
+      parsedKeyHint: null
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          crossrefWork({
+            doi: "10.1080/01621459.1976.10480966",
+            title: "Nonparametric Bayesian Estimation of Survival Curves from Incomplete Observations",
+            authors: ["V. Susarla"],
+            year: 1976
+          }),
+          crossrefWork({
+            doi: "10.1007/978-1-4612-4380-9_25",
+            title: "Nonparametric Estimation from Incomplete Observations",
+            authors: ["E. L. Kaplan", "Paul Meier"],
+            year: 1958
+          })
+        ]
+      }
+    })
+  );
+
+  assert.equal(results[0].doi, "10.1007/978-1-4612-4380-9_25");
+});
+
+test("surname-only broad contextual search keeps author matches above context-only matches", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Kivelson",
+      searchMode: "contextual",
+      sentenceText: "Critical phenomena and renormalization-group theory are reviewed in this section.",
+      contextText: "Critical phenomena renormalization group scaling superconductivity.",
+      parsedKeyHint: { surname: "Kivelson", year: null, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      if (url.searchParams.get("query.author") === "Kivelson") {
+        return jsonResponse({
+          message: {
+            items: [
+              crossrefWork({
+                doi: "10.5555/kivelson-superconductivity",
+                title: "Making high-temperature superconductors work",
+                authors: ["Steven A. Kivelson", "Eduardo Fradkin"],
+                year: 2003,
+                abstract: "Strongly correlated superconductivity and critical fluctuations."
+              })
+            ]
+          }
+        });
+      }
+      return jsonResponse({
+        message: {
+          items: [
+            crossrefWork({
+              doi: "10.1016/s0370-1573(02)00219-3",
+              title: "Critical phenomena and renormalization-group theory",
+              authors: ["Andrea Pelissetto", "Ettore Vicari"],
+              year: 2002,
+              abstract: "Critical phenomena and renormalization-group theory."
+            })
+          ]
+        }
+      });
+    }
+  );
+
+  assert.equal(results[0].authors[0], "Kivelson, Steven A.");
+  assert.equal(results[0].doi, "10.5555/kivelson-superconductivity");
+  assert.ok(calls.some((url) => url.searchParams.get("query.author") === "Kivelson"));
+});
+
 test("life sciences contextual search can use a senior coauthor key like Doudna12", async () => {
   const results = await searchLiterature(
     {
@@ -662,6 +967,228 @@ test("life sciences contextual search can use a senior coauthor key like Doudna1
   assert.equal(results[0].generatedKey, "Jinek2012");
 });
 
+test("life sciences direct search supports old PubMed records with no parsed authors", async () => {
+  const results = await searchLiterature(
+    {
+      token: "PMID:18890300",
+      searchMode: "direct",
+      sentenceText: "STREPTOMYCIN treatment of pulmonary tuberculosis.",
+      contextText: "The 1948 streptomycin tuberculosis randomized trial.",
+      parsedKeyHint: null
+    },
+    {
+      sourceProfile: "life-sciences",
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")) {
+        assert.equal(new URL(url).searchParams.get("term"), "18890300[uid]");
+        return jsonResponse({ esearchresult: { idlist: ["18890300"] } });
+      }
+      if (url.startsWith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")) {
+        return jsonResponse({
+          result: {
+            uids: ["18890300"],
+            18890300: {
+              uid: "18890300",
+              title: "STREPTOMYCIN treatment of pulmonary tuberculosis.",
+              pubdate: "1948 Oct 30",
+              fulljournalname: "British medical journal",
+              authors: [],
+              articleids: [{ idtype: "pubmed", value: "18890300" }]
+            }
+          }
+        });
+      }
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [] } });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "pubmed");
+  assert.equal(results[0].title, "STREPTOMYCIN treatment of pulmonary tuberculosis.");
+  assert.equal(results[0].authors.length, 0);
+  assert.equal(results[0].year, 1948);
+});
+
+test("direct arXiv URLs are not misread as PubMed identifiers in mixed source settings", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "https://arxiv.org/abs/1706.03762",
+      searchMode: "direct",
+      sentenceText: "",
+      contextText: "",
+      parsedKeyHint: null
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv", "pubmed"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      if (url.host === "export.arxiv.org") {
+        assert.equal(url.searchParams.get("id_list"), "1706.03762");
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/1706.03762v7</id>
+              <published>2017-06-12T00:00:00Z</published>
+              <title>Attention Is All You Need</title>
+              <summary>Transformer abstract.</summary>
+              <author><name>Ashish Vaswani</name></author>
+              <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.CL"/>
+            </entry>
+          </feed>`);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "arxiv");
+  assert.equal(results[0].eprint, "1706.03762");
+  assert.equal(calls.length, 1);
+});
+
+test("broad ranking keeps strong first-author context above related coauthor matches", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Doudna14",
+      searchMode: "contextual",
+      sentenceText: "CRISPR-Cas9 genome engineering became broadly programmable after Doudna14.",
+      contextText: "The new frontier of genome engineering with CRISPR-Cas9 Doudna Charpentier Science 2014.",
+      parsedKeyHint: { surname: "Doudna", year: 2014, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          crossrefWork({
+            doi: "10.7554/elife.04766",
+            title: "Enhanced homology-directed human genome engineering by controlled timing of CRISPR/Cas9 delivery",
+            authors: ["Steven Lin", "Brett Staahl", "Jennifer Doudna"],
+            year: 2014,
+            abstract: "CRISPR Cas9 genome engineering."
+          }),
+          crossrefWork({
+            doi: "10.1126/science.1258096",
+            title: "The new frontier of genome engineering with CRISPR-Cas9",
+            authors: ["Jennifer Doudna", "Emmanuelle Charpentier"],
+            year: 2014,
+            abstract: "CRISPR Cas9 genome engineering."
+          })
+        ]
+      }
+    })
+  );
+
+  assert.equal(results[0].doi, "10.1126/science.1258096");
+});
+
+test("broad ranking demotes non-paper provider records below journal articles", async () => {
+  const results = await searchLiterature(
+    {
+      token: "El-Badry2023",
+      searchMode: "contextual",
+      sentenceText: "A Sun-like star orbiting a black hole is the target publication.",
+      contextText: "The closest black hole is a Sun-like star orbiting a black hole in Gaia.",
+      parsedKeyHint: { surname: "El-Badry", year: 2023, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          crossrefWork({
+            doi: "10.5555/elbadry-proposal",
+            title: "Dormant black holes and neutron stars in stellar binaries",
+            authors: ["Kareem El-Badry"],
+            year: 2023,
+            abstract: "Black holes and neutron stars in stellar binaries with Gaia constraints.",
+            type: "grant",
+            journal: "NSF Award"
+          }),
+          crossrefWork({
+            doi: "10.1093/mnras/stac3140",
+            title: "A Sun-like star orbiting a black hole",
+            authors: ["Kareem El-Badry", "Hans-Walter Rix"],
+            year: 2023,
+            abstract: "A Sun-like star orbiting a black hole discovered using Gaia.",
+            type: "journal-article",
+            journal: "Monthly Notices of the Royal Astronomical Society"
+          })
+        ]
+      }
+    })
+  );
+
+  assert.equal(results[0].doi, "10.1093/mnras/stac3140");
+});
+
+test("broad ranking does not suppress real proceedings articles", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Vaswani2017",
+      searchMode: "contextual",
+      sentenceText: "Attention Is All You Need introduced transformer architectures.",
+      contextText: "Transformer architectures use attention for sequence modeling.",
+      parsedKeyHint: { surname: "Vaswani", year: 2017, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          crossrefWork({
+            doi: "10.5555/attention-proceedings",
+            title: "Attention Is All You Need",
+            authors: ["Ashish Vaswani", "Noam Shazeer"],
+            year: 2017,
+            abstract: "Transformer architectures use attention for sequence modeling.",
+            type: "proceedings-article",
+            journal: "Advances in Neural Information Processing Systems"
+          }),
+          crossrefWork({
+            doi: "10.5555/attention-poster",
+            title: "Attention Is All You Need Poster Abstract",
+            authors: ["Ashish Vaswani", "Noam Shazeer"],
+            year: 2017,
+            abstract: "Transformer architectures use attention for sequence modeling.",
+            type: "abstract",
+            journal: "Machine Learning Meeting Abstracts"
+          })
+        ]
+      }
+    })
+  );
+
+  assert.equal(results[0].doi, "10.5555/attention-proceedings");
+});
+
 test("broad ranking boosts records confirmed by multiple sources and preserves journal metadata", async () => {
   const calls = [];
   const results = await searchLiterature(
@@ -725,6 +1252,113 @@ test("broad ranking boosts records confirmed by multiple sources and preserves j
   assert.match(results[0].sourceLabel, /arXiv/);
 });
 
+test("arXiv-primary presets try Crossref first for pre-arXiv papers", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Turing1936",
+      searchMode: "contextual",
+      sentenceText: "On Computable Numbers, with an Application to the Entscheidungsproblem is the target publication.",
+      contextText: "On Computable Numbers, with an Application to the Entscheidungsproblem is a foundational computer science paper.",
+      parsedKeyHint: {
+        surname: "Turing",
+        year: 1936,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "computer-science",
+      primarySource: "arxiv",
+      fallbackSources: ["crossref"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.1112/plms/s2-42.1.230",
+                title: ["On Computable Numbers, with an Application to the Entscheidungsproblem"],
+                author: [{ family: "Turing", given: "A. M." }],
+                issued: { "date-parts": [[1936]] },
+                "container-title": ["Proceedings of the London Mathematical Society"],
+                type: "journal-article",
+                URL: "https://doi.org/10.1112/plms/s2-42.1.230"
+              }
+            ]
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(calls[0].startsWith("https://api.crossref.org/works"));
+  assert.equal(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")), false);
+  assert.equal(results[0].sourceId, "crossref");
+  assert.equal(results[0].doi, "10.1112/plms/s2-42.1.230");
+});
+
+test("contextual broad search keeps exact title-year matches for collaboration keys", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "ATLAS2024",
+      searchMode: "contextual",
+      sentenceText: "Observation of quantum entanglement with top quarks at the ATLAS detector is the target publication.",
+      contextText: "ATLAS Collaboration quantum entanglement top quarks detector.",
+      parsedKeyHint: {
+        surname: "ATLAS",
+        year: 2024,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "physics",
+      primarySource: "inspire",
+      fallbackSources: ["crossref"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://inspirehep.net/api/literature")) {
+        return jsonResponse({ hits: { hits: [] } });
+      }
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.1038/s41586-024-07824-z",
+                title: ["Observation of quantum entanglement with top quarks at the ATLAS detector"],
+                author: [{ family: "Aad", given: "G." }],
+                issued: { "date-parts": [[2024]] },
+                "container-title": ["Nature"],
+                type: "journal-article",
+                URL: "https://doi.org/10.1038/s41586-024-07824-z"
+              }
+            ]
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(calls.some((url) => url.startsWith("https://inspirehep.net/api/literature")));
+  assert.ok(calls.some((url) => url.startsWith("https://api.crossref.org/works")));
+  assert.equal(results[0].sourceId, "crossref");
+  assert.equal(results[0].doi, "10.1038/s41586-024-07824-z");
+});
+
 test("broad ranking keeps arXiv-only matches below comparable non-arXiv records", async () => {
   const results = await searchLiterature(
     {
@@ -778,6 +1412,47 @@ test("broad ranking keeps arXiv-only matches below comparable non-arXiv records"
 
   assert.equal(results[0].sourceId, "crossref");
   assert.equal(results[0].doi, "10.5555/shared-benchmark");
+});
+
+test("direct DOI fallback ignores one registry 404 and returns another registry match", async () => {
+  const results = await searchLiterature(
+    {
+      token: "doi:10.1023/a:1026654312961",
+      searchMode: "direct",
+      sentenceText: "The Large-N Limit of superconformal field theories is the target publication.",
+      contextText: "The Large-N Limit of superconformal field theories is the target publication."
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "datacite",
+      fallbackSources: ["crossref"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.datacite.org/dois/")) {
+        return statusResponse(404);
+      }
+      if (url.startsWith("https://api.crossref.org/works/")) {
+        return jsonResponse({
+          message: {
+            DOI: "10.1023/a:1026654312961",
+            title: ["The Large-N Limit of Superconformal Field Theories and Supergravity"],
+            author: [{ family: "Maldacena", given: "Juan Martin" }],
+            issued: { "date-parts": [[1998]] },
+            "container-title": ["International Journal of Theoretical Physics"],
+            type: "journal-article",
+            URL: "https://doi.org/10.1023/a:1026654312961"
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "crossref");
+  assert.equal(results[0].doi, "10.1023/a:1026654312961");
 });
 
 test("arXiv-only search ranks prior-year first-author preprints over same-year coauthor matches", async () => {
@@ -885,6 +1560,18 @@ function textResponse(payload) {
   };
 }
 
+function statusResponse(status, headers = {}) {
+  return {
+    ok: false,
+    status,
+    headers: {
+      get(name) {
+        return headers[name] ?? headers[String(name).toLowerCase()] ?? null;
+      }
+    }
+  };
+}
+
 function makeDoc(bibcode, overrides = {}) {
   return {
     bibcode,
@@ -892,11 +1579,16 @@ function makeDoc(bibcode, overrides = {}) {
     author: overrides.author ?? ["Shariat, Cheyanne"],
     year: overrides.year ?? "2025",
     abstract: overrides.abstract ?? "Resolved triples from Gaia constrain triple star populations.",
-    doi: [overrides.doi ?? `10.1234/${bibcode}`]
+    doi: [overrides.doi ?? `10.1234/${bibcode}`],
+    property: overrides.property,
+    doctype: overrides.doctype,
+    pub: overrides.pub,
+    bibstem: overrides.bibstem,
+    database: overrides.database
   };
 }
 
-function crossrefWork({ doi, title, authors, year, abstract }) {
+function crossrefWork({ doi, title, authors, year, abstract, type = "journal-article", journal = "Test Journal" }) {
   return {
     DOI: doi,
     title: [title],
@@ -904,8 +1596,8 @@ function crossrefWork({ doi, title, authors, year, abstract }) {
     issued: { "date-parts": [[year]] },
     abstract,
     "is-referenced-by-count": 0,
-    "container-title": ["Test Journal"],
-    type: "journal-article",
+    "container-title": [journal],
+    type,
     URL: `https://doi.org/${doi}`
   };
 }

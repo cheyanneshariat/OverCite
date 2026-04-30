@@ -12,33 +12,24 @@ import {
   SOURCE_IDS
 } from "../src/core/sources.js";
 
-test("broad source profile works without any required user token", () => {
-  const plan = buildSourcePlan({ sourceProfile: "broad", sourceApiTokens: {} });
+test("general source profile uses Crossref with a DOI-only DataCite fallback and no required token", () => {
+  const plan = buildSourcePlan({ sourceProfile: "general", sourceApiTokens: {} });
 
-  assert.deepEqual(plan.primarySources, [
-    SOURCE_IDS.CROSSREF,
-    SOURCE_IDS.ARXIV,
-    SOURCE_IDS.PUBMED,
-    SOURCE_IDS.DATACITE
-  ]);
+  assert.deepEqual(plan.primarySources, [SOURCE_IDS.CROSSREF]);
   assert.deepEqual(plan.optionalEnhancers, []);
   assert.deepEqual(plan.missingOptionalCredentials, []);
 
   const routing = buildSourceRouting({
-    sourceProfile: "broad",
+    sourceProfile: "general",
     sourceApiTokens: { ads: "ads-token" }
   });
   assert.equal(routing.primarySource, SOURCE_IDS.CROSSREF);
-  assert.deepEqual(routing.availableFallbackSources, [
-    SOURCE_IDS.ARXIV,
-    SOURCE_IDS.PUBMED,
-    SOURCE_IDS.DATACITE
-  ]);
+  assert.deepEqual(routing.availableFallbackSources, [SOURCE_IDS.DATACITE]);
 });
 
-test("ADS-only profile plans no broad provider calls", async () => {
+test("Astrophysics profile plans no broad provider calls", async () => {
   const plan = buildSourcePlan({
-    sourceProfile: "ads-only",
+    sourceProfile: "astrophysics",
     sourceApiTokens: { ads: "token" }
   });
 
@@ -52,26 +43,26 @@ test("ADS-only profile plans no broad provider calls", async () => {
     sentenceText: "Triple star systems are common in Gaia.",
     contextText: "Triple star systems are common in Gaia."
   }, {
-    sourceProfile: "ads-only",
+    sourceProfile: "astrophysics",
     sourceApiTokens: { ads: "token" }
   }, async () => {
-    throw new Error("ADS-only mode should not call broad providers");
+    throw new Error("Astrophysics mode should not call broad providers");
   });
 
   assert.deepEqual(candidates, []);
 });
 
-test("arXiv-only profile plans arXiv as primary", () => {
+test("Math profile uses arXiv first with Crossref fallback", () => {
   const routing = buildSourceRouting({
-    sourceProfile: "arxiv-only"
+    sourceProfile: "math"
   });
   assert.equal(routing.primarySource, SOURCE_IDS.ARXIV);
   assert.equal(routing.primarySourceAvailable, true);
-  assert.deepEqual(routing.fallbackSources, []);
-  assert.deepEqual(routing.availableFallbackSources, []);
+  assert.deepEqual(routing.fallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.deepEqual(routing.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
 
   const plan = buildSourcePlan({
-    sourceProfile: "arxiv-only",
+    sourceProfile: "math",
     sourceApiTokens: {}
   });
   assert.deepEqual(plan.primarySources, [SOURCE_IDS.ARXIV]);
@@ -122,10 +113,10 @@ test("source routing uses primary first and credential-filtered fallbacks", () =
   assert.deepEqual(routing.missingCredentialSources, []);
 });
 
-test("source routing defaults to fast ADS-only mode", () => {
+test("source routing defaults to fast Astrophysics mode", () => {
   const routing = buildSourceRouting({});
 
-  assert.equal(routing.profile, "ads-only");
+  assert.equal(routing.profile, "astrophysics");
   assert.equal(routing.primarySource, SOURCE_IDS.ADS);
   assert.equal(routing.primarySourceAvailable, false);
   assert.deepEqual(routing.fallbackSources, []);
@@ -133,15 +124,19 @@ test("source routing defaults to fast ADS-only mode", () => {
   assert.deepEqual(routing.missingCredentialSources, [SOURCE_IDS.ADS]);
 });
 
-test("source routing presets choose field-oriented primary and fallback sources", () => {
-  const astroPhysics = buildSourceRouting({ sourceProfile: "astro-physics" });
-  assert.equal(astroPhysics.primarySource, SOURCE_IDS.ADS);
-  assert.deepEqual(astroPhysics.availableFallbackSources, [SOURCE_IDS.ARXIV, SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]);
+test("source routing presets choose minimal field-oriented sources", () => {
+  const astrophysics = buildSourceRouting({ sourceProfile: "astrophysics" });
+  assert.equal(astrophysics.primarySource, SOURCE_IDS.ADS);
+  assert.deepEqual(astrophysics.availableFallbackSources, []);
 
-  const mathPhysics = buildSourceRouting({ sourceProfile: "math-physics" });
-  assert.equal(mathPhysics.primarySource, SOURCE_IDS.ARXIV);
-  assert.deepEqual(mathPhysics.availableFallbackSources, [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]);
-  assert.deepEqual(mathPhysics.missingCredentialSources, [SOURCE_IDS.ADS]);
+  const physics = buildSourceRouting({ sourceProfile: "physics" });
+  assert.equal(physics.primarySource, SOURCE_IDS.INSPIRE);
+  assert.deepEqual(physics.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+
+  const math = buildSourceRouting({ sourceProfile: "math" });
+  assert.equal(math.primarySource, SOURCE_IDS.ARXIV);
+  assert.deepEqual(math.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.deepEqual(math.missingCredentialSources, []);
 
   const computerScience = buildSourceRouting({ sourceProfile: "computer-science" });
   assert.equal(computerScience.primarySource, SOURCE_IDS.ARXIV);
@@ -151,8 +146,16 @@ test("source routing presets choose field-oriented primary and fallback sources"
 
   const lifeSciences = buildSourceRouting({ sourceProfile: "life-sciences" });
   assert.equal(lifeSciences.primarySource, SOURCE_IDS.PUBMED);
-  assert.deepEqual(lifeSciences.availableFallbackSources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE]);
+  assert.deepEqual(lifeSciences.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
   assert.deepEqual(lifeSciences.missingCredentialSources, []);
+
+  const chemistry = buildSourceRouting({ sourceProfile: "chemistry" });
+  assert.equal(chemistry.primarySource, SOURCE_IDS.CROSSREF);
+  assert.deepEqual(chemistry.availableFallbackSources, []);
+
+  const general = buildSourceRouting({ sourceProfile: "general" });
+  assert.equal(general.primarySource, SOURCE_IDS.CROSSREF);
+  assert.deepEqual(general.availableFallbackSources, [SOURCE_IDS.DATACITE]);
 });
 
 test("source routing preserves custom fallback order while dropping duplicates and unsupported sources", () => {
@@ -167,26 +170,26 @@ test("source routing preserves custom fallback order while dropping duplicates a
   assert.deepEqual(routing.availableFallbackSources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE, SOURCE_IDS.PUBMED]);
 });
 
-test("astro physics profile keeps ADS optional so missing tokens do not block broad search", () => {
+test("legacy joint profiles map to minimal subject-area presets", () => {
   const plan = buildSourcePlan({ sourceProfile: "astro-physics", sourceApiTokens: {} });
 
-  assert.deepEqual(plan.primarySources, [
-    SOURCE_IDS.CROSSREF,
-    SOURCE_IDS.ARXIV,
-    SOURCE_IDS.INSPIRE
-  ]);
+  assert.equal(plan.profile, "astrophysics");
+  assert.deepEqual(plan.primarySources, []);
   assert.deepEqual(plan.optionalEnhancers, []);
   assert.deepEqual(plan.missingOptionalCredentials, [SOURCE_IDS.ADS]);
-});
 
-test("astro physics profile puts ADS first when a token is available", () => {
-  const plan = buildSourcePlan({
-    sourceProfile: "astro-physics",
-    sourceApiTokens: { ads: "token" }
-  });
+  const mathPlan = buildSourcePlan({ sourceProfile: "math-physics", sourceApiTokens: { ads: "token" } });
+  assert.equal(mathPlan.profile, "math");
+  assert.deepEqual(mathPlan.primarySources, [SOURCE_IDS.ARXIV]);
+  assert.deepEqual(mathPlan.optionalEnhancers, []);
 
-  assert.deepEqual(plan.optionalEnhancers, [SOURCE_IDS.ADS]);
-  assert.equal(plan.orderedSources[0], SOURCE_IDS.ADS);
+  const adsPlan = buildSourcePlan({ sourceProfile: "ads-only", sourceApiTokens: { ads: "token" } });
+  assert.equal(adsPlan.profile, "astrophysics");
+  assert.deepEqual(adsPlan.optionalEnhancers, [SOURCE_IDS.ADS]);
+
+  const broadPlan = buildSourcePlan({ sourceProfile: "broad", sourceApiTokens: {} });
+  assert.equal(broadPlan.profile, "general");
+  assert.deepEqual(broadPlan.primarySources, [SOURCE_IDS.CROSSREF]);
 });
 
 test("searchBroadCandidatesForSources calls only selected broad sources", async () => {
@@ -219,7 +222,7 @@ test("searchBroadCandidatesForSources calls only selected broad sources", async 
     });
   });
 
-  assert.equal(fetchCalls.length, 2);
+  assert.equal(fetchCalls.length, 3);
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].sourceId, SOURCE_IDS.CROSSREF);
   assert.equal(candidates[0].title, "Array programming with NumPy");
@@ -328,6 +331,28 @@ test("raw DOI queries use Crossref direct work lookup", async () => {
   assert.equal(candidates[0].title, "Highly accurate protein structure prediction with AlphaFold");
 });
 
+test("Crossref DOI fragments are not mistaken for arXiv years", async () => {
+  const candidates = await searchBroadCandidatesForSources({
+    token: "doi:10.1002/j.1538-7305.1948.tb01338.x",
+    searchMode: "direct"
+  }, {
+    sourceProfile: "custom",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.CROSSREF], async () => jsonResponse({
+    message: {
+      DOI: "10.1002/j.1538-7305.1948.tb01338.x",
+      title: ["A Mathematical Theory of Communication"],
+      author: [{ family: "Shannon", given: "C. E." }],
+      issued: { "date-parts": [[1948]] },
+      "container-title": ["Bell System Technical Journal"],
+      type: "journal-article",
+      URL: "https://doi.org/10.1002/j.1538-7305.1948.tb01338.x"
+    }
+  }));
+
+  assert.equal(candidates[0].year, 1948);
+});
+
 test("raw DOI queries decode copied DOI URLs and strip page suffixes", async () => {
   const fetchCalls = [];
   const candidates = await searchBroadCandidatesForSources({
@@ -416,6 +441,34 @@ test("raw arXiv identifier queries use arXiv id_list lookup", async () => {
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].eprint, "1706.03762");
   assert.equal(candidates[0].title, "Attention Is All You Need");
+});
+
+test("direct arXiv title-year queries strip the year for title search", async () => {
+  const fetchCalls = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Mamba: Linear-Time Sequence Modeling with Selective State Spaces 2024",
+    searchMode: "direct"
+  }, {
+    sourceProfile: "computer-science",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.ARXIV], async (url) => {
+    fetchCalls.push(new URL(url));
+    assert.equal(fetchCalls[0].searchParams.get("search_query"), 'ti:"Mamba: Linear-Time Sequence Modeling with Selective State Spaces"');
+    return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <entry>
+          <id>http://arxiv.org/abs/2312.00752v2</id>
+          <published>2023-12-01T00:00:00Z</published>
+          <title>Mamba: Linear-Time Sequence Modeling with Selective State Spaces</title>
+          <summary>Selective state spaces for sequence modeling.</summary>
+          <author><name>Albert Gu</name></author>
+          <author><name>Tri Dao</name></author>
+          <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.LG"/>
+        </entry>
+      </feed>`);
+  });
+
+  assert.equal(candidates[0].eprint, "2312.00752");
 });
 
 test("old-style arXiv identifiers use arXiv id_list lookup", async () => {
@@ -717,6 +770,49 @@ test("PubMed source uses NCBI search and summary without requiring an API key", 
   assert.equal(candidates[0].year, 2021);
 });
 
+test("PubMed source keeps old no-author records and supports direct PMID lookup", async () => {
+  const fetchCalls = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "PMID:18890300",
+    searchMode: "direct",
+    parsedKeyHint: null,
+    sentenceText: "STREPTOMYCIN treatment of pulmonary tuberculosis.",
+    contextText: "The 1948 streptomycin tuberculosis randomized trial."
+  }, {
+    sourceProfile: "life-sciences",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.PUBMED], async (url) => {
+    fetchCalls.push(new URL(url));
+    if (url.startsWith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")) {
+      assert.equal(new URL(url).searchParams.get("term"), "18890300[uid]");
+      return jsonResponse({ esearchresult: { idlist: ["18890300"] } });
+    }
+    if (url.startsWith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")) {
+      return jsonResponse({
+        result: {
+          uids: ["18890300"],
+          18890300: {
+            uid: "18890300",
+            title: "STREPTOMYCIN treatment of pulmonary tuberculosis.",
+            pubdate: "1948 Oct 30",
+            fulljournalname: "British medical journal",
+            authors: [],
+            articleids: [{ idtype: "pubmed", value: "18890300" }]
+          }
+        }
+      });
+    }
+    throw new Error(`Unexpected PubMed URL ${url}`);
+  });
+
+  assert.equal(fetchCalls.length, 2);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].sourceId, SOURCE_IDS.PUBMED);
+  assert.equal(candidates[0].authors.length, 0);
+  assert.equal(candidates[0].year, 1948);
+  assert.equal(candidates[0].bibtexExportId, "18890300");
+});
+
 test("PubMed source retries one rate-limited summary request", async () => {
   let summaryAttempts = 0;
   const candidates = await searchBroadCandidatesForSources({
@@ -881,8 +977,8 @@ test("fielded raw ADS queries skip broad providers", async () => {
   const candidates = await searchBroadCandidates({
     token: 'author:"El-Badry" year:2022 title:"magnetic braking"',
     searchMode: "direct"
-  }, { sourceProfile: "broad", sourceApiTokens: {} }, async () => {
-    throw new Error("broad providers should not be called for fielded ADS raw queries");
+  }, { sourceProfile: "general", sourceApiTokens: {} }, async () => {
+    throw new Error("general provider should not be called for fielded ADS raw queries");
   });
 
   assert.deepEqual(candidates, []);
@@ -924,7 +1020,7 @@ test("selected broad source searches also skip fielded ADS raw queries", async (
   assert.deepEqual(candidates, []);
 });
 
-test("searchBroadCandidates maps and deduplicates token-free broad source results", async () => {
+test("selected broad sources map and deduplicate token-free results", async () => {
   const fetchCalls = [];
   const fetchImpl = async (url) => {
     fetchCalls.push(url);
@@ -986,14 +1082,18 @@ test("searchBroadCandidates maps and deduplicates token-free broad source result
     throw new Error(`Unexpected URL ${url}`);
   };
 
-  const candidates = await searchBroadCandidates({
+  const candidates = await searchBroadCandidatesForSources({
     token: "Doe24",
     parsedKeyHint: { surname: "Doe", year: 2024 },
     sentenceText: "A broad test dataset is useful.",
     contextText: "A broad test dataset is useful."
-  }, { sourceProfile: "broad", sourceApiTokens: {} }, fetchImpl);
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [
+    SOURCE_IDS.CROSSREF,
+    SOURCE_IDS.DATACITE,
+    SOURCE_IDS.ARXIV
+  ], fetchImpl);
 
-  assert.ok(fetchCalls.length >= 4);
+  assert.ok(fetchCalls.length >= 3);
   assert.equal(candidates.length, 3);
   assert.equal(candidates[0].doi, "10.1234/example");
   assert.match(candidates[0].sourceLabel, /Crossref/);
@@ -1034,6 +1134,38 @@ test("DataCite direct DOI lookup runs even without dataset context words", async
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].sourceId, SOURCE_IDS.DATACITE);
   assert.equal(candidates[0].doi, "10.57702/vmvbuu5i");
+});
+
+test("direct DOI 404s from one registry do not block another registry", async () => {
+  const candidates = await searchBroadCandidatesForSources({
+    token: "doi:10.1023/a:1026654312961",
+    searchMode: "direct"
+  }, {
+    sourceProfile: "custom",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.DATACITE, SOURCE_IDS.CROSSREF], async (url) => {
+    if (url.startsWith("https://api.datacite.org/dois/")) {
+      return statusResponse(404);
+    }
+    if (url.startsWith("https://api.crossref.org/works/")) {
+      return jsonResponse({
+        message: {
+          DOI: "10.1023/a:1026654312961",
+          title: ["The Large-N Limit of Superconformal Field Theories and Supergravity"],
+          author: [{ family: "Maldacena", given: "Juan Martin" }],
+          issued: { "date-parts": [[1998]] },
+          "container-title": ["International Journal of Theoretical Physics"],
+          type: "journal-article",
+          URL: "https://doi.org/10.1023/a:1026654312961"
+        }
+      });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  });
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].sourceId, SOURCE_IDS.CROSSREF);
+  assert.equal(candidates[0].doi, "10.1023/a:1026654312961");
 });
 
 test("exportCandidateBibtex creates a usable BibTeX entry for broad candidates", () => {

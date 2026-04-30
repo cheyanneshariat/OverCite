@@ -2,20 +2,20 @@
 
 OverCite helps you add LaTeX citations in VS Code without leaving the editor.
 
-Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches, and insert the selected BibTeX entry directly into your project bibliography. The default is fast ADS/SciX-only lookup; broader source presets can add arXiv, INSPIRE, Crossref, DataCite, and PubMed.
+Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches, and insert the selected BibTeX entry directly into your project bibliography. The default is fast ADS/SciX-only lookup; subject-area presets can add arXiv, INSPIRE, Crossref, DataCite, and PubMed.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 
 <blockquote>
-  This work made use of <a href="https://github.com/cheyanneshariat/OverCite">OverCite</a>, an in-editor citation tool for LaTeX.
+  This work made use of <a href="https://github.com/cheyanneshariat/OverCite">OverCite</a> \citep{Shariat2026}, an in-editor citation tool for LaTeX.
 </blockquote>
 
 ## Getting Started
 
 1. Install by searching for `OverCite` in VS Code Extensions.
 2. Open Settings and search for `OverCite`.
-3. Choose a source preset.
-4. Paste your NASA ADS or SciX API token into `OverCite: Ads Api Token` if you want ADS/SciX search.
+3. Choose your subject area.
+4. Paste your NASA ADS or SciX API token if you want ADS/SciX search.
 5. That's it. Open a `.tex` file, place the cursor inside a `\cite{...}` command, and press `Alt+Shift+E` to get started.
 
 To get an ADS/SciX token, sign in to NASA ADS or SciX and go to `Settings -> API Token`.
@@ -27,7 +27,7 @@ More details: https://github.com/cheyanneshariat/OverCite
 - Detects the active `\cite{...}` token under the cursor
 - Uses local sentence and context text to search the configured literature sources
 - Also supports a simple author/year-only fallback mode
-- Also supports a raw query mode for the token inside `\cite{...}`
+- Supports raw query mode for the token inside `\cite{...}`
 - Shows ranked paper matches in a VS Code quick-pick list
 - Inserts or reuses the matching BibTeX entry in the target `.bib` file
 - Rewrites the active citation key in the source `.tex` file
@@ -41,8 +41,8 @@ More details: https://github.com/cheyanneshariat/OverCite
 ## Settings
 
 - `overcite.adsApiToken` (accepts either a NASA ADS or SciX API token)
-- `overcite.sourceProfile` (`ads-only`, `astrophysics`, `broad`, `astro-physics`, `math-physics`, `life-sciences`, `computer-science`, or `custom`)
-- `overcite.primarySource` and `overcite.fallbackSources` for custom routing
+- `overcite.sourceProfile` (`astrophysics`, `physics`, `math`, `computer-science`, `life-sciences`, `chemistry`, `general`, or `custom`)
+- `overcite.primarySource` and `overcite.fallbackSources` for custom routing. 1 database is usually enough. Add 1-2 backups only for cross-field work.
 - `overcite.ncbiApiKey`
 - `overcite.contextWindowChars`
 - `overcite.citationKeyMode` (`authoryear`, `authoryear-underscore`, `authoryear-colon`, `informative`, `bibcode`, or `typed`)
@@ -65,6 +65,8 @@ Examples:
 
 - `\citep{Perlmutter99}` with the normal `Resolve Citation` command for contextual mode
 - `\citep{Schlegel}` with `Resolve Citation (Simple Search)` when you want author-only lookup
+- `\citep{10.1038/s41586-021-03819-2}` for DOI lookup
+- `\citep{arXiv:1706.03762}` for arXiv lookup
 - `\citep{title:"emcee"}`
 - `\citep{author:"El-Badry" year:2022 title:"magnetic braking"}`
 - `\citep{first_author:"Hunsch" year:1998}`

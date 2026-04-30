@@ -19,8 +19,8 @@
 
 ## 0.1.3
 
-- Added an optional `ADS query` mode in both the Overleaf and VS Code extensions.
-- VS Code now includes a dedicated `Resolve Citation (ADS Query)` command.
+- Added an optional direct-query mode, then named `ADS query`, in both the Overleaf and VS Code extensions.
+- VS Code added a dedicated direct-query command, renamed `Resolve Citation (Raw Query)` in 0.3.0.
 - Improved direct ADS-query parsing for quoted fielded queries and quoted commas.
 - Expanded browser, VS Code, benchmark, and local smoke-test coverage for the new mode.
 

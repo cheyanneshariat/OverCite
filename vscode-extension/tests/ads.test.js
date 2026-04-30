@@ -76,11 +76,20 @@ test("ADS candidates retain arXiv identifiers for direct cross-source ranking", 
     title: ["10,000 Resolved Triples from Gaia"],
     author: ["Shariat, Cheyanne"],
     year: "2025",
-    identifier: ["arXiv:2506.16513", "2025arXiv250616513S"]
+    identifier: ["arXiv:2506.16513", "2025arXiv250616513S"],
+    property: ["ARTICLE", "REFEREED"],
+    doctype: "article",
+    pub: "Publications of the Astronomical Society of the Pacific",
+    bibstem: ["PASP"],
+    database: ["astronomy"]
   });
 
   assert.equal(candidate.eprint, "2506.16513");
   assert.equal(candidate.archivePrefix, "arXiv");
+  assert.deepEqual(candidate.property, ["ARTICLE", "REFEREED"]);
+  assert.equal(candidate.doctype, "article");
+  assert.equal(candidate.pub, "Publications of the Astronomical Society of the Pacific");
+  assert.deepEqual(candidate.bibstem, ["PASP"]);
 });
 
 test("direct search mode returns no queries for empty-token lookups", () => {
@@ -125,6 +134,59 @@ test("simple title search prefers exact title matches over high-overlap near mat
   );
 
   assert.equal(candidates[0].bibcode, "exact");
+});
+
+test("rerankAdsCandidates demotes ADS non-paper records below refereed journal articles", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: "El-Badry2023",
+      contextText: "The closest black hole is a Sun-like star orbiting a black hole in Gaia.",
+      sentenceText: "A Sun-like star orbiting a black hole is the target publication.",
+      parsedKeyHint: { surname: "El-Badry", year: 2023, suffix: "" }
+    },
+    [
+      {
+        bibcode: "2023AAS...24111701E",
+        title: "Dormant black holes and neutron stars in stellar binaries",
+        authors: ["El-Badry, Kareem"],
+        year: 2023,
+        abstract: "Black holes and neutron stars in stellar binaries are discussed with Gaia constraints.",
+        citationCount: 0,
+        property: ["NONARTICLE", "NOT REFEREED"],
+        doctype: "abstract",
+        pub: "American Astronomical Society Meeting Abstracts",
+        bibstem: ["AAS"]
+      },
+      {
+        bibcode: "2023nsf....2307232E",
+        title: "Dormant black holes and neutron stars in stellar binaries",
+        authors: ["El-Badry, Kareem"],
+        year: 2023,
+        abstract: "Black holes and neutron stars in stellar binaries are discussed with Gaia constraints.",
+        citationCount: 0,
+        property: ["ASSOCIATED", "ESOURCE", "NONARTICLE", "NOT REFEREED"],
+        doctype: "proposal",
+        pub: "NSF Award",
+        bibstem: ["nsf", "nsf....23"]
+      },
+      {
+        bibcode: "2023MNRAS.518.1057E",
+        title: "A Sun-like star orbiting a black hole",
+        authors: ["El-Badry, Kareem", "Rix, Hans-Walter", "Quataert, Eliot"],
+        year: 2023,
+        abstract: "We report discovery of a bright nearby Sun-like star orbiting a dark object using Gaia.",
+        citationCount: 223,
+        property: ["ARTICLE", "REFEREED"],
+        doctype: "article",
+        pub: "Monthly Notices of the Royal Astronomical Society",
+        bibstem: ["MNRAS"]
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "2023MNRAS.518.1057E");
+  assert.ok(candidates[0].score > candidates[1].score);
+  assert.ok(candidates[0].score > candidates[2].score);
 });
 
 test("rerankAdsCandidates prefers matching author and year", () => {
@@ -489,6 +551,17 @@ test("buildAdsQuery uses title/abstract search for descriptive non-author tokens
     }
   });
   assert.equal(query, 'title:"magnetic_braking" OR abstract:"magnetic_braking"');
+});
+
+test("buildAdsQuery treats alphabetic multi-word titles as title searches", () => {
+  const query = buildAdsQuery({
+    token: "A Sun-like star orbiting a black hole",
+    parsedKeyHint: {
+      surname: null,
+      year: null
+    }
+  });
+  assert.equal(query, 'title:"A Sun-like star orbiting a black hole" OR abstract:"A Sun-like star orbiting a black hole"');
 });
 
 test("empty-token lookups use context-only phrase and keyword queries", () => {

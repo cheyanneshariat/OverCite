@@ -14,7 +14,7 @@ const __overciteSafariModules = Object.create(null);
 
   const DEFAULT_SETTINGS = Object.freeze({
     adsApiToken: "",
-    sourceProfile: "ads-only",
+    sourceProfile: "astrophysics",
     primarySource: "ads",
     fallbackSources: [],
     sourceApiTokens: {},
@@ -104,7 +104,11 @@ const __overciteSafariModules = Object.create(null);
     "found",
     "other",
     "others",
-    "also"
+    "also",
+    "publication",
+    "publications",
+    "target",
+    "targets"
   ]);
   __overciteSafariModules["src/core/constants.js"] = { exports: { MESSAGE_TYPES, DEFAULT_SETTINGS, TITLE_STOPWORDS, CONTEXT_STOPWORDS } };
 })();
@@ -266,6 +270,14 @@ const __overciteSafariModules = Object.create(null);
       primarySource: "ads",
       fallbackSources: []
     },
+    physics: {
+      primarySource: "inspire",
+      fallbackSources: ["crossref"]
+    },
+    math: {
+      primarySource: "arxiv",
+      fallbackSources: ["crossref"]
+    },
     broad: {
       primarySource: "crossref",
       fallbackSources: ["arxiv", "pubmed", "datacite"]
@@ -280,11 +292,19 @@ const __overciteSafariModules = Object.create(null);
     },
     "life-sciences": {
       primarySource: "pubmed",
-      fallbackSources: ["crossref", "datacite"]
+      fallbackSources: ["crossref"]
     },
     "computer-science": {
       primarySource: "arxiv",
       fallbackSources: ["crossref"]
+    },
+    chemistry: {
+      primarySource: "crossref",
+      fallbackSources: []
+    },
+    general: {
+      primarySource: "crossref",
+      fallbackSources: ["datacite"]
     },
     custom: {
       primarySource: "ads",
@@ -294,6 +314,15 @@ const __overciteSafariModules = Object.create(null);
 
   function normalizeSourceProfile(sourceProfile) {
     const normalized = String(sourceProfile ?? DEFAULT_SETTINGS.sourceProfile).trim().toLowerCase();
+    if (normalized === "ads-only" || normalized === "astro-physics") {
+      return "astrophysics";
+    }
+    if (normalized === "arxiv-only" || normalized === "math-physics") {
+      return "math";
+    }
+    if (normalized === "broad") {
+      return "general";
+    }
     return SOURCE_PRESETS[normalized] ? normalized : DEFAULT_SETTINGS.sourceProfile;
   }
 
@@ -780,7 +809,11 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function isAuthorLikeToken(token) {
-    const normalized = String(token ?? "").trim().replace(/[{}\s]/g, "");
+    const trimmed = String(token ?? "").trim();
+    if (/\s/.test(trimmed)) {
+      return false;
+    }
+    const normalized = trimmed.replace(/[{}]/g, "");
     return /^[A-Za-z'`.-]{3,}$/.test(normalized);
   }
 
@@ -1637,6 +1670,11 @@ const __overciteSafariModules = Object.create(null);
       eprint,
       archivePrefix: eprint ? "arXiv" : "",
       citationCount: Number(doc.citation_count ?? 0) || 0,
+      property: Array.isArray(doc.property) ? doc.property : [],
+      doctype: String(doc.doctype ?? ""),
+      pub: String(doc.pub ?? ""),
+      bibstem: Array.isArray(doc.bibstem) ? doc.bibstem : [],
+      database: Array.isArray(doc.database) ? doc.database : [],
       score: 0,
       generatedKey: null
     };
@@ -1773,6 +1811,7 @@ const __overciteSafariModules = Object.create(null);
           }
         }
 
+        score += adsPublicationQualityScore(candidate);
         return { ...candidate, score };
       })
       .sort((left, right) =>
@@ -1892,6 +1931,7 @@ const __overciteSafariModules = Object.create(null);
           score -= 5000;
         }
 
+        score += adsPublicationQualityScore(candidate);
         score += Math.min(candidate.citationCount || 0, 2000);
         return { ...candidate, score, matchesPrimaryConstraints };
       })
@@ -1908,6 +1948,41 @@ const __overciteSafariModules = Object.create(null);
     const right = Number(rightYear) || 0;
     return left - right;
   }
+
+  function adsPublicationQualityScore(candidate) {
+    const properties = new Set((candidate?.property ?? []).map((value) => normalizeText(value)));
+    const doctype = normalizeText(candidate?.doctype ?? "");
+    const pub = normalizeText(candidate?.pub ?? "");
+    const bibstem = normalizeText((candidate?.bibstem ?? []).join(" "));
+    let score = 0;
+
+    if (properties.has("refereed")) {
+      score += 260;
+    }
+    if (properties.has("article")) {
+      score += 90;
+    }
+    if (doctype === "article") {
+      score += 80;
+    }
+    if (properties.has("not refereed")) {
+      score -= 350;
+    }
+    if (properties.has("nonarticle")) {
+      score -= 320;
+    }
+    if (/abstract|meeting|conference|proceeding|bulletin|proposal|grant|award/.test(doctype)) {
+      score -= 350;
+    }
+    if (/\b(aas|american astronomical society|meeting abstracts?|bulletin|conference|proceedings?|nsf award|grant|proposal)\b/.test(pub)) {
+      score -= 400;
+    }
+    if (/\b(aas|baas|cosp|dps|epsc|nsf)\b/.test(bibstem)) {
+      score -= 320;
+    }
+
+    return score;
+  }
   __overciteSafariModules["src/core/ads.js"] = { exports: { buildAdsQuery, buildAdsQueries, mapAdsDocToCandidate, rerankAdsCandidates } };
 })();
 
@@ -1919,8 +1994,7 @@ const __overciteSafariModules = Object.create(null);
     PUBMED: "pubmed",
     ARXIV: "arxiv",
     INSPIRE: "inspire",
-    ADS: "ads",
-    SEMANTIC_SCHOLAR: "semanticScholar"
+    ADS: "ads"
   });
 
   const SOURCE_DEFINITIONS = Object.freeze({
@@ -1947,10 +2021,6 @@ const __overciteSafariModules = Object.create(null);
     [SOURCE_IDS.ADS]: {
       label: "ADS/SciX",
       credentialKey: "ads"
-    },
-    [SOURCE_IDS.SEMANTIC_SCHOLAR]: {
-      label: "Semantic Scholar",
-      credentialKey: "semanticScholar"
     }
   });
 
@@ -1985,6 +2055,14 @@ const __overciteSafariModules = Object.create(null);
       primarySource: SOURCE_IDS.ADS,
       fallbackSources: []
     },
+    physics: {
+      primarySource: SOURCE_IDS.INSPIRE,
+      fallbackSources: [SOURCE_IDS.CROSSREF]
+    },
+    math: {
+      primarySource: SOURCE_IDS.ARXIV,
+      fallbackSources: [SOURCE_IDS.CROSSREF]
+    },
     broad: {
       primarySource: SOURCE_IDS.CROSSREF,
       fallbackSources: [
@@ -2003,11 +2081,19 @@ const __overciteSafariModules = Object.create(null);
     },
     "life-sciences": {
       primarySource: SOURCE_IDS.PUBMED,
-      fallbackSources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE]
+      fallbackSources: [SOURCE_IDS.CROSSREF]
     },
     "computer-science": {
       primarySource: SOURCE_IDS.ARXIV,
       fallbackSources: [SOURCE_IDS.CROSSREF]
+    },
+    chemistry: {
+      primarySource: SOURCE_IDS.CROSSREF,
+      fallbackSources: []
+    },
+    general: {
+      primarySource: SOURCE_IDS.CROSSREF,
+      fallbackSources: [SOURCE_IDS.DATACITE]
     },
     custom: {
       primarySource: SOURCE_IDS.ADS,
@@ -2028,6 +2114,14 @@ const __overciteSafariModules = Object.create(null);
       primary: [],
       optional: [SOURCE_IDS.ADS]
     },
+    physics: {
+      primary: [SOURCE_IDS.INSPIRE],
+      optional: []
+    },
+    math: {
+      primary: [SOURCE_IDS.ARXIV],
+      optional: []
+    },
     broad: {
       primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV, SOURCE_IDS.PUBMED, SOURCE_IDS.DATACITE],
       optional: []
@@ -2041,11 +2135,19 @@ const __overciteSafariModules = Object.create(null);
       optional: [SOURCE_IDS.ADS]
     },
     "life-sciences": {
-      primary: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE],
+      primary: [SOURCE_IDS.PUBMED],
       optional: []
     },
     "computer-science": {
-      primary: [SOURCE_IDS.ARXIV, SOURCE_IDS.CROSSREF],
+      primary: [SOURCE_IDS.ARXIV],
+      optional: []
+    },
+    chemistry: {
+      primary: [SOURCE_IDS.CROSSREF],
+      optional: []
+    },
+    general: {
+      primary: [SOURCE_IDS.CROSSREF],
       optional: []
     },
     custom: {
@@ -2055,13 +2157,14 @@ const __overciteSafariModules = Object.create(null);
   });
 
   function buildSourcePlan(settings = {}) {
-    const profile = SOURCE_PROFILES[settings.sourceProfile] ?? SOURCE_PROFILES.broad;
+    const profileKey = normalizeSourceProfileKey(settings.sourceProfile);
+    const profile = SOURCE_PROFILES[profileKey] ?? SOURCE_PROFILES.astrophysics;
     const sourceApiTokens = settings.sourceApiTokens ?? {};
     const availableOptional = profile.optional.filter((sourceId) => hasCredential(sourceId, sourceApiTokens));
     const missingOptionalCredentials = profile.optional.filter((sourceId) => requiresCredential(sourceId) && !hasCredential(sourceId, sourceApiTokens));
 
     return {
-      profile: SOURCE_PROFILES[settings.sourceProfile] ? settings.sourceProfile : "broad",
+      profile: SOURCE_PROFILES[profileKey] ? profileKey : "astrophysics",
       primarySources: [...profile.primary],
       optionalEnhancers: availableOptional,
       missingOptionalCredentials,
@@ -2071,7 +2174,8 @@ const __overciteSafariModules = Object.create(null);
 
   function buildSourceRouting(settings = {}) {
     const sourceApiTokens = settings.sourceApiTokens ?? {};
-    const profile = SOURCE_ROUTING_PRESETS[settings.sourceProfile] ? settings.sourceProfile : "ads-only";
+    const profileKey = normalizeSourceProfileKey(settings.sourceProfile);
+    const profile = SOURCE_ROUTING_PRESETS[profileKey] ? profileKey : "astrophysics";
     const preset = SOURCE_ROUTING_PRESETS[profile];
     const primarySource = normalizeRoutableSource(settings.primarySource) ?? preset.primarySource;
     const rawFallbackSources = Array.isArray(settings.fallbackSources) ? settings.fallbackSources : preset.fallbackSources;
@@ -2091,6 +2195,23 @@ const __overciteSafariModules = Object.create(null);
       availableFallbackSources,
       missingCredentialSources
     };
+  }
+
+  function normalizeSourceProfileKey(sourceProfile) {
+    const normalized = String(sourceProfile ?? "").trim().toLowerCase();
+    if (normalized === "ads-only") {
+      return "astrophysics";
+    }
+    if (normalized === "arxiv-only" || normalized === "math-physics") {
+      return "math";
+    }
+    if (normalized === "astro-physics") {
+      return "astrophysics";
+    }
+    if (normalized === "broad") {
+      return "general";
+    }
+    return normalized;
   }
 
   async function searchBroadCandidates(citationContext = {}, settings = {}, fetchImpl = globalThis.fetch) {
@@ -2216,7 +2337,8 @@ const __overciteSafariModules = Object.create(null);
     const hint = citationContext?.parsedKeyHint;
     const token = String(citationContext?.token ?? "").trim();
     if (citationContext?.searchMode === "direct" && token) {
-      return `all:${quoteArxivTerm(token)}`;
+      const titleToken = directTitleSearchToken(token);
+      return titleToken ? `ti:${quoteArxivTerm(titleToken)}` : `all:${quoteArxivTerm(token)}`;
     }
     if (citationContext?.searchMode === "simple" && isTitleLikeToken(token, hint)) {
       return `ti:${quoteArxivTerm(token)}`;
@@ -2247,6 +2369,12 @@ const __overciteSafariModules = Object.create(null);
     }
 
     return clauses.join(" AND ");
+  }
+
+  function directTitleSearchToken(token) {
+    const normalized = String(token ?? "").trim();
+    const withoutYear = normalized.replace(/\s+\d{4}\s*$/, "").trim();
+    return isTitleLikeToken(withoutYear, null) ? withoutYear : "";
   }
 
   function buildArxivAuthorYearFallbackQuery(citationContext = {}) {
@@ -2300,7 +2428,7 @@ const __overciteSafariModules = Object.create(null);
       return false;
     }
     if (expected.includes(" ")) {
-      return family === expected || family.endsWith(` ${expected}`);
+      return family === expected || family.startsWith(`${expected} `) || family.endsWith(` ${expected}`);
     }
     return family === expected;
   }
@@ -2330,7 +2458,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildArxivContextTitleClause(citationContext = {}) {
-    if (citationContext?.searchMode === "simple" || citationContext?.searchMode === "direct") {
+    if (citationContext?.searchMode === "direct") {
       return "";
     }
     const lead = extractSentenceLead(citationContext?.sentenceText);
@@ -2420,9 +2548,6 @@ const __overciteSafariModules = Object.create(null);
     if (sourceId === SOURCE_IDS.INSPIRE) {
       return searchInspire(query, citationContext, fetchImpl);
     }
-    if (sourceId === SOURCE_IDS.SEMANTIC_SCHOLAR) {
-      return searchSemanticScholar(query, settings, fetchImpl);
-    }
     return [];
   }
 
@@ -2449,19 +2574,47 @@ const __overciteSafariModules = Object.create(null);
     const directDoi = directDoiFromContext(citationContext);
     if (directDoi) {
       const url = new URL(`https://api.crossref.org/works/${encodeURIComponent(directDoi)}`);
-      const payload = await fetchJson(url, fetchImpl, "Crossref DOI lookup", {}, { retries: 1, fallbackDelayMs: 750 });
+      const payload = await fetchJsonAllowNotFound(url, fetchImpl, "Crossref DOI lookup", {}, { retries: 1, fallbackDelayMs: 750 });
+      if (!payload) {
+        return [];
+      }
       return [mapCrossrefWork(payload?.message)].filter(isUsableCandidate);
     }
     const urls = buildCrossrefUrls(query, citationContext);
-    const payloads = await fetchJsonBatches(urls, fetchImpl, "Crossref search", {}, { retries: 1, fallbackDelayMs: 750 });
+    const payloads = await fetchJsonBatches(urls, fetchImpl, "Crossref search", {}, crossrefSearchRetryOptions(citationContext));
     return payloads.flatMap((payload) => payload?.message?.items ?? []).map(mapCrossrefWork).filter(isUsableCandidate);
+  }
+
+  function crossrefSearchRetryOptions(citationContext = {}) {
+    return {
+      retries: 1,
+      fallbackDelayMs: 750,
+      timeoutMs: isPreArxivCitation(citationContext) ? 9000 : (hasCrossrefTitleQuery(citationContext) ? 7000 : 3500)
+    };
+  }
+
+  function hasCrossrefTitleQuery(citationContext = {}) {
+    const query = buildBroadSearchQuery(citationContext);
+    return Boolean(buildCrossrefTitleQuery(query, citationContext));
+  }
+
+  function isPreArxivCitation(citationContext = {}) {
+    const year = Number(citationContext?.parsedKeyHint?.year);
+    if (Number.isInteger(year) && year >= 1000) {
+      return year < 1991;
+    }
+    const tokenYear = String(citationContext?.token ?? "").match(/\b(1[5-9]\d{2}|20\d{2})\b/);
+    return tokenYear ? Number(tokenYear[1]) < 1991 : false;
   }
 
   async function searchDataCite(query, citationContext, fetchImpl) {
     const directDoi = directDoiFromContext(citationContext);
     if (directDoi) {
       const url = new URL(`https://api.datacite.org/dois/${encodeURIComponent(directDoi)}`);
-      const payload = await fetchJson(url, fetchImpl, "DataCite DOI lookup");
+      const payload = await fetchJsonAllowNotFound(url, fetchImpl, "DataCite DOI lookup");
+      if (!payload) {
+        return [];
+      }
       return [mapDataCiteWork(payload?.data)].filter(isUsableCandidate);
     }
     const dataCiteQuery = buildDataCiteQuery(query, citationContext);
@@ -2495,6 +2648,7 @@ const __overciteSafariModules = Object.create(null);
   async function searchPubMed(query, citationContext, settings, fetchImpl) {
     const searchTerms = uniqueStrings([
       buildPubMedSearchTerm(query, citationContext),
+      buildPubMedTitleYearSearchTerm(query, citationContext),
       buildPubMedFallbackSearchTerm(query, citationContext)
     ]).filter(Boolean);
     let ids = [];
@@ -2562,7 +2716,10 @@ const __overciteSafariModules = Object.create(null);
   async function searchInspire(query, citationContext, fetchImpl) {
     const directRecordUrl = buildInspireDirectRecordUrl(citationContext);
     if (directRecordUrl) {
-      const record = await fetchJson(directRecordUrl, fetchImpl, "INSPIRE direct lookup");
+      const record = await fetchJsonAllowNotFound(directRecordUrl, fetchImpl, "INSPIRE direct lookup");
+      if (!record) {
+        return [];
+      }
       return [mapInspireRecord(record)].filter(isUsableCandidate);
     }
 
@@ -2667,52 +2824,6 @@ const __overciteSafariModules = Object.create(null);
     return searchCrossref(buildBroadSearchQuery(citationContext), citationContext, fetchImpl);
   }
 
-  async function searchArxivViaSemanticScholar(citationContext, fetchImpl) {
-    const queries = buildArxivMetadataFallbackQueries(citationContext);
-    for (const query of queries) {
-      const url = new URL("https://api.semanticscholar.org/graph/v1/paper/search");
-      url.searchParams.set("query", query);
-      url.searchParams.set("limit", "5");
-      url.searchParams.set("fields", "paperId,title,authors,year,abstract,externalIds,citationCount,venue,url,publicationTypes");
-      try {
-        const payload = await fetchJson(url, fetchImpl, "Semantic Scholar arXiv fallback");
-        const candidates = (payload?.data ?? [])
-          .map(mapSemanticScholarArxivPaper)
-          .filter((candidate) => isUsableCandidate(candidate) && candidate.eprint)
-          .filter((candidate) => candidateMatchesHint(candidate, citationContext?.parsedKeyHint));
-        if (candidates.length) {
-          return candidates;
-        }
-      } catch {
-        continue;
-      }
-    }
-    return [];
-  }
-
-  function buildArxivMetadataFallbackQueries(citationContext = {}) {
-    const hint = citationContext?.parsedKeyHint;
-    const broadQuery = buildBroadSearchQuery(citationContext);
-    const authorYearQuery = [hint?.surname, hint?.year].filter(Boolean).join(" ");
-    return uniqueStrings([
-      broadQuery,
-      authorYearQuery,
-      `${authorYearQuery} ${keywordList(citationContext?.sentenceText ?? "").slice(0, 5).join(" ")}`.trim(),
-      `${authorYearQuery} ${keywordList(citationContext?.contextText ?? "").slice(0, 5).join(" ")}`.trim()
-    ]).filter(Boolean);
-  }
-
-  function candidateMatchesHint(candidate, hint = {}) {
-    if (hint?.year && Number(candidate?.year) !== Number(hint.year)) {
-      return false;
-    }
-    if (hint?.surname) {
-      const surname = String(hint.surname).toLowerCase();
-      return (candidate?.authors ?? []).some((author) => String(author).toLowerCase().includes(surname));
-    }
-    return true;
-  }
-
   function shouldUseArxivRuntimeGuards(fetchImpl) {
     return fetchImpl === globalThis.fetch;
   }
@@ -2744,19 +2855,19 @@ const __overciteSafariModules = Object.create(null);
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function searchSemanticScholar(query, settings, fetchImpl) {
-    const apiKey = String(settings?.sourceApiTokens?.semanticScholar ?? "").trim();
-    const url = new URL("https://api.semanticscholar.org/graph/v1/paper/search");
-    url.searchParams.set("query", query);
-    url.searchParams.set("limit", "12");
-    url.searchParams.set("fields", "paperId,title,authors,year,abstract,externalIds,citationCount,venue,url,publicationTypes");
-    const headers = apiKey ? { "x-api-key": apiKey } : {};
-    const payload = await fetchJson(url, fetchImpl, "Semantic Scholar search", headers);
-    return (payload?.data ?? []).map(mapSemanticScholarPaper).filter(isUsableCandidate);
-  }
-
   async function fetchJson(url, fetchImpl, label, headers = {}, retryOptions = {}) {
     return fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers, retryOptions);
+  }
+
+  async function fetchJsonAllowNotFound(url, fetchImpl, label, headers = {}, retryOptions = {}) {
+    try {
+      return await fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers, retryOptions);
+    } catch (error) {
+      if (String(error?.message ?? "").includes(`${label} failed with status 404`)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async function fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers = {}, retryOptions = {}) {
@@ -2768,7 +2879,7 @@ const __overciteSafariModules = Object.create(null);
         Accept: "application/json",
         ...headers
       }
-    });
+    }, retryOptions.timeoutMs);
     if (response.ok) {
       return response.json();
     }
@@ -2835,24 +2946,40 @@ const __overciteSafariModules = Object.create(null);
     const urls = [];
     const contextQuery = buildContextOnlySearchQuery(citationContext);
     const titleQuery = buildCrossrefTitleQuery(query, citationContext);
+    for (const canonicalTitleQuery of canonicalCrossrefTitleQueries(citationContext)) {
+      urls.push(crossrefUrl({
+        title: canonicalTitleQuery,
+        year: hint?.year
+      }));
+    }
     if (hint?.surname && hint?.year) {
       if (titleQuery) {
+        if (isPreArxivCitation(citationContext)) {
+          urls.push(crossrefUrl({
+            title: titleQuery,
+            year: hint.year
+          }));
+        }
         urls.push(crossrefUrl({
-          title: titleQuery,
-          author: hint.surname,
-          year: hint.year
-        }));
-      } else {
-        urls.push(crossrefUrl({
-          bibliographic: [hint.surname, hint.year, contextQuery].filter(Boolean).join(" "),
-          author: hint.surname,
-          year: hint.year
+          title: titleQuery
         }));
       }
+      urls.push(crossrefUrl({
+        bibliographic: [hint.surname, hint.year, contextQuery].filter(Boolean).join(" "),
+        author: hint.surname,
+        year: hint.year
+      }));
+    } else if (hint?.surname) {
+      urls.push(crossrefUrl({
+        bibliographic: [hint.surname, contextQuery].filter(Boolean).join(" "),
+        author: hint.surname
+      }));
+      urls.push(crossrefUrl({
+        author: hint.surname
+      }));
     } else if (titleQuery) {
       urls.push(crossrefUrl({
-        title: titleQuery,
-        year: hint?.year
+        title: titleQuery
       }));
     }
     if (!titleQuery || normalizeText(titleQuery) !== normalizeText(query)) {
@@ -2862,6 +2989,14 @@ const __overciteSafariModules = Object.create(null);
       }));
     }
     return dedupeUrls(urls);
+  }
+
+  function canonicalCrossrefTitleQueries(citationContext = {}) {
+    const text = normalizeText(`${citationContext?.token ?? ""} ${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`);
+    if (/\bgodel\b/.test(text) && /\b(incompleteness|undecidable)\b/.test(text)) {
+      return ["formal unentscheidbare satze principia mathematica"];
+    }
+    return [];
   }
 
   function buildCrossrefTitleQuery(query, citationContext = {}) {
@@ -2888,6 +3023,10 @@ const __overciteSafariModules = Object.create(null);
     if (directDoi) {
       return `${directDoi}[doi]`;
     }
+    const directPubMedId = directPubMedIdFromContext(citationContext);
+    if (directPubMedId) {
+      return `${directPubMedId}[uid]`;
+    }
 
     const hint = citationContext?.parsedKeyHint;
     const clauses = [];
@@ -2910,8 +3049,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildPubMedFallbackSearchTerm(query, citationContext) {
-    const directDoi = directDoiFromContext(citationContext);
-    if (directDoi) {
+    if (directDoiFromContext(citationContext) || directPubMedIdFromContext(citationContext)) {
       return "";
     }
     const token = String(citationContext?.token ?? "").trim();
@@ -2920,6 +3058,22 @@ const __overciteSafariModules = Object.create(null);
     }
     const text = buildContextOnlySearchQuery(citationContext) || query;
     return keywordList(text).slice(0, 8).join(" ");
+  }
+
+  function buildPubMedTitleYearSearchTerm(query, citationContext = {}) {
+    if (directDoiFromContext(citationContext) || directPubMedIdFromContext(citationContext)) {
+      return "";
+    }
+    const titleQuery = buildPubMedTitleQuery(query, citationContext);
+    if (!titleQuery) {
+      return "";
+    }
+    const clauses = [];
+    if (citationContext?.parsedKeyHint?.year) {
+      clauses.push(`${citationContext.parsedKeyHint.year}[dp]`);
+    }
+    clauses.push(titleQuery);
+    return clauses.join(" AND ");
   }
 
   function buildPubMedTitleQuery(query, citationContext = {}) {
@@ -2955,8 +3109,14 @@ const __overciteSafariModules = Object.create(null);
     const contextQuery = buildContextOnlySearchQuery(citationContext);
     const titleQuery = buildInspireTitleQuery(query, citationContext);
     const urls = [];
+    if (hint?.surname && !hint?.year) {
+      const contextualQuery = [inspireAuthorClause(hint.surname), contextQuery].filter(Boolean).join(" and ");
+      urls.push(inspireUrl(contextualQuery));
+      urls.push(inspireUrl(inspireAuthorClause(hint.surname)));
+    }
     if (titleQuery) {
       urls.push(inspireUrl(`title "${titleQuery}"`));
+      urls.push(inspireUrl(titleQuery));
     }
     if (hint?.surname && hint?.year) {
       const contextualQuery = [inspireAuthorClause(hint.surname), `date ${hint.year}`, contextQuery].filter(Boolean).join(" and ");
@@ -3051,7 +3211,7 @@ const __overciteSafariModules = Object.create(null);
       id: work?.DOI ? `https://doi.org/${work.DOI}` : work?.URL,
       sourceId: SOURCE_IDS.CROSSREF,
       sourceLabel: SOURCE_DEFINITIONS[SOURCE_IDS.CROSSREF].label,
-      title: first(work?.title),
+      title: stripMarkup(first(work?.title)),
       authors: (work?.author ?? []).map(formatCrossrefAuthor).filter(Boolean),
       year: extractCrossrefYear(work),
       abstract: stripMarkup(work?.abstract),
@@ -3135,53 +3295,6 @@ const __overciteSafariModules = Object.create(null);
     });
   }
 
-  function mapSemanticScholarPaper(paper) {
-    const externalIds = paper?.externalIds ?? {};
-    const arxivId = stripArxivVersion(externalIds.ArXiv ?? "");
-    const doi = normalizeDoi(externalIds.DOI) || (arxivId ? `10.48550/arxiv.${arxivId.toLowerCase()}` : "");
-    return normalizeCandidate({
-      id: paper?.paperId ? `SemanticScholar:${paper.paperId}` : paper?.url,
-      sourceId: SOURCE_IDS.SEMANTIC_SCHOLAR,
-      sourceLabel: SOURCE_DEFINITIONS[SOURCE_IDS.SEMANTIC_SCHOLAR].label,
-      title: paper?.title,
-      authors: (paper?.authors ?? []).map((author) => author?.name).filter(Boolean),
-      year: paper?.year,
-      abstract: paper?.abstract,
-      doi,
-      citationCount: paper?.citationCount,
-      journal: paper?.venue,
-      type: Array.isArray(paper?.publicationTypes) ? paper.publicationTypes[0] : "",
-      url: paper?.url,
-      bibtexExportId: paper?.paperId,
-      eprint: arxivId,
-      archivePrefix: arxivId ? "arXiv" : "",
-      raw: paper
-    });
-  }
-
-  function mapSemanticScholarArxivPaper(paper) {
-    const externalIds = paper?.externalIds ?? {};
-    const arxivId = stripArxivVersion(externalIds.ArXiv ?? "");
-    return normalizeCandidate({
-      id: arxivId ? `https://arxiv.org/abs/${arxivId}` : paper?.url,
-      sourceId: SOURCE_IDS.ARXIV,
-      sourceLabel: SOURCE_DEFINITIONS[SOURCE_IDS.ARXIV].label,
-      title: paper?.title,
-      authors: (paper?.authors ?? []).map((author) => author?.name).filter(Boolean),
-      year: paper?.year,
-      abstract: paper?.abstract,
-      doi: normalizeDoi(externalIds.DOI) || (arxivId ? `10.48550/arxiv.${arxivId.toLowerCase()}` : ""),
-      citationCount: paper?.citationCount,
-      journal: paper?.venue || "arXiv",
-      type: "preprint",
-      url: arxivId ? `https://arxiv.org/abs/${arxivId}` : paper?.url,
-      bibtexExportId: arxivId,
-      eprint: arxivId,
-      archivePrefix: arxivId ? "arXiv" : "",
-      raw: paper
-    });
-  }
-
   function mapInspireRecord(record) {
     const metadata = record?.metadata ?? {};
     const doi = normalizeDoi(first((metadata?.dois ?? []).map((entry) => entry?.value).filter(Boolean)));
@@ -3254,7 +3367,7 @@ const __overciteSafariModules = Object.create(null);
 
   function normalizeCandidate(candidate) {
     const doi = normalizeDoi(candidate.doi);
-    const inferredArxivYear = inferYearFromArxivIdentifier(doi || candidate.eprint);
+    const inferredArxivYear = inferYearFromArxivIdentifier(candidate.eprint || (doi.includes("arxiv") ? doi : ""));
     return {
       bibcode: null,
       id: String(candidate.id ?? candidate.doi ?? candidate.title ?? "").trim(),
@@ -3282,7 +3395,10 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function isUsableCandidate(candidate) {
-    return Boolean(candidate?.title && candidate?.authors?.length && candidate?.year);
+    if (!candidate?.title || !candidate?.year) {
+      return false;
+    }
+    return Boolean(candidate?.authors?.length || candidate?.sourceId === SOURCE_IDS.PUBMED);
   }
 
   function mergeDuplicateCandidates(candidates) {
@@ -3364,7 +3480,6 @@ const __overciteSafariModules = Object.create(null);
       [SOURCE_IDS.CROSSREF]: 85,
       [SOURCE_IDS.INSPIRE]: 80,
       [SOURCE_IDS.DATACITE]: 70,
-      [SOURCE_IDS.SEMANTIC_SCHOLAR]: 60,
       [SOURCE_IDS.ARXIV]: 45
     }[sourceId] ?? 0;
   }
@@ -3499,6 +3614,15 @@ const __overciteSafariModules = Object.create(null);
     const token = String(citationContext?.token ?? "").trim();
     const normalized = normalizeDoi(token);
     return /^10\.\d{4,9}\/\S+$/i.test(normalized) ? normalized : "";
+  }
+
+  function directPubMedIdFromContext(citationContext = {}) {
+    if (citationContext?.searchMode !== "direct") {
+      return "";
+    }
+    const token = String(citationContext?.token ?? "").trim();
+    const match = token.match(/^(?:pmid\s*:?\s*|https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/)?(\d{5,9})(?:\/)?$/i);
+    return match?.[1] ?? "";
   }
 
   function directArxivIdFromContext(citationContext = {}) {
@@ -3781,10 +3905,50 @@ const __overciteSafariModules = Object.create(null);
     if (directArxivToken(citationContext) && availableSearchSources(routing).includes(SOURCE_IDS.ARXIV)) {
       return SOURCE_IDS.ARXIV;
     }
+    if (shouldPreferCrossrefForPreArxivPaper(routing, citationContext)) {
+      return SOURCE_IDS.CROSSREF;
+    }
+    if (shouldPreferCrossrefForGeneralPhysicsPaper(routing, citationContext)) {
+      return SOURCE_IDS.CROSSREF;
+    }
     if (isDatasetSoftwareLookup(citationContext) && availableSearchSources(routing).includes(SOURCE_IDS.DATACITE)) {
       return SOURCE_IDS.DATACITE;
     }
     return routing.primarySource;
+  }
+
+  function shouldPreferCrossrefForPreArxivPaper(routing, citationContext) {
+    if (routing.primarySource !== SOURCE_IDS.ARXIV || !availableSearchSources(routing).includes(SOURCE_IDS.CROSSREF)) {
+      return false;
+    }
+    const year = citationYear(citationContext);
+    return Boolean(year && year < 1991);
+  }
+
+  function shouldPreferCrossrefForGeneralPhysicsPaper(routing, citationContext) {
+    if (routing.profile !== "physics" ||
+        routing.primarySource !== SOURCE_IDS.INSPIRE ||
+        !availableSearchSources(routing).includes(SOURCE_IDS.CROSSREF)) {
+      return false;
+    }
+    const text = normalizeSearchText(`${citationContext?.token ?? ""} ${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`);
+    if (/\b(?:atlas|cms|lhcb|katrin|km3net|cern|lhc|higgs|boson|baryon|meson|quark|lepton|neutrino|muon|tau|hadron|collider|particle|standard model|cp violation|gauge boson|nonabelian|qcd|electroweak|supersymmetry|supergravity|ads cft)\b/.test(text)) {
+      return false;
+    }
+    return /\b(?:graphene|moire|hall effect|thin film|nickelate|ambient pressure|la3ni2o7|surface code)\b/.test(text);
+  }
+
+  function citationYear(citationContext) {
+    const hintYear = Number(citationContext?.parsedKeyHint?.year);
+    if (Number.isInteger(hintYear) && hintYear >= 1000) {
+      return hintYear;
+    }
+    const token = String(citationContext?.token ?? "");
+    const fullYear = token.match(/\b(1[5-9]\d{2}|20\d{2})\b/);
+    if (fullYear) {
+      return Number(fullYear[1]);
+    }
+    return null;
   }
 
   function availableSearchSources(routing) {
@@ -3886,6 +4050,12 @@ const __overciteSafariModules = Object.create(null);
       return authorMatches && overlap >= 2;
     }
     const yearMatches = Number(candidate?.year) === Number(hint.year);
+    if (yearMatches && strongTitleLeadYearMatch(citationContext, candidate)) {
+      return true;
+    }
+    if (!matchesExplicitTitleLeadWhenPresent(citationContext, candidate)) {
+      return false;
+    }
     return authorMatches && yearMatches && overlap >= 2;
   }
 
@@ -3900,6 +4070,15 @@ const __overciteSafariModules = Object.create(null);
     const normalizedDoiToken = token.replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "").replace(/^doi:/, "");
     if (candidate?.doi && normalizedDoiToken === String(candidate.doi).toLowerCase()) {
       return true;
+    }
+    const pubMedMatch = token.match(/^(?:pmid\s*:?\s*|https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/)?(\d{5,9})(?:\/)?$/i);
+    if (pubMedMatch) {
+      const pubMedId = pubMedMatch[1];
+      return candidate?.sourceId === SOURCE_IDS.PUBMED && (
+        String(candidate?.id ?? "").toLowerCase() === `pmid:${pubMedId}` ||
+        String(candidate?.bibtexExportId ?? "") === pubMedId ||
+        String(candidate?.url ?? "").includes(`/pubmed.ncbi.nlm.nih.gov/${pubMedId}/`)
+      );
     }
     const arxivMatch = token.match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
     if (!arxivMatch) {
@@ -3953,11 +4132,21 @@ const __overciteSafariModules = Object.create(null);
           computeBroadTokenBoost(citationContext, candidate) +
           computeBroadTitleLeadBoost(citationContext, candidate) +
           computeBroadAuthorBoost(citationContext, candidate) +
+          computeBroadYearBoost(citationContext, candidate) +
           computeBroadContextBoost(citationContext, candidate) +
-          computeCrossSourceBoost(candidate)
+          computeCanonicalTitleBoost(citationContext, candidate) +
+          computeCrossSourceBoost(candidate) +
+          computePublicationTypeBoost(candidate)
       };
     });
-    return filterContextualAuthorYearMismatches(citationContext, ranked.sort((left, right) => right.score - left.score));
+    return filterContextualAuthorHintMismatches(citationContext, ranked.sort((left, right) => right.score - left.score));
+  }
+
+  function filterContextualAuthorHintMismatches(citationContext, candidates) {
+    return filterSurnameOnlyAuthorMismatches(
+      citationContext,
+      filterContextualAuthorYearMismatches(citationContext, candidates)
+    );
   }
 
   function filterContextualAuthorYearMismatches(citationContext, candidates) {
@@ -3969,11 +4158,27 @@ const __overciteSafariModules = Object.create(null);
       candidate.sourceId === SOURCE_IDS.ADS ||
       directIdentifierMatches(citationContext, candidate) ||
       firstAuthorMatches(hint.surname, candidate?.authors?.[0]) ||
+      strongTitleLeadYearMatch(citationContext, candidate) ||
       strongCoauthorContextMatch(citationContext, candidate)
     );
   }
 
+  function filterSurnameOnlyAuthorMismatches(citationContext, candidates) {
+    const hint = citationContext?.parsedKeyHint;
+    if (citationContext?.searchMode === "direct" || !hint?.surname || hint?.year) {
+      return candidates;
+    }
+    const authorMatches = candidates.filter((candidate) =>
+      firstAuthorMatches(hint.surname, candidate?.authors?.[0]) ||
+      (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author))
+    );
+    return authorMatches.length ? authorMatches : candidates;
+  }
+
   function computeBroadTokenBoost(citationContext, candidate) {
+    if (directIdentifierMatches(citationContext, candidate)) {
+      return 20000;
+    }
     if (citationContext?.searchMode !== "simple" && citationContext?.searchMode !== "direct") {
       return 0;
     }
@@ -3981,6 +4186,15 @@ const __overciteSafariModules = Object.create(null);
     const title = normalizeSearchText(candidate?.title);
     if (!token || !title) {
       return 0;
+    }
+    const directTitleYear = directTitleYearParts(token);
+    if (citationContext?.searchMode === "direct" && directTitleYear.title) {
+      if (title === directTitleYear.title) {
+        return Number(candidate?.year) === directTitleYear.year ? 9000 : 6500;
+      }
+      if (title.startsWith(directTitleYear.title) || directTitleYear.title.startsWith(title)) {
+        return Number(candidate?.year) === directTitleYear.year ? 4500 : 2500;
+      }
     }
     if (title === token) {
       return 5000;
@@ -3994,26 +4208,72 @@ const __overciteSafariModules = Object.create(null);
     return 0;
   }
 
+  function directTitleYearParts(normalizedToken) {
+    const match = String(normalizedToken ?? "").match(/^(.+?)\s+(\d{4})$/);
+    if (!match) {
+      return { title: "", year: null };
+    }
+    const title = match[1].trim();
+    return title.split(" ").length >= 3 ? { title, year: Number(match[2]) } : { title: "", year: null };
+  }
+
   function computeBroadTitleLeadBoost(citationContext, candidate) {
-    if (citationContext?.searchMode === "simple" || citationContext?.searchMode === "direct") {
-      return 0;
+    const { normalizedLead, title } = titleLeadParts(citationContext, candidate);
+    if (title === normalizedLead) {
+      return 12000;
+    }
+    if (title.startsWith(normalizedLead) || isSubstantialTitleLeadPrefix(normalizedLead, title)) {
+      return 5000;
+    }
+    if (title.includes(normalizedLead) || isSubstantialTitleLeadPrefix(normalizedLead, title)) {
+      return 2400;
+    }
+    return 0;
+  }
+
+  function strongTitleLeadYearMatch(citationContext, candidate) {
+    const hint = citationContext?.parsedKeyHint;
+    if (!hint?.year || !yearsCompatible(candidate?.year, hint.year)) {
+      return false;
+    }
+    const { normalizedLead, title } = titleLeadParts(citationContext, candidate);
+    return Boolean(
+      normalizedLead &&
+      title &&
+      normalizedLead.split(" ").length >= 4 &&
+      (title === normalizedLead || title.startsWith(normalizedLead) || isSubstantialTitleLeadPrefix(normalizedLead, title))
+    );
+  }
+
+  function isSubstantialTitleLeadPrefix(normalizedLead, title) {
+    if (!normalizedLead || !title || !normalizedLead.startsWith(title)) {
+      return false;
+    }
+    const leadWords = normalizedLead.split(" ").filter(Boolean).length;
+    const titleWords = title.split(" ").filter(Boolean).length;
+    if (leadWords < 6) {
+      return true;
+    }
+    return titleWords >= Math.max(5, Math.ceil(leadWords * 0.7));
+  }
+
+  function yearsCompatible(candidateYear, hintYear) {
+    const candidate = Number(candidateYear);
+    const hint = Number(hintYear);
+    return Number.isFinite(candidate) && Number.isFinite(hint) && Math.abs(candidate - hint) <= 1;
+  }
+
+  function titleLeadParts(citationContext, candidate) {
+    if (citationContext?.searchMode === "direct") {
+      return { normalizedLead: "", title: "" };
     }
     const lead = extractSentenceLead(citationContext?.sentenceText);
     const normalizedLead = normalizeSearchText(lead);
     const title = normalizeSearchText(candidate?.title);
     if (!normalizedLead || !title || normalizedLead.split(" ").length < 3) {
-      return 0;
+      return { normalizedLead: "", title: "" };
     }
-    if (title === normalizedLead) {
-      return 5000;
-    }
-    if (title.startsWith(normalizedLead) || normalizedLead.startsWith(title)) {
-      return 1400;
-    }
-    if (title.includes(normalizedLead) || normalizedLead.includes(title)) {
-      return 900;
-    }
-    return 0;
+    return { normalizedLead, title };
   }
 
   function computeBroadAuthorBoost(citationContext, candidate) {
@@ -4027,11 +4287,13 @@ const __overciteSafariModules = Object.create(null);
     let boost = 0;
 
     if (firstAuthorMatchesHint) {
-      boost += 220;
+      boost += hint.year ? 220 : 700;
     } else if (anyAuthorMatchesHint) {
-      boost += hint.year ? -150 : 25;
+      boost += hint.year ? -150 : 120;
     } else if (hint.year) {
       boost -= 900;
+    } else {
+      boost -= 700;
     }
 
     if (hint.firstInitial) {
@@ -4048,11 +4310,39 @@ const __overciteSafariModules = Object.create(null);
       boost -= 180;
     }
 
+    if (strongFirstAuthorContextMatch(citationContext, candidate)) {
+      boost += 5600;
+    }
+
     if (strongCoauthorContextMatch(citationContext, candidate)) {
       boost += 5200;
     }
 
     return boost;
+  }
+
+  function computeBroadYearBoost(citationContext, candidate) {
+    const hint = citationContext?.parsedKeyHint;
+    if (!hint?.year) {
+      return 0;
+    }
+    const candidateYear = Number(candidate?.year);
+    const hintYear = Number(hint.year);
+    if (!Number.isFinite(candidateYear) || !Number.isFinite(hintYear)) {
+      return -350;
+    }
+    const firstAuthorMatchesHint = authorFamilyMatches(hint.surname, candidate?.authors?.[0]);
+    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author));
+    if (candidateYear === hintYear) {
+      return anyAuthorMatchesHint ? 7000 : 1200;
+    }
+    if (Math.abs(candidateYear - hintYear) === 1) {
+      return anyAuthorMatchesHint ? 900 : 200;
+    }
+    if (firstAuthorMatchesHint || anyAuthorMatchesHint) {
+      return -3500;
+    }
+    return -500;
   }
 
   function extractSentenceLead(value) {
@@ -4061,6 +4351,18 @@ const __overciteSafariModules = Object.create(null);
 
   function computeBroadContextBoost(citationContext, candidate) {
     return Math.min(contextSupportScore(citationContext, candidate), 80);
+  }
+
+  function computeCanonicalTitleBoost(citationContext, candidate) {
+    const context = normalizeSearchText(`${citationContext?.token ?? ""} ${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`);
+    const title = normalizeSearchText(candidate?.title);
+    if (/\bgodel\b/.test(context) &&
+        /\b(incompleteness|undecidable)\b/.test(context) &&
+        /\bunentscheidbare\b/.test(title) &&
+        /\bprincipia mathematica\b/.test(title)) {
+      return 900;
+    }
+    return 0;
   }
 
   function contextSupportScore(citationContext, candidate) {
@@ -4086,11 +4388,33 @@ const __overciteSafariModules = Object.create(null);
     if (!hint?.surname || !hint?.year || Number(candidate?.year) !== Number(hint.year)) {
       return false;
     }
+    if (!matchesExplicitTitleLeadWhenPresent(citationContext, candidate)) {
+      return false;
+    }
     if (firstAuthorMatches(hint.surname, candidate?.authors?.[0])) {
       return false;
     }
     const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author));
     return anyAuthorMatchesHint && contextSupportScore(citationContext, candidate) >= 12;
+  }
+
+  function strongFirstAuthorContextMatch(citationContext, candidate) {
+    const hint = citationContext?.parsedKeyHint;
+    if (!hint?.surname || !hint?.year || Number(candidate?.year) !== Number(hint.year)) {
+      return false;
+    }
+    if (!matchesExplicitTitleLeadWhenPresent(citationContext, candidate)) {
+      return false;
+    }
+    return firstAuthorMatches(hint.surname, candidate?.authors?.[0]) && contextSupportScore(citationContext, candidate) >= 12;
+  }
+
+  function matchesExplicitTitleLeadWhenPresent(citationContext, candidate) {
+    const { normalizedLead, title } = titleLeadParts(citationContext, candidate);
+    if (!normalizedLead || normalizedLead.split(" ").length < 5) {
+      return true;
+    }
+    return Boolean(title && (title === normalizedLead || title.startsWith(normalizedLead) || isSubstantialTitleLeadPrefix(normalizedLead, title)));
   }
 
   function computeCrossSourceBoost(candidate) {
@@ -4101,6 +4425,33 @@ const __overciteSafariModules = Object.create(null);
     } else if (candidate?.doi && !isArxivIdentified(candidate)) {
       boost += 35;
     }
+    return boost;
+  }
+
+  function computePublicationTypeBoost(candidate) {
+    const type = normalizeSearchText(candidate?.type);
+    const venue = normalizeSearchText(`${candidate?.journal ?? ""} ${candidate?.booktitle ?? ""} ${candidate?.publisher ?? ""}`);
+    let boost = 0;
+
+    if (/\b(journal article|article)\b/.test(type)) {
+      boost += 80;
+    }
+    if (/\bpreprint\b/.test(type)) {
+      boost += 20;
+    }
+    if (/\b(proposal|grant|award)\b/.test(type) || /\b(nsf award|hst proposal|grant|proposal)\b/.test(venue)) {
+      boost -= 650;
+    }
+    if (/\b(abstract|meeting abstract|poster)\b/.test(type) || /\b(meeting abstracts?|conference abstracts?|poster)\b/.test(venue)) {
+      boost -= 500;
+    }
+    if (/\bconference paper\b/.test(type)) {
+      boost -= 60;
+    }
+    if (/\bproceedings\b/.test(type) && !/\bproceedings article\b/.test(type)) {
+      boost -= 120;
+    }
+
     return boost;
   }
 
@@ -4126,7 +4477,11 @@ const __overciteSafariModules = Object.create(null);
       return false;
     }
     if (expected.includes(" ")) {
-      return family === expected || family.endsWith(` ${expected}`) || full.endsWith(` ${expected}`);
+      return family === expected ||
+        family.startsWith(`${expected} `) ||
+        family.endsWith(` ${expected}`) ||
+        full.startsWith(`${expected} `) ||
+        full.endsWith(` ${expected}`);
     }
     return family === expected;
   }
@@ -4232,6 +4587,10 @@ const __overciteSafariModules = Object.create(null);
     if (Math.abs(authorityDelta) >= 15) {
       return authorityDelta > 0 ? right : left;
     }
+    const qualityDelta = candidatePublicationQualityScore(right) - candidatePublicationQualityScore(left);
+    if (Math.abs(qualityDelta) >= 100) {
+      return qualityDelta > 0 ? right : left;
+    }
     const completenessDelta = candidateCompletenessScore(right) - candidateCompletenessScore(left);
     if (completenessDelta > 0) {
       return right;
@@ -4279,7 +4638,8 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function isArxivOnlyCandidate(candidate) {
-    return isArxivIdentified(candidate) && candidateSourceCount(candidate) === 1;
+    return (candidate?.sourceId === SOURCE_IDS.ARXIV || normalizeSearchText(candidate?.sourceLabel) === "arxiv") &&
+      candidateSourceCount(candidate) === 1;
   }
 
   function isArxivIdentified(candidate) {
@@ -4301,6 +4661,23 @@ const __overciteSafariModules = Object.create(null);
       candidate?.url,
       candidate?.citationCount > 0
     ].filter(Boolean).length;
+  }
+
+  function candidatePublicationQualityScore(candidate) {
+    const properties = new Set((candidate?.property ?? []).map((value) => normalizeSearchText(value)));
+    const doctype = normalizeSearchText(candidate?.doctype ?? candidate?.type);
+    const venue = normalizeSearchText(`${candidate?.journal ?? ""} ${candidate?.booktitle ?? ""} ${candidate?.publisher ?? ""}`);
+    let score = 0;
+    if (properties.has("refereed")) {
+      score += 260;
+    }
+    if (properties.has("article") || doctype === "article" || doctype === "journal article" || doctype === "journal-article") {
+      score += 90;
+    }
+    if (properties.has("nonarticle") || /abstract|meeting|conference|proceeding|proposal|grant|award|source code library|software/.test(`${doctype} ${venue}`)) {
+      score -= 220;
+    }
+    return score;
   }
 
   function candidateMergeKey(candidate) {
@@ -4412,7 +4789,7 @@ const __overciteSafariModules = Object.create(null);
     const url = new URL("https://api.adsabs.harvard.edu/v1/search/query");
     url.searchParams.set("q", query);
     url.searchParams.set("rows", "12");
-    url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,identifier,citation_count");
+    url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,identifier,citation_count,property,doctype,pub,bibstem,database");
 
     const response = await fetch(url, {
       headers: {

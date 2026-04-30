@@ -10,6 +10,18 @@ test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   assert.equal(manifest.background.service_worker, "src/background.js");
   assert.equal(manifest.background.type, "module");
   assert.deepEqual(manifest.background.preferred_environment, ["document", "service_worker"]);
+  assert.deepEqual(manifest.host_permissions, [
+    "https://overleaf.com/*",
+    "https://www.overleaf.com/*",
+    "https://api.adsabs.harvard.edu/*"
+  ]);
+  assert.deepEqual(manifest.optional_host_permissions, [
+    "https://api.crossref.org/*",
+    "https://api.datacite.org/*",
+    "https://eutils.ncbi.nlm.nih.gov/*",
+    "https://export.arxiv.org/*",
+    "https://inspirehep.net/*"
+  ]);
   assert.equal(manifest.icons["16"], "icons/icon-16.png");
   assert.equal(manifest.icons["32"], "icons/icon-32.png");
   assert.equal(manifest.icons["48"], "icons/icon-48.png");

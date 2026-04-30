@@ -69,30 +69,28 @@
         },
         "overcite.sourceProfile": {
           "type": "string",
-          "default": "ads-only",
+          "default": "astrophysics",
           "enum": [
-            "ads-only",
-            "arxiv-only",
             "astrophysics",
-            "broad",
-            "astro-physics",
-            "math-physics",
-            "life-sciences",
+            "physics",
+            "math",
             "computer-science",
+            "life-sciences",
+            "chemistry",
+            "general",
             "custom"
           ],
           "enumDescriptions": [
-            "Fast legacy ADS/SciX-only mode.",
-            "arXiv-only. Good for arXiv-heavy fields and preprints.",
             "Astrophysics preset using ADS/SciX only.",
-            "Crossref primary with arXiv, PubMed, and DataCite fallbacks.",
-            "ADS/SciX primary with arXiv, INSPIRE, and Crossref fallbacks.",
-            "arXiv primary with INSPIRE, Crossref, and ADS/SciX fallbacks.",
-            "PubMed primary with Crossref and DataCite fallbacks.",
-            "arXiv primary with Crossref fallback.",
+            "Physics preset using INSPIRE, then Crossref if needed.",
+            "Math preset using arXiv, then Crossref if needed.",
+            "Computer science preset using arXiv, then Crossref if needed.",
+            "Biology / medicine preset using PubMed, then Crossref if needed.",
+            "Chemistry preset using Crossref / DOI only.",
+            "General preset using Crossref / DOI only.",
             "Use overcite.primarySource and overcite.fallbackSources."
           ],
-          "markdownDescription": "Choose a source preset. `ads-only` keeps the fastest legacy behavior."
+          "markdownDescription": "Choose a subject-area preset. Each preset uses one fast default source; add fallbacks only for cross-field work."
         },
         "overcite.primarySource": {
           "type": "string",

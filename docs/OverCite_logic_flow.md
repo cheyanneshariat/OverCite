@@ -1,6 +1,6 @@
 # OverCite Logic Flow
 
-This document gives a visual overview of how OverCite goes from a rough cite token in Overleaf to a selected ADS paper and an updated BibTeX entry.
+This document gives a visual overview of how OverCite goes from a rough cite token in Overleaf to a selected paper and an updated BibTeX entry.
 
 ![OverCite logic flow](assets/overcite_logic_flow.svg)
 
@@ -19,13 +19,13 @@ flowchart TD
 
   G --> I["Build phrase and keyword concepts"]
   H --> I
-  C --> J["Build ADS query ladder"]
+  C --> J["Build source query plan"]
   D --> J
   E --> J
   I --> J
 
-  J --> K["Run ADS searches"]
-  K --> L["Merge unique bibcodes"]
+  J --> K["Run configured source searches"]
+  K --> L["Merge duplicate records"]
   L --> M["Rerank candidates"]
 
   M --> N["First-author preference"]
@@ -37,7 +37,7 @@ flowchart TD
 
   M --> T["Show popup results"]
   T --> U["User selects paper"]
-  U --> V["Export ADS BibTeX"]
+  U --> V["Export or build BibTeX"]
   V --> W["Resolve target bibliography file"]
   W --> X["Deduplicate or insert BibTeX entry"]
   X --> Y["Rewrite cite key in TeX"]
@@ -46,10 +46,11 @@ flowchart TD
 ## Short Notes
 
 - Immediate sentence context is prioritized over the wider context window.
-- Author-year keys such as `Shariat25` and `Cheng25` lead with `first_author + year` queries.
+- Author-year keys such as `Shariat25`, `Doudna14`, and `Higgs1964` lead with `first_author + year` signals.
 - Surname-only keys such as `El-Badry`, `Li`, and `Perez Paolino` now prefer `first_author` before broader `author` fallbacks.
 - Optional first initials such as `LiW25`, `JSmith05`, and `SmithJ05` can narrow common surnames.
 - Multi-word surnames such as `Perez Paolino` are supported.
+- ADS/SciX, arXiv, INSPIRE, Crossref, PubMed, and DataCite each use source-specific query syntax behind the same OverCite workflow.
 - Conservative morphology expansion helps retrieval for nearby scientific wording such as:
   - `mergers -> merger`
   - `binaries -> binary`

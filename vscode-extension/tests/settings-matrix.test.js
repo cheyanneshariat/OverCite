@@ -10,14 +10,13 @@ const KEY_MODES = ["authoryear", "authoryear-underscore", "authoryear-colon", "i
 const INSERT_MODES = ["append", "alphabetical"];
 const SEARCH_MODES = ["contextual", "simple", "direct"];
 const SOURCE_PROFILES = [
-  "ads-only",
-  "arxiv-only",
   "astrophysics",
-  "broad",
-  "astro-physics",
-  "math-physics",
-  "life-sciences",
+  "physics",
+  "math",
   "computer-science",
+  "life-sciences",
+  "chemistry",
+  "general",
   "custom"
 ];
 
@@ -190,7 +189,7 @@ function routeForCase(index) {
     {
       source: SOURCE_IDS.ADS,
       settings: {
-        sourceProfile: "ads-only",
+        sourceProfile: "astrophysics",
         sourceApiTokens: { ads: "ads-token" },
         adsApiToken: "ads-token"
       }
@@ -216,7 +215,7 @@ function routeForCase(index) {
     {
       source: SOURCE_IDS.ARXIV,
       settings: {
-        sourceProfile: "math-physics",
+        sourceProfile: "math",
         primarySource: SOURCE_IDS.ARXIV,
         fallbackSources: [],
         sourceApiTokens: {}
@@ -225,7 +224,7 @@ function routeForCase(index) {
     {
       source: SOURCE_IDS.INSPIRE,
       settings: {
-        sourceProfile: "custom",
+        sourceProfile: "physics",
         primarySource: SOURCE_IDS.INSPIRE,
         fallbackSources: [],
         sourceApiTokens: {}

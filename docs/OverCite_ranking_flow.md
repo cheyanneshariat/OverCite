@@ -1,6 +1,6 @@
 # OverCite Ranking Flow
 
-This document isolates the reranking logic that happens after OverCite has already collected a pool of ADS candidates.
+This document isolates the reranking logic that happens after OverCite has already collected a pool of candidates.
 
 ![OverCite ranking flow](assets/overcite_ranking_flow.svg)
 
@@ -21,6 +21,7 @@ This document isolates the reranking logic that happens after OverCite has alrea
 
 ## Short Notes
 
-- The ranking stage only reorders candidates that were already retrieved from ADS.
+- The ranking stage only reorders candidates that were already retrieved from the configured sources.
 - Better query construction still matters, especially for common surnames such as `Li`.
 - Optional first initials such as `LiW25`, `JSmith05`, and `SmithJ05` can help disambiguate common surnames before ranking.
+- When duplicate records appear across databases, records found by multiple sources get a small boost and arXiv-only duplicates rank below journal or DOI-backed records when the match quality is similar.

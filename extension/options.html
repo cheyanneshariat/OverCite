@@ -321,14 +321,13 @@
             <span class="label-text">Search coverage</span>
             <span class="hint">Choose which databases OverCite searches.</span>
             <select id="source-profile" name="sourceProfile">
-              <option value="ads-only">ADS/SciX only</option>
-              <option value="arxiv-only">arXiv only</option>
               <option value="astrophysics">Astrophysics</option>
-              <option value="broad">Broad search</option>
-              <option value="astro-physics">Astro / Physics</option>
-              <option value="math-physics">Math / Physics</option>
-              <option value="life-sciences">Life Sciences</option>
+              <option value="physics">Physics</option>
+              <option value="math">Math</option>
               <option value="computer-science">Computer Science</option>
+              <option value="life-sciences">Biology / Medicine</option>
+              <option value="chemistry">Chemistry</option>
+              <option value="general">General / DOI</option>
               <option value="custom">Custom</option>
             </select>
           </label>
@@ -416,8 +415,8 @@
           <span class="hint">Contextual is best for normal citation keys. Simple search and raw query stay available in the popup.</span>
           <select id="default-search-mode" name="defaultSearchMode">
             <option value="contextual">Contextual</option>
-            <option value="simple">Simple Search</option>
-            <option value="direct">Raw Query</option>
+            <option value="simple">Simple search</option>
+            <option value="direct">Raw query</option>
           </select>
         </label>
         </section>
@@ -436,7 +435,7 @@
         </label>
         </section>
         <div class="actions">
-          <button type="submit">Save Settings</button>
+          <button type="submit">Save settings</button>
           <div id="status" aria-live="polite"></div>
         </div>
       </form>

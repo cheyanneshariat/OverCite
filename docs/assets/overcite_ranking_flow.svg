@@ -24,8 +24,8 @@
   <text class="title" x="60" y="116">Candidate Ranking Flow</text>
 
   <rect class="box" x="390" y="150" width="420" height="88" rx="16"/>
-  <text class="text" x="600" y="192" text-anchor="middle">ADS Candidate Enters Pool</text>
-  <text class="subtext" x="600" y="220" text-anchor="middle">title, abstract, authors, year, bibcode</text>
+  <text class="text" x="600" y="192" text-anchor="middle">Candidate Enters Pool</text>
+  <text class="subtext" x="600" y="220" text-anchor="middle">title, abstract, authors, year, DOI, source id</text>
 
   <rect class="box" x="390" y="280" width="420" height="88" rx="16"/>
   <text class="text" x="600" y="322" text-anchor="middle">Start Base Score</text>

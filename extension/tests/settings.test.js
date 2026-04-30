@@ -38,21 +38,26 @@ test("normalizeSettings accepts valid default search modes and defaults invalid 
   assert.equal(normalizeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "contextual");
 });
 
-test("normalizeSettings accepts source profiles and defaults invalid ones to ADS-only", () => {
-  assert.equal(normalizeSettings({ sourceProfile: "ads-only" }).sourceProfile, "ads-only");
-  assert.equal(normalizeSettings({ sourceProfile: "arxiv-only" }).sourceProfile, "arxiv-only");
+test("normalizeSettings accepts source profiles and defaults invalid ones to Astrophysics", () => {
+  assert.equal(normalizeSettings({ sourceProfile: "ads-only" }).sourceProfile, "astrophysics");
+  assert.equal(normalizeSettings({ sourceProfile: "arxiv-only" }).sourceProfile, "math");
+  assert.equal(normalizeSettings({ sourceProfile: "broad" }).sourceProfile, "general");
   assert.equal(normalizeSettings({ sourceProfile: "astrophysics" }).sourceProfile, "astrophysics");
-  assert.equal(normalizeSettings({ sourceProfile: "astro-physics" }).sourceProfile, "astro-physics");
-  assert.equal(normalizeSettings({ sourceProfile: "math-physics" }).sourceProfile, "math-physics");
+  assert.equal(normalizeSettings({ sourceProfile: "physics" }).sourceProfile, "physics");
+  assert.equal(normalizeSettings({ sourceProfile: "math" }).sourceProfile, "math");
+  assert.equal(normalizeSettings({ sourceProfile: "astro-physics" }).sourceProfile, "astrophysics");
+  assert.equal(normalizeSettings({ sourceProfile: "math-physics" }).sourceProfile, "math");
   assert.equal(normalizeSettings({ sourceProfile: "life-sciences" }).sourceProfile, "life-sciences");
   assert.equal(normalizeSettings({ sourceProfile: "computer-science" }).sourceProfile, "computer-science");
-  assert.equal(normalizeSettings({ sourceProfile: "other" }).sourceProfile, "ads-only");
+  assert.equal(normalizeSettings({ sourceProfile: "chemistry" }).sourceProfile, "chemistry");
+  assert.equal(normalizeSettings({ sourceProfile: "general" }).sourceProfile, "general");
+  assert.equal(normalizeSettings({ sourceProfile: "other" }).sourceProfile, "astrophysics");
 });
 
-test("normalizeSettings uses ADS-only as the default fast source routing", () => {
+test("normalizeSettings uses Astrophysics as the default fast source routing", () => {
   const settings = normalizeSettings({});
 
-  assert.equal(settings.sourceProfile, "ads-only");
+  assert.equal(settings.sourceProfile, "astrophysics");
   assert.equal(settings.primarySource, "ads");
   assert.deepEqual(settings.fallbackSources, []);
 });
@@ -80,21 +85,17 @@ test("normalizeSettings drops removed routing values", () => {
 });
 
 test("normalizeSettings applies field presets when routing is not customized", () => {
-  const arxivOnly = normalizeSettings({ sourceProfile: "arxiv-only" });
-  assert.equal(arxivOnly.primarySource, "arxiv");
-  assert.deepEqual(arxivOnly.fallbackSources, []);
-
   const astrophysics = normalizeSettings({ sourceProfile: "astrophysics" });
   assert.equal(astrophysics.primarySource, "ads");
   assert.deepEqual(astrophysics.fallbackSources, []);
 
-  const astroPhysics = normalizeSettings({ sourceProfile: "astro-physics" });
-  assert.equal(astroPhysics.primarySource, "ads");
-  assert.deepEqual(astroPhysics.fallbackSources, ["arxiv", "inspire", "crossref"]);
+  const physics = normalizeSettings({ sourceProfile: "physics" });
+  assert.equal(physics.primarySource, "inspire");
+  assert.deepEqual(physics.fallbackSources, ["crossref"]);
 
-  const mathPhysics = normalizeSettings({ sourceProfile: "math-physics" });
-  assert.equal(mathPhysics.primarySource, "arxiv");
-  assert.deepEqual(mathPhysics.fallbackSources, ["inspire", "crossref", "ads"]);
+  const math = normalizeSettings({ sourceProfile: "math" });
+  assert.equal(math.primarySource, "arxiv");
+  assert.deepEqual(math.fallbackSources, ["crossref"]);
 
   const settings = normalizeSettings({ sourceProfile: "computer-science" });
 
@@ -103,7 +104,15 @@ test("normalizeSettings applies field presets when routing is not customized", (
 
   const lifeSciences = normalizeSettings({ sourceProfile: "life-sciences" });
   assert.equal(lifeSciences.primarySource, "pubmed");
-  assert.deepEqual(lifeSciences.fallbackSources, ["crossref", "datacite"]);
+  assert.deepEqual(lifeSciences.fallbackSources, ["crossref"]);
+
+  const chemistry = normalizeSettings({ sourceProfile: "chemistry" });
+  assert.equal(chemistry.primarySource, "crossref");
+  assert.deepEqual(chemistry.fallbackSources, []);
+
+  const general = normalizeSettings({ sourceProfile: "general" });
+  assert.equal(general.primarySource, "crossref");
+  assert.deepEqual(general.fallbackSources, ["datacite"]);
 });
 
 test("normalizeSettings trims optional source API tokens and mirrors the legacy ADS token", () => {
@@ -119,6 +128,26 @@ test("normalizeSettings trims optional source API tokens and mirrors the legacy 
     ads: "legacy-ads",
     ncbi: "ncbi"
   });
+});
+
+test("normalizeSettings preserves the public ADS-only upgrade path", () => {
+  const settings = normalizeSettings({
+    adsApiToken: " public-user-token ",
+    defaultSearchMode: "contextual",
+    citationKeyMode: "informative",
+    bibliographyInsertMode: "alphabetical",
+    contextWindowChars: 650
+  });
+
+  assert.equal(settings.adsApiToken, "public-user-token");
+  assert.deepEqual(settings.sourceApiTokens, { ads: "public-user-token" });
+  assert.equal(settings.sourceProfile, "astrophysics");
+  assert.equal(settings.primarySource, "ads");
+  assert.deepEqual(settings.fallbackSources, []);
+  assert.equal(settings.defaultSearchMode, "contextual");
+  assert.equal(settings.citationKeyMode, "informative");
+  assert.equal(settings.bibliographyInsertMode, "alphabetical");
+  assert.equal(settings.contextWindowChars, 650);
 });
 
 test("getStorageArea falls back to local storage when sync storage is unavailable", () => {

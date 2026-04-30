@@ -14,7 +14,7 @@ test("normalizeVsCodeSettings constrains and normalizes values", () => {
   });
 
   assert.equal(settings.adsApiToken, "token");
-  assert.equal(settings.sourceProfile, "ads-only");
+  assert.equal(settings.sourceProfile, "astrophysics");
   assert.equal(settings.primarySource, "ads");
   assert.deepEqual(settings.fallbackSources, []);
   assert.deepEqual(settings.sourceApiTokens, { ads: "token" });
@@ -25,26 +25,26 @@ test("normalizeVsCodeSettings constrains and normalizes values", () => {
   assert.deepEqual(settings.projectBibFileOverrides, { "/tmp/project": "refs.bib" });
 });
 
-test("normalizeVsCodeSettings supports broad source presets and custom routing", () => {
+test("normalizeVsCodeSettings supports subject-area source presets and custom routing", () => {
   const astrophysics = normalizeVsCodeSettings({ sourceProfile: "astrophysics" });
   assert.equal(astrophysics.primarySource, "ads");
   assert.deepEqual(astrophysics.fallbackSources, []);
 
-  const astroPhysics = normalizeVsCodeSettings({ sourceProfile: "astro-physics" });
-  assert.equal(astroPhysics.primarySource, "ads");
-  assert.deepEqual(astroPhysics.fallbackSources, ["arxiv", "inspire", "crossref"]);
+  const physics = normalizeVsCodeSettings({ sourceProfile: "physics" });
+  assert.equal(physics.primarySource, "inspire");
+  assert.deepEqual(physics.fallbackSources, ["crossref"]);
 
-  const mathPhysics = normalizeVsCodeSettings({ sourceProfile: "math-physics" });
-  assert.equal(mathPhysics.primarySource, "arxiv");
-  assert.deepEqual(mathPhysics.fallbackSources, ["inspire", "crossref", "ads"]);
+  const math = normalizeVsCodeSettings({ sourceProfile: "math" });
+  assert.equal(math.primarySource, "arxiv");
+  assert.deepEqual(math.fallbackSources, ["crossref"]);
 
-  const broad = normalizeVsCodeSettings({
-    sourceProfile: "broad",
+  const chemistry = normalizeVsCodeSettings({
+    sourceProfile: "chemistry",
     sourceApiTokens: { ads: " ads-token " }
   });
-  assert.equal(broad.primarySource, "crossref");
-  assert.deepEqual(broad.fallbackSources, ["arxiv", "pubmed", "datacite"]);
-  assert.deepEqual(broad.sourceApiTokens, { ads: "ads-token" });
+  assert.equal(chemistry.primarySource, "crossref");
+  assert.deepEqual(chemistry.fallbackSources, []);
+  assert.deepEqual(chemistry.sourceApiTokens, { ads: "ads-token" });
 
   const cs = normalizeVsCodeSettings({
     sourceProfile: "computer-science",
@@ -54,6 +54,14 @@ test("normalizeVsCodeSettings supports broad source presets and custom routing",
   assert.deepEqual(cs.fallbackSources, ["crossref"]);
   assert.deepEqual(cs.sourceApiTokens, { ncbi: "ncbi" });
 
+  const lifeSciences = normalizeVsCodeSettings({ sourceProfile: "life-sciences" });
+  assert.equal(lifeSciences.primarySource, "pubmed");
+  assert.deepEqual(lifeSciences.fallbackSources, ["crossref"]);
+
+  const general = normalizeVsCodeSettings({ sourceProfile: "general" });
+  assert.equal(general.primarySource, "crossref");
+  assert.deepEqual(general.fallbackSources, ["datacite"]);
+
   const custom = normalizeVsCodeSettings({
     sourceProfile: "custom",
     primarySource: "pubmed",
@@ -61,6 +69,34 @@ test("normalizeVsCodeSettings supports broad source presets and custom routing",
   });
   assert.equal(custom.primarySource, "pubmed");
   assert.deepEqual(custom.fallbackSources, ["crossref", "datacite"]);
+});
+
+test("normalizeVsCodeSettings maps legacy source presets to subject areas", () => {
+  assert.equal(normalizeVsCodeSettings({ sourceProfile: "ads-only" }).sourceProfile, "astrophysics");
+  assert.equal(normalizeVsCodeSettings({ sourceProfile: "astro-physics" }).sourceProfile, "astrophysics");
+  assert.equal(normalizeVsCodeSettings({ sourceProfile: "arxiv-only" }).sourceProfile, "math");
+  assert.equal(normalizeVsCodeSettings({ sourceProfile: "math-physics" }).sourceProfile, "math");
+  assert.equal(normalizeVsCodeSettings({ sourceProfile: "broad" }).sourceProfile, "general");
+});
+
+test("normalizeVsCodeSettings preserves the public ADS-only upgrade path", () => {
+  const settings = normalizeVsCodeSettings({
+    adsApiToken: " public-user-token ",
+    defaultSearchMode: "contextual",
+    citationKeyMode: "informative",
+    bibliographyInsertMode: "alphabetical",
+    contextWindowChars: 650
+  });
+
+  assert.equal(settings.adsApiToken, "public-user-token");
+  assert.deepEqual(settings.sourceApiTokens, { ads: "public-user-token" });
+  assert.equal(settings.sourceProfile, "astrophysics");
+  assert.equal(settings.primarySource, "ads");
+  assert.deepEqual(settings.fallbackSources, []);
+  assert.equal(settings.defaultSearchMode, "contextual");
+  assert.equal(settings.citationKeyMode, "informative");
+  assert.equal(settings.bibliographyInsertMode, "alphabetical");
+  assert.equal(settings.contextWindowChars, 650);
 });
 
 test("normalizeVsCodeSettings accepts direct as a valid default search mode", () => {

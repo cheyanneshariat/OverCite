@@ -9,7 +9,7 @@ export const MESSAGE_TYPES = Object.freeze({
 
 export const DEFAULT_SETTINGS = Object.freeze({
   adsApiToken: "",
-  sourceProfile: "ads-only",
+  sourceProfile: "astrophysics",
   primarySource: "ads",
   fallbackSources: [],
   sourceApiTokens: {},
@@ -99,5 +99,9 @@ export const CONTEXT_STOPWORDS = new Set([
   "found",
   "other",
   "others",
-  "also"
+  "also",
+  "publication",
+  "publications",
+  "target",
+  "targets"
 ]);
