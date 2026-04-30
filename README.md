@@ -10,7 +10,7 @@ Used OverCite in a manuscript? See [Acknowledge](#acknowledge).
 
 ## Demo
 
-The default command is `Alt+Shift+E` and can be changed in settings. Mac users: `Alt` = `Option` / `⌥`.
+The default shortcut is `Alt+Shift+E`. Mac users: `Alt` = `Option` / `⌥`.
 
 [![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
 
