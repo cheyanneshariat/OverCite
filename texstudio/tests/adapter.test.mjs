@@ -278,6 +278,69 @@ test("applyTexstudioRequest resolves bibliography paths from the root document",
   assert.match(await fs.readFile(path.join(projectDir, "bib", "references.bib"), "utf8"), /Root2025/);
 });
 
+test("applyTexstudioRequest resolves biblatex addbibresource targets", async () => {
+  const projectDir = await makeProject({
+    "main.tex": "\\documentclass{article}\n\\begin{document}\nBibLaTeX cite \\citep{Biblatex2025}.\n\\addbibresource{library/main.bib}\n\\end{document}",
+    "library/main.bib": ""
+  });
+  const activeFilePath = path.join(projectDir, "main.tex");
+  const activeText = await fs.readFile(activeFilePath, "utf8");
+
+  const response = await applyTexstudioRequest({
+    activeFilePath,
+    activeText,
+    projectDir,
+    cursorIndex: activeText.indexOf("Biblatex2025") + 3,
+    selectedCandidate: {
+      sourceId: "crossref",
+      sourceLabel: "Crossref",
+      title: "BibLaTeX Bibliography Target",
+      authors: ["Biblatex, Bea"],
+      year: 2025,
+      bibtex: "@article{candidate,title={BibLaTeX Bibliography Target},author={Biblatex, Bea},year={2025}}"
+    }
+  });
+
+  assert.equal(response.status, "applied");
+  assert.equal(response.bibFile.relativePath, "library/main.bib");
+  assert.match(await fs.readFile(path.join(projectDir, "library", "main.bib"), "utf8"), /Biblatex2025/);
+});
+
+test("applyTexstudioRequest honors project-specific bibliography overrides", async () => {
+  const projectDir = await makeProject({
+    "main.tex": "\\bibliography{refs}\nOverride cite \\citep{Override2025}.",
+    "refs.bib": "",
+    "manual.bib": ""
+  });
+  const activeFilePath = path.join(projectDir, "main.tex");
+  const activeText = await fs.readFile(activeFilePath, "utf8");
+
+  const response = await applyTexstudioRequest({
+    activeFilePath,
+    activeText,
+    projectDir,
+    cursorIndex: activeText.indexOf("Override2025") + 3,
+    settings: {
+      projectBibFileOverrides: {
+        [projectDir]: "manual.bib"
+      }
+    },
+    selectedCandidate: {
+      sourceId: "crossref",
+      sourceLabel: "Crossref",
+      title: "Project Override Citation",
+      authors: ["Override, Olive"],
+      year: 2025,
+      bibtex: "@article{candidate,title={Project Override Citation},author={Override, Olive},year={2025}}"
+    }
+  });
+
+  assert.equal(response.status, "applied");
+  assert.equal(response.bibFile.relativePath, "manual.bib");
+  assert.equal(await fs.readFile(path.join(projectDir, "refs.bib"), "utf8"), "");
+  assert.match(await fs.readFile(path.join(projectDir, "manual.bib"), "utf8"), /Override2025/);
+});
+
 test("loadTexstudioSettings layers user, project, TeXstudio, request, and env settings", async () => {
   const projectDir = await makeProject({
     ".overcite.json": JSON.stringify({

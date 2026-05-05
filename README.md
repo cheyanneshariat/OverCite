@@ -221,7 +221,7 @@ TeXstudio support currently lives as a local script macro plus Node CLI from thi
 4. In TeXstudio, open `Macros` -> `Edit Macros...`, then import `~/.overcite/texstudio/overcite-contextual.txsMacro` and `~/.overcite/texstudio/overcite-open-settings.txsMacro`.
 5. Open a saved `.tex` project with a `.bib` file, put the cursor inside a citation key, and run the macro.
 
-Use `Alt+Shift+E` to resolve citations and `Alt+Shift+O` to open settings. Optional simple-search and raw-query macros are generated too. For full setup, settings, and testing instructions, see [texstudio/README.md](texstudio/README.md) and [texstudio/SETTINGS.md](texstudio/SETTINGS.md).
+Use `Alt+Shift+E` to resolve citations and `Alt+Shift+O` to open settings. Optional simple-search and raw-query macros are generated too. Run `node texstudio/scripts/install.mjs --doctor` if setup looks off. For full setup, settings, and testing instructions, see [texstudio/README.md](texstudio/README.md) and [texstudio/SETTINGS.md](texstudio/SETTINGS.md).
 
 </details>
 

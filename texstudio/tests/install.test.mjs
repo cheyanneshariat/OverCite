@@ -135,6 +135,73 @@ test("installer can customize the settings open command", async () => {
   assert.match(openSettings.tag.join("\n"), /var OVERCITE_OPEN_COMMAND_PREFIX = "custom-open"/);
 });
 
+test("installer can open settings after setup", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "overcite-texstudio-install-edit-"));
+  const outputDir = path.join(tempDir, "macros");
+  const settingsPath = path.join(tempDir, "settings.json");
+  const openedPathLog = path.join(tempDir, "opened.txt");
+  const openerPath = path.join(tempDir, "opener.mjs");
+  await fs.writeFile(openerPath, [
+    "import fs from 'node:fs';",
+    `fs.writeFileSync(${JSON.stringify(openedPathLog)}, process.argv[2]);`
+  ].join("\n"), "utf8");
+
+  await execFileAsync(process.execPath, [
+    installerPath,
+    "--output-dir", outputDir,
+    "--settings-path", settingsPath,
+    "--open-command", `${process.execPath} ${openerPath}`,
+    "--edit-settings"
+  ], { cwd: repoRoot });
+
+  assert.equal(await fs.readFile(openedPathLog, "utf8"), settingsPath);
+});
+
+test("installer doctor verifies generated setup files", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "overcite-texstudio-install-doctor-"));
+  const outputDir = path.join(tempDir, "macros");
+  const settingsPath = path.join(tempDir, "settings.json");
+
+  await execFileAsync(process.execPath, [
+    installerPath,
+    "--output-dir", outputDir,
+    "--settings-path", settingsPath,
+    "--source-profile", "general"
+  ], { cwd: repoRoot });
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    installerPath,
+    "--output-dir", outputDir,
+    "--settings-path", settingsPath,
+    "--doctor"
+  ], { cwd: repoRoot });
+
+  assert.match(stdout, /OverCite TeXstudio doctor/);
+  assert.match(stdout, /OK\s+OverCite: Resolve Citation macro \(Alt\+Shift\+E\)/);
+  assert.match(stdout, /OK\s+Open Settings macro \(Alt\+Shift\+O\)/);
+  assert.match(stdout, /OK\s+Settings JSON/);
+  assert.match(stdout, /Setup looks ready/);
+});
+
+test("installer doctor fails clearly before setup is generated", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "overcite-texstudio-install-doctor-missing-"));
+  const outputDir = path.join(tempDir, "macros");
+  const settingsPath = path.join(tempDir, "settings.json");
+
+  try {
+    await execFileAsync(process.execPath, [
+      installerPath,
+      "--output-dir", outputDir,
+      "--settings-path", settingsPath,
+      "--doctor"
+    ], { cwd: repoRoot });
+    assert.fail("doctor should fail when setup files are missing");
+  } catch (error) {
+    assert.match(error.stdout, /ERR\s+OverCite: Resolve Citation macro/);
+    assert.match(error.stdout, /Run the installer again/);
+  }
+});
+
 test("installer help documents the easy setup command", async () => {
   const { stdout } = await execFileAsync(process.execPath, [installerPath, "--help"], {
     cwd: repoRoot
@@ -143,6 +210,8 @@ test("installer help documents the easy setup command", async () => {
   assert.match(stdout, /--source-profile NAME/);
   assert.match(stdout, /--ads-token TOKEN/);
   assert.match(stdout, /--open-command COMMAND/);
+  assert.match(stdout, /--edit-settings/);
+  assert.match(stdout, /--doctor/);
 });
 
 function escapeRegex(value) {

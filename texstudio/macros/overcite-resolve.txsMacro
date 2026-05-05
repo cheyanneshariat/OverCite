@@ -84,6 +84,9 @@ function chooseCandidate(candidates) {
   if (labels.length == 0) {
     throw "OverCite found no matching records.";
   }
+  if (labels.length == 1) {
+    return 0;
+  }
   var dialog = new UniversalInputDialog();
   dialog.add(labels, "OverCite result", "result");
   if (dialog.exec() != 1) return -1;

@@ -28,6 +28,12 @@ To add an ADS/SciX token during setup:
 node texstudio/scripts/install.mjs --source-profile astrophysics --ads-token YOUR_TOKEN
 ```
 
+To open the settings file immediately after setup:
+
+```bash
+node texstudio/scripts/install.mjs --source-profile astrophysics --edit-settings
+```
+
 Then in TeXstudio:
 
 1. Open `Macros` -> `Edit Macros...`.
@@ -36,6 +42,14 @@ Then in TeXstudio:
 4. Use the imported default shortcut, `Alt+Shift+E`, or change it in the macro editor.
 5. Use `Alt+Shift+O` to open settings from TeXstudio.
 6. Optional: add `overcite-simple.txsMacro` and `overcite-raw-query.txsMacro`; they default to `Alt+Shift+S` and `Alt+Shift+R`.
+
+If something does not work, run:
+
+```bash
+node texstudio/scripts/install.mjs --doctor
+```
+
+The doctor checks Node, the generated macro files, the settings JSON, and the local settings reference. On macOS it also looks for TeXstudio in `/Applications` and `~/Applications`.
 
 ## Manual Setup
 
@@ -90,6 +104,7 @@ The v0.3.0 source settings are supported: `sourceProfile`, `primarySource`, `fal
 - Save the active `.tex` file before running the macro.
 - The macro edits the active TeXstudio buffer; the CLI writes the `.bib` file.
 - If multiple `.bib` files are possible, the macro asks which one to update.
+- If setup looks wrong, run `node texstudio/scripts/install.mjs --doctor` from the OverCite folder.
 - The resolve macros use TeXstudio script APIs documented for 4.x: `editor.document().getRootDocument()`, `editor.text()`, `cursor.lineNumber()`, `writeFile`, `readFile`, `system`, `UniversalInputDialog`, and `cursor.setPosition`.
 - The settings macro opens `~/.overcite/texstudio-settings.json` in the system default editor. If a platform needs a different open command, rerun the installer with `--open-command`.
 - This integration deliberately follows OverCite v0.3.0 behavior, not the reverted v0.3.1 raw-query patch.
@@ -102,6 +117,8 @@ npm run check
 npm test
 npm run test:smoke
 npm run install:local -- --help
+node scripts/install.mjs --output-dir tmp/doctor-macros --settings-path tmp/doctor-settings.json
+node scripts/install.mjs --output-dir tmp/doctor-macros --settings-path tmp/doctor-settings.json --doctor
 ```
 
 Full regression before packaging:

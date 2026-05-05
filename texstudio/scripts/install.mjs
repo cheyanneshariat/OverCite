@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -36,6 +37,12 @@ try {
   const adsToken = String(args["ads-token"] ?? "").trim();
   const ncbiApiKey = String(args["ncbi-api-key"] ?? "").trim();
 
+  if (args.doctor) {
+    const ok = await runDoctor({ outputDir, settingsPath });
+    process.exitCode = ok ? 0 : 1;
+    process.exit();
+  }
+
   await assertFileExists(cliPath, "OverCite TeXstudio CLI");
   await assertFileExists(settingsReferenceSourcePath, "OverCite TeXstudio settings reference");
   const sourceMacro = await fs.readFile(macroSourcePath, "utf8");
@@ -72,6 +79,9 @@ try {
     });
 
   printSummary({ outputDir, macroFiles, settingsResult, settingsReferencePath });
+  if (args["edit-settings"]) {
+    openSettingsFile(settingsPath, resolveOpenCommandPrefix(args["open-command"]));
+  }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
@@ -209,6 +219,119 @@ function resolveOpenCommandPrefix(value) {
   return "xdg-open";
 }
 
+async function runDoctor({ outputDir, settingsPath }) {
+  const checks = [];
+  checks.push(await fileCheck("Node.js 18+", true, () => {
+    assertNodeVersion();
+    return process.version;
+  }));
+  checks.push(await pathCheck("OverCite TeXstudio CLI", cliPath, true));
+  checks.push(await pathCheck("Resolve macro template", macroSourcePath, true));
+  checks.push(await pathCheck("Open Settings macro template", settingsMacroSourcePath, true));
+  checks.push(await pathCheck("Settings reference source", settingsReferenceSourcePath, true));
+
+  for (const [, name, fileName, shortcut] of MODES) {
+    checks.push(await jsonMacroCheck(`${name} macro (${shortcut})`, path.join(outputDir, fileName), true));
+  }
+  checks.push(await jsonMacroCheck("Open Settings macro (Alt+Shift+O)", path.join(outputDir, "overcite-open-settings.txsMacro"), true));
+  checks.push(await pathCheck("Installed settings reference", path.join(outputDir, defaultSettingsReferenceFileName), true));
+  checks.push(await settingsJsonCheck(settingsPath));
+  checks.push(await texstudioAppCheck());
+
+  process.stdout.write("OverCite TeXstudio doctor\n\n");
+  for (const check of checks) {
+    process.stdout.write(`${check.ok ? "OK " : check.required ? "ERR" : "WARN"}  ${check.label}${check.detail ? ` - ${check.detail}` : ""}\n`);
+  }
+  const failed = checks.filter((check) => check.required && !check.ok);
+  if (failed.length) {
+    process.stdout.write("\nRun the installer again, then reimport the generated macros in TeXstudio:\n");
+    process.stdout.write("  node texstudio/scripts/install.mjs --source-profile astrophysics\n");
+    return false;
+  }
+  process.stdout.write("\nSetup looks ready. If TeXstudio still asks for permission, allow the OverCite macro to run external commands.\n");
+  return true;
+}
+
+async function fileCheck(label, required, fn) {
+  try {
+    return { label, ok: true, required: Boolean(required), detail: fn() };
+  } catch (error) {
+    return { label, ok: false, required: Boolean(required), detail: error.message };
+  }
+}
+
+async function pathCheck(label, filePath, required) {
+  try {
+    await fs.access(filePath);
+    return { label, ok: true, required, detail: filePath };
+  } catch {
+    return { label, ok: false, required, detail: filePath };
+  }
+}
+
+async function jsonMacroCheck(label, filePath, required) {
+  try {
+    const parsed = JSON.parse(await fs.readFile(filePath, "utf8"));
+    const valid = parsed?.type === "Script" && Array.isArray(parsed.tag) && parsed.tag.length > 0;
+    return {
+      label,
+      ok: valid,
+      required,
+      detail: valid ? filePath : "not a valid TeXstudio script macro JSON"
+    };
+  } catch (error) {
+    return { label, ok: false, required, detail: `${filePath} (${error.message})` };
+  }
+}
+
+async function settingsJsonCheck(settingsPath) {
+  try {
+    const settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+    const sourceProfile = settings.sourceProfile ? `sourceProfile=${settings.sourceProfile}` : "sourceProfile not set";
+    return { label: "Settings JSON", ok: true, required: true, detail: `${settingsPath} (${sourceProfile})` };
+  } catch (error) {
+    return { label: "Settings JSON", ok: false, required: true, detail: `${settingsPath} (${error.message})` };
+  }
+}
+
+async function texstudioAppCheck() {
+  if (process.platform !== "darwin") {
+    return { label: "TeXstudio app", ok: true, required: false, detail: "not checked on this platform" };
+  }
+  const appDirs = ["/Applications", path.join(os.homedir(), "Applications")];
+  for (const appDir of appDirs) {
+    let entries = [];
+    try {
+      entries = await fs.readdir(appDir);
+    } catch {
+      continue;
+    }
+    const match = entries.find((entry) => /^texstudio.*\.app$/i.test(entry));
+    if (match) {
+      return { label: "TeXstudio app", ok: true, required: false, detail: path.join(appDir, match) };
+    }
+  }
+  return { label: "TeXstudio app", ok: false, required: false, detail: "not found in /Applications or ~/Applications" };
+}
+
+function openSettingsFile(settingsPath, openCommandPrefix) {
+  const command = `${openCommandPrefix} ${quoteShellArg(settingsPath)}`;
+  const result = spawnSync(command, {
+    shell: true,
+    stdio: "inherit"
+  });
+  if (result.error) {
+    throw new Error(`Could not open ${settingsPath}: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(`Could not open ${settingsPath}. Edit it manually, or rerun with --open-command.`);
+  }
+}
+
+function quoteShellArg(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
 function parseArgs(rawArgs) {
   const parsed = {};
   for (let index = 0; index < rawArgs.length; index += 1) {
@@ -242,6 +365,8 @@ Options:
   --ncbi-api-key TOKEN    Optional NCBI API key for PubMed lookups.
   --node-path PATH        Node executable path to embed in generated macros.
   --open-command COMMAND  Command prefix for the Open Settings macro.
+  --edit-settings         Open the settings JSON after setup.
+  --doctor                Check the generated macros, settings, and local setup.
   --force                 Recreate the settings file instead of merging.
   --skip-settings         Only generate macros.
   --help                  Show this help text.
@@ -263,6 +388,7 @@ Next steps:
   3. Import overcite-open-settings.txsMacro so users can edit settings from TeXstudio.
   4. Use Alt+Shift+E for OverCite and Alt+Shift+O to open settings.
   5. Optionally add the simple and raw-query macros too.
+  6. Run node texstudio/scripts/install.mjs --doctor if anything seems off.
 
 Generated macro folder:
   ${outputDir}

@@ -8,6 +8,18 @@ TeXstudio uses a JSON settings file:
 
 Open it from TeXstudio with `Macros` -> `OverCite: Open Settings`, or use the default shortcut `Alt+Shift+O`.
 
+You can also open it during setup:
+
+```bash
+node texstudio/scripts/install.mjs --edit-settings
+```
+
+If TeXstudio cannot find the macros or settings file, run:
+
+```bash
+node texstudio/scripts/install.mjs --doctor
+```
+
 Settings are loaded in this order. Later layers override earlier layers:
 
 1. `~/.overcite/texstudio-settings.json`
