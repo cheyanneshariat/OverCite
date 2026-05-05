@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added experimental TeXstudio support through a local script macro, Node CLI, and one-command setup helper that reuse the v0.3.0 source-routing and insertion core.
+
 ## ✨ 0.3.0
 
 - Added broader source presets with arXiv, INSPIRE, Crossref, PubMed, and DataCite.

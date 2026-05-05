@@ -1,0 +1,183 @@
+%SCRIPT
+// OverCite for TeXstudio.
+// Install as a Script macro. For Simple search or Raw query shortcuts, copy this
+// macro and change OVERCITE_MODE to "simple" or "direct".
+var OVERCITE_MODE = "contextual";
+var OVERCITE_NODE = persistentOrDefault("overciteNodePath", "node");
+var OVERCITE_CLI = persistentOrDefault("overciteCliPath", "/absolute/path/to/OverCite/texstudio/src/cli.mjs");
+
+function persistentOrDefault(name, fallback) {
+  try {
+    if (hasPersistent(name)) {
+      var value = getPersistent(name);
+      if (value) return value;
+    }
+  } catch (ignore) {}
+  return fallback;
+}
+
+function quoteArg(value) {
+  return "\"" + String(value).replace(/"/g, "\\\"") + "\"";
+}
+
+function dirname(fileName) {
+  var normalized = String(fileName || "").replace(/\\/g, "/");
+  var index = normalized.lastIndexOf("/");
+  if (index < 0) return ".";
+  return normalized.substring(0, index) || "/";
+}
+
+function currentFileName() {
+  try {
+    if (editor.fileName()) return editor.fileName();
+  } catch (ignore) {}
+  try {
+    if (app.getCurrentFileName()) return app.getCurrentFileName();
+  } catch (ignore2) {}
+  return "";
+}
+
+function currentRootEditor() {
+  try {
+    var rootDoc = editor.document().getRootDocument();
+    if (rootDoc && rootDoc.editorView && rootDoc.editorView.editor) {
+      return rootDoc.editorView.editor;
+    }
+  } catch (ignore) {}
+  try {
+    var doc = documentManager.getRootDocumentForDoc(editor.document());
+    if (doc && doc.editorView && doc.editorView.editor) {
+      return doc.editorView.editor;
+    }
+  } catch (ignore2) {}
+  return editor;
+}
+
+function readJsonFile(fileName) {
+  return JSON.parse(readFile(fileName));
+}
+
+function runCli(command, requestPath, responsePath, workingDirectory) {
+  var cmd = quoteArg(OVERCITE_NODE) + " " + quoteArg(OVERCITE_CLI) + " " + command +
+    " --request " + quoteArg(requestPath) +
+    " --response " + quoteArg(responsePath);
+  var process = system(cmd, workingDirectory);
+  if (process == null) {
+    throw "TeXstudio did not allow OverCite to run an external command. Grant macro execution permission and try again.";
+  }
+  process.waitForFinished();
+  var exitCode = typeof process.exitCode == "function" ? process.exitCode() : process.exitCode;
+  if (exitCode != 0) {
+    var stderr = "";
+    try {
+      stderr = process.readAllStandardErrorStr();
+    } catch (ignore) {}
+    throw stderr || "OverCite command failed.";
+  }
+}
+
+function chooseCandidate(candidates) {
+  var labels = [];
+  for (var i = 0; i < candidates.length; i++) {
+    labels.push((i + 1) + ". " + (candidates[i].choiceLabel || candidates[i].title || candidates[i].generatedKey));
+  }
+  if (labels.length == 0) {
+    throw "OverCite found no matching records.";
+  }
+  var dialog = new UniversalInputDialog();
+  dialog.add(labels, "OverCite result", "result");
+  if (dialog.exec() != 1) return -1;
+  var selected = dialog.get("result");
+  for (var j = 0; j < labels.length; j++) {
+    if (labels[j] == selected) return j;
+  }
+  return 0;
+}
+
+function chooseBibFile(candidates) {
+  var labels = [];
+  for (var i = 0; i < candidates.length; i++) labels.push(candidates[i]);
+  var dialog = new UniversalInputDialog();
+  dialog.add(labels, "Bibliography file", "bib");
+  if (dialog.exec() != 1) return "";
+  return dialog.get("bib");
+}
+
+function applyActiveEdit(response) {
+  if (response.activeFile && typeof response.activeFile.updatedText == "string") {
+    editor.setText(response.activeFile.updatedText);
+    return;
+  }
+  var edit = response.activeEdit;
+  cursor.beginEditBlock();
+  cursor.setPosition(edit.start, cursorEnums.MoveAnchor);
+  cursor.setPosition(edit.end, cursorEnums.KeepAnchor);
+  cursor.replaceSelectedText(edit.text);
+  cursor.endEditBlock();
+}
+
+function runOverCite() {
+  if (!OVERCITE_CLI || OVERCITE_CLI.indexOf("/absolute/path/to/") == 0) {
+    throw "Set the persistent overciteCliPath value to texstudio/src/cli.mjs before using this macro.";
+  }
+  var activeFilePath = currentFileName();
+  if (!activeFilePath) {
+    throw "Save this TeX file before running OverCite.";
+  }
+  var rootEd = currentRootEditor();
+  var rootFilePath = activeFilePath;
+  try {
+    if (rootEd.fileName()) rootFilePath = rootEd.fileName();
+  } catch (ignore) {}
+  var projectDir = dirname(rootFilePath || activeFilePath);
+  var requestPath = projectDir + "/.overcite-texstudio-request.json";
+  var responsePath = projectDir + "/.overcite-texstudio-response.json";
+  var request = {
+    activeFilePath: activeFilePath,
+    activeText: editor.text(),
+    rootFilePath: rootFilePath,
+    rootText: rootEd.text(),
+    projectDir: projectDir,
+    cursor: {
+      line: cursor.lineNumber(),
+      column: cursor.columnNumber(),
+      lineBase: 0,
+      columnBase: 0
+    },
+    searchMode: OVERCITE_MODE
+  };
+
+  writeFile(requestPath, JSON.stringify(request));
+  runCli("resolve", requestPath, responsePath, projectDir);
+  var response = readJsonFile(responsePath);
+  if (response.status == "error") throw response.message;
+  if (response.status != "needs-selection") throw response.message || "OverCite returned no selectable results.";
+  var selectedIndex = chooseCandidate(response.candidates);
+  if (selectedIndex < 0) return;
+
+  request.citationContext = response.citationContext;
+  request.selectedCandidate = response.candidates[selectedIndex];
+  writeFile(requestPath, JSON.stringify(request));
+  runCli("apply", requestPath, responsePath, projectDir);
+  response = readJsonFile(responsePath);
+
+  if (response.status == "needs-choice") {
+    var bibTarget = chooseBibFile(response.bibCandidates);
+    if (!bibTarget) return;
+    request.bibTarget = bibTarget;
+    writeFile(requestPath, JSON.stringify(request));
+    runCli("apply", requestPath, responsePath, projectDir);
+    response = readJsonFile(responsePath);
+  }
+
+  if (response.status == "error") throw response.message;
+  if (response.status != "applied") throw response.message || "OverCite did not apply a citation.";
+  applyActiveEdit(response);
+  information("OverCite inserted " + response.finalKey + " into " + response.bibFile.relativePath + ".");
+}
+
+try {
+  runOverCite();
+} catch (error) {
+  critical(String(error));
+}

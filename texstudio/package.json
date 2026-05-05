@@ -1,0 +1,16 @@
+{
+  "name": "overcite-texstudio",
+  "version": "0.3.0",
+  "private": true,
+  "license": "CC-BY-NC-ND-4.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "check": "node --check src/adapter.mjs && node --check src/cli.mjs && node --check scripts/install.mjs && node --check scripts/run-smoke-test.mjs && node --check tests/adapter.test.mjs && node --check tests/cli.test.mjs && node --check tests/install.test.mjs && node --check tests/macro.test.mjs",
+    "install:local": "node scripts/install.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:smoke": "node scripts/run-smoke-test.mjs"
+  }
+}
