@@ -17,7 +17,7 @@ The integration is intentionally small:
 3. From the OverCite folder, run:
 
 ```bash
-node texstudio/scripts/install.mjs --source-profile astrophysics
+./install-texstudio.sh --source-profile astrophysics
 ```
 
 The installer writes ready-to-import macros to `~/.overcite/texstudio/`, creates a starter settings file at `~/.overcite/texstudio-settings.json`, and copies a local settings reference to `~/.overcite/texstudio/settings-reference.md`.
@@ -25,13 +25,13 @@ The installer writes ready-to-import macros to `~/.overcite/texstudio/`, creates
 To add an ADS/SciX token during setup:
 
 ```bash
-node texstudio/scripts/install.mjs --source-profile astrophysics --ads-token YOUR_TOKEN
+./install-texstudio.sh --source-profile astrophysics --ads-token YOUR_TOKEN
 ```
 
 To open the settings file immediately after setup:
 
 ```bash
-node texstudio/scripts/install.mjs --source-profile astrophysics --edit-settings
+./install-texstudio.sh --source-profile astrophysics --edit-settings
 ```
 
 Then in TeXstudio:
@@ -52,6 +52,17 @@ node texstudio/scripts/install.mjs --doctor
 ```
 
 The doctor checks Node, the generated macro files, the settings JSON, and the local settings reference. On macOS it also looks for TeXstudio in `/Applications` and `~/Applications`.
+
+## Quick Check
+
+Use `fixtures/quick-check` to verify the token-free path after setup:
+
+1. Open `texstudio/fixtures/quick-check/main.tex` in TeXstudio.
+2. Put the cursor inside `10.1038/s41586-021-03819-2`.
+3. Run `OverCite: Resolve Citation (Raw Query)`.
+4. Confirm the buffer changes to `\citep{Jumper2021}` and `references.bib` contains the AlphaFold entry.
+
+The `.tex` file is updated in the TeXstudio buffer first; save the file when you want the disk copy to change. The `.bib` file is written immediately.
 
 ## Manual Setup
 
@@ -121,6 +132,12 @@ npm run test:smoke
 npm run install:local -- --help
 node scripts/install.mjs --output-dir tmp/doctor-macros --settings-path tmp/doctor-settings.json
 node scripts/install.mjs --output-dir tmp/doctor-macros --settings-path tmp/doctor-settings.json --doctor
+```
+
+From the repository root, the same focused TeXstudio suite is:
+
+```bash
+cd texstudio && npm run check && npm test && npm run test:smoke
 ```
 
 Full regression before packaging:

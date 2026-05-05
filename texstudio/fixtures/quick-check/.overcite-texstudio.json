@@ -1,0 +1,6 @@
+{
+  "sourceProfile": "general",
+  "primarySource": "crossref",
+  "fallbackSources": [],
+  "defaultSearchMode": "direct"
+}

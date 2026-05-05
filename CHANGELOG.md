@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+## 0.3.2
+
 - Added experimental TeXstudio support through a local script macro, Node CLI, and one-command setup helper that reuse the v0.3.0 source-routing and insertion core.
 - Added a TeXstudio `Open Settings` macro and full settings reference so users can edit every supported option from the TeXstudio workflow.
+- Added TeXstudio setup diagnostics with `--doctor`, clearer first-run permission guidance, a token-free quick-check fixture, and stronger macro error handling.
+- Added TeXstudio coverage for settings layering, root documents, BibLaTeX targets, project `.bib` overrides, paths with spaces, stale response files, and the quick smoke flow.
 
 ## ✨ 0.3.0
 

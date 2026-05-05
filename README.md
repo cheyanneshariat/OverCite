@@ -217,7 +217,7 @@ TeXstudio support currently lives as a local script macro plus Node CLI from thi
 
 1. Clone or download this repository.
 2. Install Node.js 18 or newer.
-3. Run `node texstudio/scripts/install.mjs --source-profile astrophysics`.
+3. Run `./install-texstudio.sh --source-profile astrophysics`.
 4. In TeXstudio, open `Macros` -> `Edit Macros...`, then import `~/.overcite/texstudio/overcite-contextual.txsMacro` and `~/.overcite/texstudio/overcite-open-settings.txsMacro`.
 5. Open a saved `.tex` project with a `.bib` file, put the cursor inside a citation key, and run the macro.
 

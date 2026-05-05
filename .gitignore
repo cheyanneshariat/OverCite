@@ -18,3 +18,9 @@ test-results/
 /package-lock.json
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
+
+# Keep accidental full-desktop screenshots out of release docs.
+Screen Shot *.png
+Screenshot *.png
+docs/assets/*screenshot*.png
+docs/assets/texstudio-*.png
