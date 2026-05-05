@@ -50,8 +50,9 @@ Then:
 
 1. Open the OverCite settings.
 2. Choose your subject area.
-3. Recommended for astrophysics: add a NASA ADS/SciX API token.
-4. Try a citation you know, such as one of your own papers or a colleague's paper.
+   - Recommended for astrophysics: add a NASA ADS/SciX API token.
+   - Get one from [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/): sign in -> account settings -> API token -> copy into OverCite settings.
+3. Try a citation you know, such as one of your own papers or a colleague's paper.
 
 ## How to Use
 
