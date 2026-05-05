@@ -9,6 +9,8 @@ example_tex/.DS_Store
 *.out
 *.fdb_latexmk
 *.fls
+.overcite-texstudio-request.json
+.overcite-texstudio-response.json
 local_testing/
 playwright-report/
 test-results/
