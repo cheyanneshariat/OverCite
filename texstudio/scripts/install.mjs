@@ -7,9 +7,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const texstudioRoot = path.resolve(__dirname, "..");
 const macroSourcePath = path.join(texstudioRoot, "macros", "overcite-resolve.txsMacro");
+const settingsMacroSourcePath = path.join(texstudioRoot, "macros", "overcite-open-settings.txsMacro");
+const settingsReferenceSourcePath = path.join(texstudioRoot, "SETTINGS.md");
 const cliPath = path.join(texstudioRoot, "src", "cli.mjs");
 const defaultOutputDir = path.join(os.homedir(), ".overcite", "texstudio");
 const defaultSettingsPath = path.join(os.homedir(), ".overcite", "texstudio-settings.json");
+const defaultSettingsReferenceFileName = "settings-reference.md";
+const settingsDocsUrl = "https://github.com/cheyanneshariat/OverCite/blob/main/texstudio/SETTINGS.md";
 const MODES = Object.freeze([
   ["contextual", "OverCite: Resolve Citation", "overcite-contextual.txsMacro", "Alt+Shift+E"],
   ["simple", "OverCite: Resolve Citation (Simple Search)", "overcite-simple.txsMacro", "Alt+Shift+S"],
@@ -33,7 +37,9 @@ try {
   const ncbiApiKey = String(args["ncbi-api-key"] ?? "").trim();
 
   await assertFileExists(cliPath, "OverCite TeXstudio CLI");
+  await assertFileExists(settingsReferenceSourcePath, "OverCite TeXstudio settings reference");
   const sourceMacro = await fs.readFile(macroSourcePath, "utf8");
+  const settingsMacro = await fs.readFile(settingsMacroSourcePath, "utf8");
   await fs.mkdir(outputDir, { recursive: true });
 
   const macroFiles = [];
@@ -42,12 +48,30 @@ try {
     await fs.writeFile(outputPath, renderMacro(sourceMacro, { mode, name, shortcut, nodePath, cliPath }), "utf8");
     macroFiles.push({ mode, path: outputPath });
   }
+  const settingsMacroPath = path.join(outputDir, "overcite-open-settings.txsMacro");
+  const settingsReferencePath = path.join(outputDir, defaultSettingsReferenceFileName);
+  await fs.writeFile(settingsMacroPath, renderSettingsMacro(settingsMacro, {
+    settingsPath,
+    settingsReferencePath,
+    docsUrl: settingsDocsUrl,
+    openCommandPrefix: resolveOpenCommandPrefix(args["open-command"])
+  }), "utf8");
+  macroFiles.push({ mode: "settings", path: settingsMacroPath });
+  await fs.copyFile(settingsReferenceSourcePath, settingsReferencePath);
 
   const settingsResult = args["skip-settings"]
     ? { path: settingsPath, action: "skipped" }
-    : await writeSettings({ settingsPath, sourceProfile, adsToken, ncbiApiKey, force: Boolean(args.force) });
+    : await writeSettings({
+      settingsPath,
+      settingsReferencePath,
+      docsUrl: settingsDocsUrl,
+      sourceProfile,
+      adsToken,
+      ncbiApiKey,
+      force: Boolean(args.force)
+    });
 
-  printSummary({ outputDir, macroFiles, settingsResult });
+  printSummary({ outputDir, macroFiles, settingsResult, settingsReferencePath });
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
@@ -75,7 +99,30 @@ function renderMacro(sourceMacro, { mode, name, shortcut, nodePath, cliPath }) {
   }, null, 2)}\n`;
 }
 
-async function writeSettings({ settingsPath, sourceProfile, adsToken, ncbiApiKey, force }) {
+function renderSettingsMacro(sourceMacro, { settingsPath, settingsReferencePath, docsUrl, openCommandPrefix }) {
+  const script = sourceMacro
+    .replace(/var OVERCITE_SETTINGS_PATH = "[^"]*";/, `var OVERCITE_SETTINGS_PATH = ${JSON.stringify(settingsPath)};`)
+    .replace(/var OVERCITE_SETTINGS_REFERENCE_PATH = "[^"]*";/, `var OVERCITE_SETTINGS_REFERENCE_PATH = ${JSON.stringify(settingsReferencePath)};`)
+    .replace(/var OVERCITE_SETTINGS_DOCS_URL = "[^"]*";/, `var OVERCITE_SETTINGS_DOCS_URL = ${JSON.stringify(docsUrl)};`)
+    .replace(/var OVERCITE_OPEN_COMMAND_PREFIX = "[^"]*";/, `var OVERCITE_OPEN_COMMAND_PREFIX = ${JSON.stringify(openCommandPrefix)};`)
+    .replace(/^%SCRIPT\r?\n/, "");
+  return `${JSON.stringify({
+    abbrev: "",
+    checkState: 2,
+    description: [
+      "Open the OverCite TeXstudio settings file."
+    ],
+    formatVersion: 2,
+    menu: "",
+    name: "OverCite: Open Settings",
+    shortcut: "Alt+Shift+O",
+    tag: script.split("\n"),
+    trigger: "",
+    type: "Script"
+  }, null, 2)}\n`;
+}
+
+async function writeSettings({ settingsPath, settingsReferencePath, docsUrl, sourceProfile, adsToken, ncbiApiKey, force }) {
   const existing = await readJsonIfExists(settingsPath);
   if (existing && !force && !sourceProfile && !adsToken && !ncbiApiKey) {
     return { path: settingsPath, action: "kept" };
@@ -84,12 +131,18 @@ async function writeSettings({ settingsPath, sourceProfile, adsToken, ncbiApiKey
   const settings = existing && !force
     ? { ...existing }
     : {
+      _help: `Edit this file, save it, then run OverCite again. Full option reference: ${settingsReferencePath}. GitHub: ${docsUrl}`,
       sourceProfile: "astrophysics",
+      adsApiToken: "",
+      ncbiApiKey: "",
+      contextWindowChars: 500,
       citationKeyMode: "authoryear",
       bibliographyInsertMode: "append",
-      defaultSearchMode: "contextual"
+      defaultSearchMode: "contextual",
+      projectBibFileOverrides: {}
     };
 
+  settings._help = settings._help || `Edit this file, save it, then run OverCite again. Full option reference: ${settingsReferencePath}. GitHub: ${docsUrl}`;
   if (sourceProfile) {
     settings.sourceProfile = sourceProfile;
   }
@@ -142,6 +195,20 @@ function resolveExecutablePath(value, fallback) {
   return raw;
 }
 
+function resolveOpenCommandPrefix(value) {
+  const raw = String(value ?? "").trim();
+  if (raw) {
+    return raw;
+  }
+  if (process.platform === "darwin") {
+    return "open";
+  }
+  if (process.platform === "win32") {
+    return "cmd /c start \"\"";
+  }
+  return "xdg-open";
+}
+
 function parseArgs(rawArgs) {
   const parsed = {};
   for (let index = 0; index < rawArgs.length; index += 1) {
@@ -174,25 +241,28 @@ Options:
   --ads-token TOKEN       Optional ADS/SciX token for astronomy lookups.
   --ncbi-api-key TOKEN    Optional NCBI API key for PubMed lookups.
   --node-path PATH        Node executable path to embed in generated macros.
+  --open-command COMMAND  Command prefix for the Open Settings macro.
   --force                 Recreate the settings file instead of merging.
   --skip-settings         Only generate macros.
   --help                  Show this help text.
 `);
 }
 
-function printSummary({ outputDir, macroFiles, settingsResult }) {
+function printSummary({ outputDir, macroFiles, settingsResult, settingsReferencePath }) {
   process.stdout.write(`OverCite TeXstudio setup files are ready.
 
 Generated macros:
 ${macroFiles.map((file) => `  - ${file.mode}: ${file.path}`).join("\n")}
 
 Settings file: ${settingsResult.path} (${settingsResult.action})
+Settings reference: ${settingsReferencePath}
 
 Next steps:
   1. Open TeXstudio -> Macros -> Edit Macros...
   2. Import overcite-contextual.txsMacro.
-  3. Use the default Alt+Shift+E shortcut, or change it in the macro editor.
-  4. Optionally add the simple and raw-query macros too.
+  3. Import overcite-open-settings.txsMacro so users can edit settings from TeXstudio.
+  4. Use Alt+Shift+E for OverCite and Alt+Shift+O to open settings.
+  5. Optionally add the simple and raw-query macros too.
 
 Generated macro folder:
   ${outputDir}

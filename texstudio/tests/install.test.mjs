@@ -32,7 +32,10 @@ test("installer generates ready-to-import macros with embedded local paths", asy
   const contextual = JSON.parse(await fs.readFile(path.join(outputDir, "overcite-contextual.txsMacro"), "utf8"));
   const simple = JSON.parse(await fs.readFile(path.join(outputDir, "overcite-simple.txsMacro"), "utf8"));
   const direct = JSON.parse(await fs.readFile(path.join(outputDir, "overcite-raw-query.txsMacro"), "utf8"));
+  const openSettings = JSON.parse(await fs.readFile(path.join(outputDir, "overcite-open-settings.txsMacro"), "utf8"));
+  const settingsReference = await fs.readFile(path.join(outputDir, "settings-reference.md"), "utf8");
   const contextualScript = contextual.tag.join("\n");
+  const openSettingsScript = openSettings.tag.join("\n");
 
   assert.equal(contextual.formatVersion, 2);
   assert.equal(contextual.type, "Script");
@@ -40,19 +43,31 @@ test("installer generates ready-to-import macros with embedded local paths", asy
   assert.equal(contextual.shortcut, "Alt+Shift+E");
   assert.equal(simple.shortcut, "Alt+Shift+S");
   assert.equal(direct.shortcut, "Alt+Shift+R");
+  assert.equal(openSettings.name, "OverCite: Open Settings");
+  assert.equal(openSettings.shortcut, "Alt+Shift+O");
   assert.doesNotMatch(contextual.tag[0], /^%SCRIPT/);
+  assert.doesNotMatch(openSettings.tag[0], /^%SCRIPT/);
   assert.match(contextualScript, /var OVERCITE_MODE = "contextual"/);
   assert.match(simple.tag.join("\n"), /var OVERCITE_MODE = "simple"/);
   assert.match(direct.tag.join("\n"), /var OVERCITE_MODE = "direct"/);
+  assert.match(openSettingsScript, new RegExp(escapeRegex(JSON.stringify(settingsPath))));
+  assert.match(openSettingsScript, /var OVERCITE_SETTINGS_DOCS_URL = "https:\/\/github\.com\/cheyanneshariat\/OverCite\/blob\/main\/texstudio\/SETTINGS\.md"/);
+  assert.match(settingsReference, /All Options/);
+  assert.match(settingsReference, /citationKeyMode/);
   assert.match(contextualScript, new RegExp(escapeRegex(JSON.stringify(process.execPath))));
   assert.match(contextualScript, new RegExp(escapeRegex(JSON.stringify(cliPath))));
   assert.doesNotMatch(contextualScript, /\/absolute\/path\/to\/OverCite/);
 
   const settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+  assert.match(settings._help, /settings-reference\.md/);
   assert.equal(settings.sourceProfile, "general");
   assert.equal(settings.adsApiToken, "ads-test-token");
   assert.equal(settings.ncbiApiKey, "ncbi-test-key");
+  assert.equal(settings.contextWindowChars, 500);
+  assert.equal(settings.citationKeyMode, "authoryear");
+  assert.equal(settings.bibliographyInsertMode, "append");
   assert.equal(settings.defaultSearchMode, "contextual");
+  assert.deepEqual(settings.projectBibFileOverrides, {});
 });
 
 test("installer keeps existing settings unless requested to update them", async () => {
@@ -103,6 +118,23 @@ test("installer preserves command-name node paths", async () => {
   assert.match(contextual.tag.join("\n"), /var OVERCITE_NODE = persistentOrDefault\("overciteNodePath", "node"\)/);
 });
 
+test("installer can customize the settings open command", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "overcite-texstudio-install-open-"));
+  const outputDir = path.join(tempDir, "macros");
+  const settingsPath = path.join(tempDir, "settings.json");
+
+  await execFileAsync(process.execPath, [
+    installerPath,
+    "--output-dir", outputDir,
+    "--settings-path", settingsPath,
+    "--open-command", "custom-open",
+    "--skip-settings"
+  ], { cwd: repoRoot });
+
+  const openSettings = JSON.parse(await fs.readFile(path.join(outputDir, "overcite-open-settings.txsMacro"), "utf8"));
+  assert.match(openSettings.tag.join("\n"), /var OVERCITE_OPEN_COMMAND_PREFIX = "custom-open"/);
+});
+
 test("installer help documents the easy setup command", async () => {
   const { stdout } = await execFileAsync(process.execPath, [installerPath, "--help"], {
     cwd: repoRoot
@@ -110,6 +142,7 @@ test("installer help documents the easy setup command", async () => {
   assert.match(stdout, /node texstudio\/scripts\/install\.mjs/);
   assert.match(stdout, /--source-profile NAME/);
   assert.match(stdout, /--ads-token TOKEN/);
+  assert.match(stdout, /--open-command COMMAND/);
 });
 
 function escapeRegex(value) {

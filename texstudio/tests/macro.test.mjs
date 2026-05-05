@@ -6,6 +6,7 @@ import test from "node:test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const macroPath = path.resolve(__dirname, "../macros/overcite-resolve.txsMacro");
+const settingsMacroPath = path.resolve(__dirname, "../macros/overcite-open-settings.txsMacro");
 
 test("TeXstudio macro uses the documented script integration surface", async () => {
   const macro = await fs.readFile(macroPath, "utf8");
@@ -32,4 +33,14 @@ test("TeXstudio macro quotes command arguments without rewriting path separators
   const quoteArgBody = macro.match(/function quoteArg\(value\) \{([^]*?)\n\}/)?.[1] ?? "";
   assert.match(quoteArgBody, /replace\(\/"\/g/);
   assert.doesNotMatch(quoteArgBody, /replace\(\/\\\\/);
+});
+
+test("TeXstudio settings macro opens the generated settings file", async () => {
+  const macro = await fs.readFile(settingsMacroPath, "utf8");
+  assert.match(macro, /^%SCRIPT/);
+  assert.match(macro, /OVERCITE_SETTINGS_PATH/);
+  assert.match(macro, /OVERCITE_SETTINGS_REFERENCE_PATH/);
+  assert.match(macro, /OVERCITE_SETTINGS_DOCS_URL/);
+  assert.match(macro, /system\(cmd, dirname\(fileName\)\)/);
+  assert.match(macro, /information\("Opened OverCite settings/);
 });

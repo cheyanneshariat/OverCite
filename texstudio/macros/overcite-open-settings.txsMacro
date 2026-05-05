@@ -1,0 +1,37 @@
+%SCRIPT
+// Open the user-editable OverCite TeXstudio settings file.
+var OVERCITE_SETTINGS_PATH = "/absolute/path/to/texstudio-settings.json";
+var OVERCITE_SETTINGS_REFERENCE_PATH = "/absolute/path/to/settings-reference.md";
+var OVERCITE_SETTINGS_DOCS_URL = "https://github.com/cheyanneshariat/OverCite/blob/main/texstudio/SETTINGS.md";
+var OVERCITE_OPEN_COMMAND_PREFIX = "open";
+
+function quoteArg(value) {
+  return "\"" + String(value).replace(/"/g, "\\\"") + "\"";
+}
+
+function dirname(fileName) {
+  var normalized = String(fileName || "").replace(/\\/g, "/");
+  var index = normalized.lastIndexOf("/");
+  if (index < 0) return ".";
+  return normalized.substring(0, index) || "/";
+}
+
+function openPath(fileName) {
+  var cmd = OVERCITE_OPEN_COMMAND_PREFIX + " " + quoteArg(fileName);
+  var process = system(cmd, dirname(fileName));
+  if (process == null) {
+    throw "TeXstudio did not allow OverCite to open the settings file.";
+  }
+  process.waitForFinished();
+  var exitCode = typeof process.exitCode == "function" ? process.exitCode() : process.exitCode;
+  if (exitCode != 0) {
+    throw "Could not open " + fileName + ". Edit it manually, or see " + OVERCITE_SETTINGS_DOCS_URL;
+  }
+}
+
+try {
+  openPath(OVERCITE_SETTINGS_PATH);
+  information("Opened OverCite settings. Full option reference: " + OVERCITE_SETTINGS_REFERENCE_PATH);
+} catch (error) {
+  critical(String(error));
+}

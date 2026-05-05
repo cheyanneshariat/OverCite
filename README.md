@@ -20,6 +20,12 @@
   </p>
 
   <p>
+    <img alt="Chrome users" src="https://img.shields.io/chrome-web-store/users/hmjojciemhnfkjnilakhehkgkhkplbdo?label=Chrome%20users&amp;color=4285F4">
+    <img alt="Firefox users" src="https://img.shields.io/amo/users/overcite?label=Firefox%20users&amp;color=FF7139">
+    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-38-007ACC">
+  </p>
+
+  <p>
     <a href="#get-started">Get Started</a> ·
     <a href="#how-to-use">How to Use</a> ·
     <a href="#examples">Examples</a> ·
@@ -209,10 +215,10 @@ TeXstudio support currently lives as a local script macro plus Node CLI from thi
 1. Clone or download this repository.
 2. Install Node.js 18 or newer.
 3. Run `node texstudio/scripts/install.mjs --source-profile astrophysics`.
-4. In TeXstudio, open `Macros` -> `Edit Macros...`, import `~/.overcite/texstudio/overcite-contextual.txsMacro`, and assign a shortcut.
+4. In TeXstudio, open `Macros` -> `Edit Macros...`, then import `~/.overcite/texstudio/overcite-contextual.txsMacro` and `~/.overcite/texstudio/overcite-open-settings.txsMacro`.
 5. Open a saved `.tex` project with a `.bib` file, put the cursor inside a citation key, and run the macro.
 
-For full local setup and testing instructions, see [texstudio/README.md](texstudio/README.md).
+Use `Alt+Shift+E` to resolve citations and `Alt+Shift+O` to open settings. For full setup, settings, and testing instructions, see [texstudio/README.md](texstudio/README.md) and [texstudio/SETTINGS.md](texstudio/SETTINGS.md).
 
 </details>
 

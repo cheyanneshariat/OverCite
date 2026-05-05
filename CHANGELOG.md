@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added experimental TeXstudio support through a local script macro, Node CLI, and one-command setup helper that reuse the v0.3.0 source-routing and insertion core.
+- Added a TeXstudio `Open Settings` macro and full settings reference so users can edit every supported option from the TeXstudio workflow.
 
 ## ✨ 0.3.0
 
