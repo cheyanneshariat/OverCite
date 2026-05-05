@@ -160,7 +160,7 @@ function splitCitationTokenSegments(inside) {
       continue;
     }
 
-    if (char !== "," || inQuotes || isAdsFieldContinuation(inside, index)) {
+    if (char !== "," || inQuotes) {
       continue;
     }
 
@@ -170,11 +170,6 @@ function splitCitationTokenSegments(inside) {
 
   segments.push(buildCitationTokenSegment(inside, segmentStart, inside.length));
   return segments;
-}
-
-function isAdsFieldContinuation(source, commaIndex) {
-  const rest = source.slice(commaIndex + 1).trimStart();
-  return /^(?:abs|abstract|ack|aff|affiliation|arxiv|author|bibcode|bibstem|body|citation|citations|database|doctype|doi|full|identifier|keyword|orcid|property|pub|title|year|first_author)\s*:/i.test(rest);
 }
 
 function buildCitationTokenSegment(source, rawStart, rawEnd) {

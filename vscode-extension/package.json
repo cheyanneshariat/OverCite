@@ -2,7 +2,7 @@
   "name": "overcite-vscode",
   "displayName": "OverCite",
   "description": "Search literature sources from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.3.1",
+  "version": "0.3.0",
   "publisher": "CheyanneShariat",
   "icon": "icon.png",
   "homepage": "https://github.com/cheyanneshariat/OverCite",
