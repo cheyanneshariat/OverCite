@@ -4,7 +4,7 @@
 
 <h1 align="center">OverCite</h1>
 
-<h2 align="center">add citations to LaTeX without leaving your editor.</h2>
+<h3 align="center">add citations to LaTeX without leaving your editor.</h3>
 
 <p align="center">
   <em>Type rough citation key &rarr; press shortcut &rarr; choose paper &rarr; OverCite inserts BibTeX.</em>
