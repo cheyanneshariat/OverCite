@@ -2,9 +2,7 @@
   <img src="docs/assets/overcite-logo-rounded.png" alt="OverCite logo" width="220">
 </p>
 
-<p align="center" style="font-size: 56px; line-height: 1; margin: 0;">
-  <strong>OverCite</strong>
-</p>
+<h1 align="center">OverCite</h1>
 
 <h2 align="center">add citations to LaTeX without leaving your editor.</h2>
 
