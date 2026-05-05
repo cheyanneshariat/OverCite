@@ -12,17 +12,20 @@
 
 <div align="center">
   <p>
-    <a href="https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo"><img alt="Chrome Web Store" src="https://img.shields.io/badge/Chrome-Web%20Store-4285F4?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white"></a>
+    <a href="https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo"><img alt="Chrome Web Store" src="https://img.shields.io/badge/Chrome-Web%20Store-34A853?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white"></a>
     <a href="https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search"><img alt="Firefox Add-ons" src="https://img.shields.io/badge/Firefox-Add--ons-FF7139?style=for-the-badge&amp;logo=firefoxbrowser&amp;logoColor=white"></a>
     <a href="https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode"><img alt="VS Code Marketplace" src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&amp;logo=visualstudiocode&amp;logoColor=white"></a>
-    <a href="https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc"><img alt="RNAAS paper" src="https://img.shields.io/badge/Paper-RNAAS-6B7280?style=for-the-badge"></a>
-    <a href="LICENSE"><img alt="License: CC BY-NC-ND 4.0" src="https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-111827?style=for-the-badge"></a>
   </p>
 
   <p>
-    <img alt="Chrome users" src="https://img.shields.io/chrome-web-store/users/hmjojciemhnfkjnilakhehkgkhkplbdo?label=Chrome%20users&amp;color=4285F4">
-    <img alt="Firefox users" src="https://img.shields.io/amo/users/overcite?label=Firefox%20users&amp;color=FF7139">
-    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-38-007ACC">
+    <a href="https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc"><img alt="RNAAS paper" src="https://img.shields.io/badge/Paper-RNAAS-7C3AED?style=for-the-badge"></a>
+    <a href="LICENSE"><img alt="License: CC BY-NC-ND 4.0" src="https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-0E7C7B?style=for-the-badge"></a>
+  </p>
+
+  <p>
+    <img alt="Chrome users" src="https://img.shields.io/chrome-web-store/users/hmjojciemhnfkjnilakhehkgkhkplbdo?label=Chrome%20users&amp;color=34A853&amp;style=for-the-badge">
+    <img alt="Firefox users" src="https://img.shields.io/amo/users/overcite?label=Firefox%20users&amp;color=FF7139&amp;style=for-the-badge">
+    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-38-007ACC?style=for-the-badge">
   </p>
 
   <p>
