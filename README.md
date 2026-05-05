@@ -1,93 +1,98 @@
-# OverCite
+<div align="center">
+  <img src="docs/assets/overcite-logo-rounded.png" alt="OverCite logo" width="168">
+  <h1>OverCite</h1>
+  <p><strong>Add citations to LaTeX without leaving your editor.</strong></p>
+  <p>Type a rough citation key, press a shortcut, choose the right paper, and OverCite inserts the BibTeX.</p>
 
-Type rough citation key -> press shortcut -> choose paper -> OverCite inserts BibTeX.
+  <p>
+    <a href="https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo"><img alt="Chrome Web Store" src="https://img.shields.io/badge/Chrome-Web%20Store-4285F4?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white"></a>
+    <a href="https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search"><img alt="Firefox Add-ons" src="https://img.shields.io/badge/Firefox-Add--ons-FF7139?style=for-the-badge&amp;logo=firefoxbrowser&amp;logoColor=white"></a>
+    <a href="https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode"><img alt="VS Code Marketplace" src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&amp;logo=visualstudiocode&amp;logoColor=white"></a>
+    <a href="https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc"><img alt="RNAAS paper" src="https://img.shields.io/badge/Paper-RNAAS-6B7280?style=for-the-badge"></a>
+    <a href="LICENSE"><img alt="License: CC BY-NC-ND 4.0" src="https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-111827?style=for-the-badge"></a>
+  </p>
 
-... without leaving the editor.
+  <p>
+    <a href="#get-started">Get Started</a> ·
+    <a href="#demo">Demo</a> ·
+    <a href="#how-it-works">How It Works</a> ·
+    <a href="#settings">Settings</a> ·
+    <a href="#acknowledge">Acknowledge</a>
+  </p>
+</div>
 
-Supported areas: astrophysics, physics, math, computer science, biology, medicine, chemistry, statistics, data/software citations, and cross-field projects.
+<p align="center">
+  <a href="docs/assets/overcite-demo-preview-storyboard-apr25.gif">
+    <img src="docs/assets/overcite-demo-preview-storyboard-apr25.gif" alt="OverCite resolving a citation in Overleaf" width="820">
+  </a>
+</p>
 
-Used OverCite in a manuscript? See [Acknowledge](#acknowledge).
+## Why OverCite
+
+OverCite is for writers who already know the paper, author, result, DOI, or arXiv id they want to cite and do not want to stop writing to search, copy BibTeX, rename keys, and return to the draft.
+
+- Works in Overleaf through Chrome and Firefox, and in local LaTeX projects through VS Code.
+- Searches astrophysics, physics, math, computer science, biology, medicine, chemistry, statistics, data/software citations, and cross-field projects.
+- Updates the cite key and inserts the BibTeX entry into your `.bib` file.
+- Does not use an LLM for search or ranking.
+
+OverCite is not meant to replace broader literature exploration or paper discovery. It is meant to make known-citation insertion fast.
+
+## Get Started
+
+Install OverCite from the place where you write:
+
+| Editor | Best install path | Notes |
+| --- | --- | --- |
+| Overleaf in Chrome | [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo) | Recommended for most Overleaf users |
+| Overleaf in Firefox | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search) | Same workflow as Chrome |
+| Local LaTeX in VS Code | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) | Uses your local `.tex` and `.bib` files |
+| TeXstudio | [Local setup](texstudio/README.md) | Experimental |
+| Safari | [Local build](safari/README.md) | Beta |
+
+Then:
+
+1. Open the OverCite settings.
+2. Choose your subject area.
+3. Optional but recommended for astrophysics: add a NASA ADS/SciX API token.
+4. Try a citation you know, such as one of your own papers or a colleague's paper.
+
+You do **not** need to clone this repository unless you want a local developer copy.
 
 ## Demo
 
-The default shortcut is `Alt+Shift+E`. Mac users: `Alt` = `Option` / `⌥`.
+The default shortcut is `Alt+Shift+E`. On macOS, `Alt` means `Option`.
 
-[![Watch the OverCite demo](docs/assets/overcite-demo-preview-storyboard-apr25.gif)](docs/assets/overcite-demo-preview-storyboard-apr25.gif)
+## How It Works
 
-## Quick Install
-
-1. Search for `OverCite` in the extensions store or marketplace ([Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)).
-2. Open the OverCite settings.
-3. Choose your subject area.
-    Optional: add a NASA ADS/SciX API token. Recommended for astrophysics users.
-4. Get citing! To start, try one of your own papers (or a colleague's).
-
-Links: [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo) | [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search) | [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) | [Paper](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc) | [PDF](docs/papers/OverCite_RNAAS_2026.pdf)
-
-## How to Use
-
-1. Type a rough citation key like `\citep{Dirac1928}`, `\citep{Watson1953}`, or `\citep{Doudna14}`. You can also leave out the year, search for a title, or paste a DOI/arXiv id (see [Examples](#examples)).
+1. Type a rough citation key like `\citep{Dirac1928}`, `\citep{Watson1953}`, or `\citep{Doudna14}`. You can also leave out the year, search for a title, or paste a DOI/arXiv id.
 2. Put the cursor on the key you want to resolve.
-3. Press `Alt+Shift+E` (or remap this).
-4. Review the OverCite results popup, click the paper you want.
-5. That's it! OverCite will update the cite key and insert the BibTeX entry into your `.bib` file.
+3. Press `Alt+Shift+E`, or remap the shortcut.
+4. Review the OverCite results popup and choose the paper.
+5. OverCite updates the cite key and inserts the BibTeX entry into your `.bib` file.
 
 ![OverCite workflow](docs/assets/outline.png)
 
 ## Examples
 
-Search modes:
+OverCite has three search modes:
 
-1. `Contextual` uses typed citation key + local sentence context
-2. `Simple search` searches author/year only and sorts by citation count
-3. `Raw query` sends the typed token directly to the configured source route
+| Mode | Use it when | Example |
+| --- | --- | --- |
+| `Contextual` | You want OverCite to use the typed key plus nearby sentence context. | `CRISPR-Cas9 genome engineering became broadly programmable after \citep{Doudna14}.` |
+| `Simple search` | You want author/year lookup sorted by citation count. | `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.` |
+| `Raw query` | You want to send the typed token directly to the configured source. | `\citep{author:"Schlegel" title:"dust"}` |
 
-Mode examples:
+More keys to try:
 
-- `Contextual`: `CRISPR-Cas9 genome engineering became broadly programmable after \citep{Doudna14}.`
-- `Contextual`: `Transformers made attention central in language modeling \citep{Vaswani17}.`
-- `Contextual`: `Molecular Structure of Nucleic Acids introduced the double helix model \citep{Watson1953}.`
-- `Simple search`: `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.`
-- `Simple search`: `Relativistic quantum mechanics follows from \citep{Dirac1928}.`
-- `Simple search`: `Gaia revealed the closest known black hole \citep{El-Badry2023}.`
-- `Raw query`: use a DOI, arXiv id, or ADS/SciX fielded query directly
-
-Note that you can set the `Default Search Mode` in the extension settings.
-
-Rough keys:
-
-- `\citep{Doudna14}`: CRISPR-Cas9 genome engineering
 - `\citep{Higgs1964}`: Higgs mechanism
 - `\citep{Dirac1928}`: quantum theory of the electron
 - `\citep{Watson1953}`: DNA double helix
 - `\citep{El-Badry2023}`: closest black hole
 - `\citep{Hochreiter97}`: LSTM
-- `\citep{Foreman-Mackey2013}`: emcee
-- `\citep{Schlegel}`: dust maps
-
-Exact lookups:
-
-- `\citep{10.1126/science.1258096}`: Doudna/Charpentier CRISPR-Cas9
 - `\citep{10.1038/s41586-021-03819-2}`: AlphaFold
-- `\citep{arXiv:2303.08774}`: OpenAI GPT-4 report
 - `\citep{arXiv:1706.03762}`: "Attention Is All You Need"
-- `\citep{10.1038/171737a0}`: Watson-Crick DNA structure
-- `\citep{10.1098/rspa.1928.0023}`: Dirac equation
-- `\citep{10.1002/j.1538-7305.1948.tb01338.x}`: information theory
-- `\citep{10.1103/PhysRevLett.13.508}`: Higgs mechanism
-- `\citep{10.1093/mnras/stac3140}`: closest black hole
-- `\citep{10.1103/PhysRev.140.A1133}`: Kohn-Sham equations
-- `\citep{10.1086/260062}`: Black-Scholes
-- `\citep{10.1111/j.2517-6161.1996.tb02080.x}`: LASSO
-- `\citep{hep-th/9711200}`: AdS/CFT
 - `\citep{10.57702/vmvbuu5i}`: MNIST dataset
-- `\citep{author:"Schlegel" title:"dust"}`: ADS/SciX fielded query
-
-## Scope
-
-OverCite works best when you already know the paper, author, or result you want to cite, and want to add it without leaving the editor. It is designed to replace the interruptive workflow of stopping, searching, copying BibTeX, renaming the citation key, and then returning to writing.
-
-*OverCite is not meant to replace broader literature exploration or paper discovery.*
 
 ## Settings
 
@@ -168,6 +173,21 @@ You do **not** need to clone or download this repository unless you want a local
 10. Review the dropdown results and choose the paper you want
 
 For custom VS Code shortcuts or more detailed VS Code examples, see [vscode-extension/README.md](vscode-extension/README.md).
+
+</details>
+
+<details>
+  <summary>TeXstudio (experimental)</summary>
+
+TeXstudio support currently lives as a local script macro plus Node CLI from this repository.
+
+1. Clone or download this repository.
+2. Install Node.js 18 or newer.
+3. Run `node texstudio/scripts/install.mjs --source-profile astrophysics`.
+4. In TeXstudio, open `Macros` -> `Edit Macros...`, import `~/.overcite/texstudio/overcite-contextual.txsMacro`, and assign a shortcut.
+5. Open a saved `.tex` project with a `.bib` file, put the cursor inside a citation key, and run the macro.
+
+For full local setup and testing instructions, see [texstudio/README.md](texstudio/README.md).
 
 </details>
 
