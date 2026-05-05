@@ -57,7 +57,20 @@ function readJsonFile(fileName) {
   return JSON.parse(readFile(fileName));
 }
 
+function writeRunningResponse(fileName) {
+  writeFile(fileName, JSON.stringify({ status: "running" }));
+}
+
+function structuredErrorMessage(fileName) {
+  try {
+    var response = readJsonFile(fileName);
+    if (response.status == "error" && response.message) return response.message;
+  } catch (ignore) {}
+  return "";
+}
+
 function runCli(command, requestPath, responsePath, workingDirectory) {
+  writeRunningResponse(responsePath);
   var cmd = quoteArg(OVERCITE_NODE) + " " + quoteArg(OVERCITE_CLI) + " " + command +
     " --request " + quoteArg(requestPath) +
     " --response " + quoteArg(responsePath);
@@ -72,7 +85,7 @@ function runCli(command, requestPath, responsePath, workingDirectory) {
     try {
       stderr = process.readAllStandardErrorStr();
     } catch (ignore) {}
-    throw stderr || "OverCite command failed.";
+    throw structuredErrorMessage(responsePath) || stderr || "OverCite command failed.";
   }
 }
 

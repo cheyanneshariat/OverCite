@@ -14,6 +14,8 @@ test("TeXstudio macro uses the documented script integration surface", async () 
   assert.match(macro, /editor\.text\(\)/);
   assert.match(macro, /cursor\.lineNumber\(\)/);
   assert.match(macro, /writeFile\(requestPath/);
+  assert.match(macro, /writeRunningResponse\(responsePath\)/);
+  assert.match(macro, /structuredErrorMessage\(responsePath\) \|\| stderr/);
   assert.match(macro, /system\(cmd, workingDirectory\)/);
   assert.match(macro, /new UniversalInputDialog\(\)/);
   assert.match(macro, /if \(labels\.length == 1\) \{\n    return 0;/);

@@ -43,6 +43,8 @@ Then in TeXstudio:
 5. Use `Alt+Shift+O` to open settings from TeXstudio.
 6. Optional: add `overcite-simple.txsMacro` and `overcite-raw-query.txsMacro`; they default to `Alt+Shift+S` and `Alt+Shift+R`.
 
+On the first run, TeXstudio asks whether to trust the script before it can write request files and run Node. Choose `Yes, allow all calls it will ever make` if you want OverCite to run without repeated permission prompts.
+
 If something does not work, run:
 
 ```bash
