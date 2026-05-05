@@ -49,7 +49,7 @@ Install OverCite from the place where you write:
 | Overleaf in Chrome | [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo) | Recommended for most Overleaf users |
 | Overleaf in Firefox | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search) | Same workflow as Chrome |
 | Local LaTeX in VS Code | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode) | Uses your local `.tex` and `.bib` files |
-| TeXstudio | [Local setup](texstudio/README.md) | Experimental |
+| TeXstudio | [Local setup](texstudio/README.md) | Experimental local macro setup |
 | Safari | [Local build](safari/README.md) | Beta |
 
 Then:
@@ -67,7 +67,7 @@ The default shortcut is `Alt+Shift+E`. Mac users: `Alt` = `Option` / `⌥`.
 1. Type a rough citation key like `\citep{Dirac1928}`, `\citep{Watson1953}`, or `\citep{Doudna14}`. You can also leave out the year, search for a title, or paste a DOI/arXiv id (see [Examples](#examples)).
 2. Put the cursor on the key you want to resolve.
 3. Press `Alt+Shift+E` (or remap this).
-4. Review the OverCite results popup, click the paper you want.
+4. Review the OverCite results and choose the paper you want.
 5. That's it! OverCite will update the cite key and insert the BibTeX entry into your `.bib` file.
 
 ![OverCite workflow](docs/assets/outline.png)
@@ -90,7 +90,7 @@ Mode examples:
 - `Simple search`: `Gaia revealed the closest known black hole \citep{El-Badry2023}.`
 - `Raw query`: use a DOI, arXiv id, or ADS/SciX fielded query directly
 
-Note that you can set the `Default Search Mode` in the extension settings.
+Note that you can set the `Default Search Mode` in settings.
 
 Rough keys:
 
@@ -129,7 +129,7 @@ OverCite works best when you already know the paper, author, or result you want 
 
 ## Settings
 
-OverCite keeps the UI simple and puts the main behavior controls in the extension settings page.
+OverCite keeps the UI simple and puts the main behavior controls in settings. Chrome, Firefox, and VS Code use their normal extension settings pages. TeXstudio uses a small JSON settings file that can be opened from TeXstudio with the `OverCite: Open Settings` macro.
 
 ![OverCite source settings](docs/assets/overcite-settings-sources.png)
 
@@ -144,7 +144,7 @@ Current settings include:
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
 
-For non-empty citation keys, the popup also includes small `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources.
+For non-empty citation keys, OverCite also supports `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources. In TeXstudio, these are available as optional imported macros.
 
 ## Install
 
@@ -218,7 +218,7 @@ TeXstudio support currently lives as a local script macro plus Node CLI from thi
 4. In TeXstudio, open `Macros` -> `Edit Macros...`, then import `~/.overcite/texstudio/overcite-contextual.txsMacro` and `~/.overcite/texstudio/overcite-open-settings.txsMacro`.
 5. Open a saved `.tex` project with a `.bib` file, put the cursor inside a citation key, and run the macro.
 
-Use `Alt+Shift+E` to resolve citations and `Alt+Shift+O` to open settings. For full setup, settings, and testing instructions, see [texstudio/README.md](texstudio/README.md) and [texstudio/SETTINGS.md](texstudio/SETTINGS.md).
+Use `Alt+Shift+E` to resolve citations and `Alt+Shift+O` to open settings. Optional simple-search and raw-query macros are generated too. For full setup, settings, and testing instructions, see [texstudio/README.md](texstudio/README.md) and [texstudio/SETTINGS.md](texstudio/SETTINGS.md).
 
 </details>
 
@@ -279,6 +279,8 @@ archivePrefix = {arXiv},
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Release notes: [v0.3.0](docs/releases/v0.3.0.md)
+- TeXstudio setup: [texstudio/README.md](texstudio/README.md)
+- TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)
 - Paper PDF: [docs/papers/OverCite_RNAAS_2026.pdf](docs/papers/OverCite_RNAAS_2026.pdf)
 - Logic flow: [docs/OverCite_logic_flow.md](docs/OverCite_logic_flow.md)
@@ -317,6 +319,17 @@ For a local developer install, reload `extension/dist/firefox/manifest.json` fro
 1. Update OverCite through the VS Code Extensions view
 2. Or reinstall from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
 3. Reload VS Code if needed
+
+</details>
+
+<details>
+  <summary>TeXstudio</summary>
+
+1. Pull or download the latest repository
+2. Rerun `node texstudio/scripts/install.mjs --source-profile astrophysics`
+3. Reimport the generated macros from `~/.overcite/texstudio/` if the macro files changed
+
+Existing TeXstudio settings stay in `~/.overcite/texstudio-settings.json`.
 
 </details>
 
