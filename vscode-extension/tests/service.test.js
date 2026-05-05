@@ -148,7 +148,7 @@ test("searchAds direct mode performs one literal ADS query with no contextual ex
   const calls = [];
   const results = await searchAds(
     {
-      token: 'author:"El-Badry" year:2022 title:"magnetic braking"',
+      token: 'author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026',
       searchMode: "direct",
       sentenceText: "People find that magnetic braking saturates",
       contextText: "People find that magnetic braking saturates in close binaries from ZTF",
@@ -162,20 +162,22 @@ test("searchAds direct mode performs one literal ADS query with no contextual ex
       calls.push(String(input));
       return okResponse([
         makeDoc("direct-1", {
-          title: "Magnetic braking saturates: evidence from the orbital period distribution of low-mass detached eclipsing binaries from ZTF",
-          author: ["El-Badry, Kareem"],
-          year: "2022",
-          abstract: "Magnetic braking saturates in detached eclipsing binaries."
+          title: "A sub-ppm upper limit on the cosmological variations of the fine structure constant alpha",
+          author: ["Muller, S.", "Beelen, A."],
+          year: "2026",
+          abstract: "A constrained ADS fielded query result."
         })
       ]);
     }
   );
 
   assert.equal(calls.length, 1);
-  const query = new URL(calls[0]).searchParams.get("q") ?? "";
-  assert.equal(query, 'author:"El-Badry" year:2022 title:"magnetic braking"');
+  const url = new URL(calls[0]);
+  const query = url.searchParams.get("q") ?? "";
+  assert.equal(query, 'author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026');
+  assert.equal(url.searchParams.get("rows"), "50");
   assert.doesNotMatch(query, /People find that magnetic braking saturates/);
-  assert.match(results[0].title, /Magnetic braking saturates/i);
+  assert.match(results[0].title, /fine structure constant/i);
 });
 
 test("searchAds contextual mode starts the first two ADS queries in parallel", async () => {

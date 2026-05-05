@@ -59,14 +59,14 @@ test("direct search mode sends the raw token to ADS without author-year parsing 
 
 test("direct search mode preserves fielded ADS queries with quotes exactly", () => {
   const queries = buildAdsQueries({
-    token: 'author:"El-Badry" year:2022 title:"magnetic braking"',
+    token: 'author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026',
     searchMode: "direct",
     sentenceText: "People find that magnetic braking saturates",
     contextText: "People find that magnetic braking saturates in close binaries",
     parsedKeyHint: null
   });
 
-  assert.deepEqual(queries, ['author:"El-Badry" year:2022 title:"magnetic braking"']);
+  assert.deepEqual(queries, ['author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026']);
 });
 
 test("direct search mode fields DOI and bare arXiv identifiers for ADS", () => {
@@ -282,6 +282,38 @@ test("direct search mode applies only light token matching boosts and otherwise 
   assert.equal(candidates[0].bibcode, "title-match");
   assert.equal(candidates[1].bibcode, "no-match");
   assert.equal(candidates[2].bibcode, "same-score-later");
+});
+
+test("direct fielded ADS queries preserve ADS result order", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: 'author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026',
+      searchMode: "direct"
+    },
+    [
+      {
+        bibcode: "ads-first",
+        title: "A sub-ppm upper limit on the cosmological variations of the fine structure constant alpha",
+        authors: ["Muller, S.", "Beelen, A."],
+        year: 2026,
+        abstract: "",
+        doi: null,
+        citationCount: 1
+      },
+      {
+        bibcode: "more-cited",
+        title: "A different highly cited paper",
+        authors: ["Someone Else"],
+        year: 2026,
+        abstract: "",
+        doi: null,
+        citationCount: 100000
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "ads-first");
+  assert.equal(candidates[1].bibcode, "more-cited");
 });
 
 test("direct search mode strongly prefers exact title matches over title-prefix matches", () => {

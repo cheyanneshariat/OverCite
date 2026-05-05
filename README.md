@@ -227,7 +227,7 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Release notes: [v0.3.0](docs/releases/v0.3.0.md)
+- Release notes: [v0.3.1](docs/releases/v0.3.1.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)
 - Paper PDF: [docs/papers/OverCite_RNAAS_2026.pdf](docs/papers/OverCite_RNAAS_2026.pdf)
 - Logic flow: [docs/OverCite_logic_flow.md](docs/OverCite_logic_flow.md)

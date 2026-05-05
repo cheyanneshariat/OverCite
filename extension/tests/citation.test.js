@@ -33,6 +33,16 @@ test("findCitationAtCursor does not split on commas inside quoted ADS query valu
   assert.deepEqual(result.tokens, ['first_author:"Smith, J" year:2020', "Shariat25"]);
 });
 
+test("findCitationAtCursor keeps comma-separated ADS fielded raw queries intact", () => {
+  const source = 'Here is text \\citep{author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026} and more.';
+  const cursorIndex = source.indexOf("Muller") + 2;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.token, 'author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026');
+  assert.deepEqual(result.tokens, ['author:"Muller, S." author:"Beelen, A." aff:"LAM", year:2026']);
+});
+
 test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   const shortYear = parseCitationKeyHint("Shariat25");
   const longYear = parseCitationKeyHint("MacLeod2025");

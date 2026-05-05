@@ -1312,7 +1312,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function isFieldedAdsQuery(token) {
-    return /\b(?:abs|abstract|author|bibcode|doi|identifier|title|year|arxiv):/i.test(token);
+    return /\b(?:abs|abstract|ack|aff|affiliation|arxiv|author|bibcode|bibstem|body|citation|citations|database|doctype|doi|first_author|full|identifier|keyword|orcid|property|pub|title|year):/i.test(token);
   }
 
   function directDoiToken(token) {
@@ -1840,6 +1840,9 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function rerankDirectAdsCandidates(citationContext, candidates) {
+    if (isFieldedAdsQuery(citationContext?.token)) {
+      return candidates.map((candidate) => ({ ...candidate, score: 0 }));
+    }
     const token = normalizeText(citationContext?.token ?? "");
     return candidates
       .map((candidate, index) => {
@@ -2285,7 +2288,7 @@ const __overciteSafariModules = Object.create(null);
       return false;
     }
     const token = String(citationContext?.token ?? "").trim();
-    return /\b(?:abs|abstract|author|bibcode|title|year):/i.test(token);
+    return /\b(?:abs|abstract|ack|aff|affiliation|author|bibcode|bibstem|body|citation|citations|database|doctype|first_author|full|identifier|keyword|orcid|property|pub|title|year):/i.test(token);
   }
 
   function buildBroadSearchQuery(citationContext = {}) {
@@ -4701,9 +4704,10 @@ const __overciteSafariModules = Object.create(null);
     const mergedDocs = [];
     const seenBibcodes = new Set();
     const initialQueries = citationContext?.searchMode === "simple" ? queries.slice(0, 1) : queries.slice(0, 2);
+    const rows = citationContext?.searchMode === "direct" ? 50 : 12;
 
     if (initialQueries.length) {
-      const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken)));
+      const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken, rows)));
       for (const [index, docs] of initialBatches.entries()) {
         mergeDocs(mergedDocs, seenBibcodes, docs, index);
       }
@@ -4716,7 +4720,7 @@ const __overciteSafariModules = Object.create(null);
 
     for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
       const index = offset + initialQueries.length;
-      const docs = await fetchAdsDocs(query, adsApiToken);
+      const docs = await fetchAdsDocs(query, adsApiToken, rows);
       mergeDocs(mergedDocs, seenBibcodes, docs, index);
       if (shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
         break;
@@ -4785,10 +4789,10 @@ const __overciteSafariModules = Object.create(null);
     return payload.export?.trim?.() ?? "";
   }
 
-  async function fetchAdsDocs(query, adsApiToken) {
+  async function fetchAdsDocs(query, adsApiToken, rows = 12) {
     const url = new URL("https://api.adsabs.harvard.edu/v1/search/query");
     url.searchParams.set("q", query);
-    url.searchParams.set("rows", "12");
+    url.searchParams.set("rows", String(rows));
     url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,identifier,citation_count,property,doctype,pub,bibstem,database");
 
     const response = await fetch(url, {

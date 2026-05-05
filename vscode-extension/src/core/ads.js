@@ -566,7 +566,7 @@ function buildDirectAdsQueries(citationContext) {
 }
 
 function isFieldedAdsQuery(token) {
-  return /\b(?:abs|abstract|author|bibcode|doi|identifier|title|year|arxiv):/i.test(token);
+  return /\b(?:abs|abstract|ack|aff|affiliation|arxiv|author|bibcode|bibstem|body|citation|citations|database|doctype|doi|first_author|full|identifier|keyword|orcid|property|pub|title|year):/i.test(token);
 }
 
 function directDoiToken(token) {
@@ -1066,6 +1066,9 @@ export function rerankAdsCandidates(citationContext, candidates) {
 }
 
 function rerankDirectAdsCandidates(citationContext, candidates) {
+  if (isFieldedAdsQuery(citationContext?.token)) {
+    return candidates.map((candidate) => ({ ...candidate, score: 0 }));
+  }
   const token = normalizeText(citationContext?.token ?? "");
   return candidates
     .map((candidate, index) => {

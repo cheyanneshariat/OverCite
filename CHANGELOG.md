@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.1
+
+- Fixed ADS/SciX raw query mode so comma-separated fielded queries are sent literally to ADS/SciX.
+- Kept ADS/SciX result ordering for fielded raw queries.
+
 ## ✨ 0.3.0
 
 - Added broader source presets with arXiv, INSPIRE, Crossref, PubMed, and DataCite.

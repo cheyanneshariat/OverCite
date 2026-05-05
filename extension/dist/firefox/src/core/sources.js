@@ -295,7 +295,7 @@ export function isFieldedAdsDirectQuery(citationContext = {}) {
     return false;
   }
   const token = String(citationContext?.token ?? "").trim();
-  return /\b(?:abs|abstract|author|bibcode|title|year):/i.test(token);
+  return /\b(?:abs|abstract|ack|aff|affiliation|author|bibcode|bibstem|body|citation|citations|database|doctype|first_author|full|identifier|keyword|orcid|property|pub|title|year):/i.test(token);
 }
 
 export function buildBroadSearchQuery(citationContext = {}) {

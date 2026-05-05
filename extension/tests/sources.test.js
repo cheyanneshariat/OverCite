@@ -966,6 +966,10 @@ test("fielded raw ADS queries skip broad providers", async () => {
     searchMode: "direct"
   }), true);
   assert.equal(isFieldedAdsDirectQuery({
+    token: 'aff:"LAM", year:2026',
+    searchMode: "direct"
+  }), true);
+  assert.equal(isFieldedAdsDirectQuery({
     token: "Attention Is All You Need",
     searchMode: "direct"
   }), false);

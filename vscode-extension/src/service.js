@@ -210,9 +210,10 @@ async function fetchSearchCandidates(queries, citationContext, adsApiToken, fetc
   const mergedDocs = [];
   const seenBibcodes = new Set();
   const initialQueries = citationContext?.searchMode === "simple" ? queries.slice(0, 1) : queries.slice(0, 2);
+  const rows = citationContext?.searchMode === "direct" ? 50 : 12;
 
   if (initialQueries.length) {
-    const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken, fetchImpl)));
+    const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken, fetchImpl, rows)));
     for (const [index, docs] of initialBatches.entries()) {
       mergeDocs(mergedDocs, seenBibcodes, docs, index);
     }
@@ -225,7 +226,7 @@ async function fetchSearchCandidates(queries, citationContext, adsApiToken, fetc
 
   for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
     const index = offset + initialQueries.length;
-    const docs = await fetchAdsDocs(query, adsApiToken, fetchImpl);
+    const docs = await fetchAdsDocs(query, adsApiToken, fetchImpl, rows);
     mergeDocs(mergedDocs, seenBibcodes, docs, index);
     if (shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
       break;
@@ -968,10 +969,10 @@ export function applyInsertion(payload) {
   return applyBibInsertion(payload);
 }
 
-async function fetchAdsDocs(query, adsApiToken, fetchImpl) {
+async function fetchAdsDocs(query, adsApiToken, fetchImpl, rows = 12) {
   const url = new URL(ADS_SEARCH_URL);
   url.searchParams.set("q", query);
-  url.searchParams.set("rows", "12");
+  url.searchParams.set("rows", String(rows));
   url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,identifier,citation_count,property,doctype,pub,bibstem,database");
 
   const response = await fetchImpl(url, {
