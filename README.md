@@ -15,11 +15,7 @@
     <a href="https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo"><img alt="Chrome Web Store" src="https://img.shields.io/badge/Chrome-Web%20Store-34A853?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white"></a>
     <a href="https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search"><img alt="Firefox Add-ons" src="https://img.shields.io/badge/Firefox-Add--ons-FF7139?style=for-the-badge&amp;logo=firefoxbrowser&amp;logoColor=white"></a>
     <a href="https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode"><img alt="VS Code Marketplace" src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&amp;logo=visualstudiocode&amp;logoColor=white"></a>
-  </p>
-
-  <p>
     <a href="https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc"><img alt="RNAAS paper" src="https://img.shields.io/badge/Paper-RNAAS-7C3AED?style=for-the-badge"></a>
-    <a href="LICENSE"><img alt="License: CC BY-NC-ND 4.0" src="https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-0E7C7B?style=for-the-badge"></a>
   </p>
 
   <p>
@@ -28,13 +24,13 @@
     <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-38-007ACC?style=for-the-badge">
   </p>
 
-  <p>
+  <h3>
     <a href="#get-started">Get Started</a> ·
     <a href="#how-to-use">How to Use</a> ·
     <a href="#examples">Examples</a> ·
     <a href="#settings">Settings</a> ·
     <a href="#acknowledge">Acknowledge</a>
-  </p>
+  </h3>
 </div>
 
 <p align="center">
@@ -79,50 +75,34 @@ The default shortcut is `Alt+Shift+E`. Mac users: `Alt` = `Option` / `⌥`.
 
 Search modes:
 
-1. `Contextual` uses typed citation key + local sentence context
-2. `Simple search` searches author/year only and sorts by citation count
-3. `Raw query` sends the typed token directly to the configured source route
+1. `Contextual` uses the rough key plus nearby sentence context.
+2. `Simple search` searches author/year only and sorts by citation count.
+3. `Raw query` sends the typed token directly to the configured source route.
 
-Mode examples:
+Try these:
 
-- `Contextual`: `CRISPR-Cas9 genome engineering became broadly programmable after \citep{Doudna14}.`
-- `Contextual`: `Transformers made attention central in language modeling \citep{Vaswani17}.`
-- `Contextual`: `Molecular Structure of Nucleic Acids introduced the double helix model \citep{Watson1953}.`
-- `Simple search`: `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.`
-- `Simple search`: `Relativistic quantum mechanics follows from \citep{Dirac1928}.`
-- `Simple search`: `Gaia revealed the closest known black hole \citep{El-Badry2023}.`
-- `Raw query`: use a DOI, arXiv id, or ADS/SciX fielded query directly
+| Mode | Example | Good for |
+| --- | --- | --- |
+| `Contextual` | `CRISPR-Cas9 genome engineering became broadly programmable after \citep{Doudna14}.` | Known results with useful sentence context |
+| `Contextual` | `Transformers made attention central in language modeling \citep{Vaswani17}.` | Computer science and ML papers |
+| `Simple search` | `The emcee sampler is widely used in astronomy \citep{Foreman-Mackey2013}.` | Author/year lookups |
+| `Simple search` | `A sparse regression baseline is provided by \citep{Tibshirani1996}.` | Broad cross-field author/year keys |
+| `Raw query` | `\citep{10.1038/s41586-021-03819-2}` | DOI lookup |
+| `Raw query` | `\citep{arXiv:1706.03762}` | arXiv lookup |
+| `Raw query` | `\citep{author:"Schlegel" title:"dust"}` | ADS/SciX fielded query |
+| `Raw query` | `\citep{title:"MNIST"}` | Title search |
+| `Raw query` | `\citep{software citation station}` | Plain text search |
 
 Note that you can set the `Default Search Mode` in settings.
 
-Rough keys:
+More rough keys:
 
-- `\citep{Doudna14}`: CRISPR-Cas9 genome engineering
 - `\citep{Higgs1964}`: Higgs mechanism
 - `\citep{Dirac1928}`: quantum theory of the electron
 - `\citep{Watson1953}`: DNA double helix
 - `\citep{El-Badry2023}`: closest black hole
-- `\citep{Hochreiter97}`: LSTM
-- `\citep{Foreman-Mackey2013}`: emcee
-- `\citep{Schlegel}`: dust maps
-
-Exact lookups:
-
-- `\citep{10.1126/science.1258096}`: Doudna/Charpentier CRISPR-Cas9
-- `\citep{10.1038/s41586-021-03819-2}`: AlphaFold
-- `\citep{arXiv:2303.08774}`: OpenAI GPT-4 report
-- `\citep{arXiv:1706.03762}`: "Attention Is All You Need"
-- `\citep{10.1038/171737a0}`: Watson-Crick DNA structure
-- `\citep{10.1098/rspa.1928.0023}`: Dirac equation
-- `\citep{10.1002/j.1538-7305.1948.tb01338.x}`: information theory
-- `\citep{10.1103/PhysRevLett.13.508}`: Higgs mechanism
-- `\citep{10.1093/mnras/stac3140}`: closest black hole
-- `\citep{10.1103/PhysRev.140.A1133}`: Kohn-Sham equations
-- `\citep{10.1086/260062}`: Black-Scholes
-- `\citep{10.1111/j.2517-6161.1996.tb02080.x}`: LASSO
 - `\citep{hep-th/9711200}`: AdS/CFT
 - `\citep{10.57702/vmvbuu5i}`: MNIST dataset
-- `\citep{author:"Schlegel" title:"dust"}`: ADS/SciX fielded query
 
 ## Scope
 
