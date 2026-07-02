@@ -181,6 +181,24 @@ test("content-script removes overlay DOM on close", async () => {
   );
 });
 
+test("content-script replaces lookup failures with retryable error UI", async () => {
+  const source = await readContentScript();
+  const startLookupBody = extractFunctionBody(source, "startLookup");
+  const errorActionsBody = extractFunctionBody(source, "buildLookupErrorActions");
+
+  assert.match(startLookupBody, /let results;/);
+  assert.match(startLookupBody, /try \{\s*results = await callRuntime\(\{/s);
+  assert.match(startLookupBody, /type: MESSAGE_TYPES\.SEARCH_ADS/);
+  assert.match(startLookupBody, /catch \(error\) \{/);
+  assert.match(startLookupBody, /renderOverlay\(\{\s*subtitle: `\$\{citationContext\.command\}\{\$\{citationContext\.token \|\| "\.\.\."\}\}`,[\s\S]*error: true,[\s\S]*actions: buildLookupErrorActions\(citationContext, resolvedSearchMode\)[\s\S]*\}\);/);
+  assert.match(startLookupBody, /toast\(error\.message \|\| "OverCite could not complete this lookup\.", "error", \{ durationMs: 5200 \}\)/);
+  assert.match(startLookupBody, /return;/);
+  assert.match(errorActionsBody, /label: "Try again"/);
+  assert.match(errorActionsBody, /kind: "primary"/);
+  assert.match(errorActionsBody, /startLookup\(searchMode\)\.catch\(\(error\) => toast\(error\.message, "error"\)\)/);
+  assert.match(errorActionsBody, /\.\.\.buildSearchModeActions\(citationContext, searchMode\)/);
+});
+
 test("content-script uses a short non-blocking success notice after insertion", async () => {
   const source = await readContentScript();
   const insertBody = extractFunctionBody(source, "insertCandidateWithState");
@@ -191,6 +209,18 @@ test("content-script uses a short non-blocking success notice after insertion", 
   assert.match(source, /Math\.max\(MIN_TOAST_DURATION_MS, options\.durationMs\)/);
   assert.match(insertBody, /\{ durationMs: SUCCESS_TOAST_DURATION_MS \}/);
   assert.match(source, /#ezcite-toast \{[\s\S]*?pointer-events: none;/);
+});
+
+test("content-script removes hidden toast nodes after they fade", async () => {
+  const source = await readContentScript();
+  const toastBody = extractFunctionBody(source, "toast");
+
+  assert.match(toastBody, /window\.clearTimeout\(toastNode\._removeTimeoutId\)/);
+  assert.match(toastBody, /const timeoutId = window\.setTimeout/);
+  assert.match(toastBody, /toastNode\.classList\.remove\("visible"\)/);
+  assert.match(toastBody, /toastNode\._removeTimeoutId = window\.setTimeout/);
+  assert.match(toastBody, /toastNode\._timeoutId === timeoutId/);
+  assert.match(toastBody, /toastNode\.remove\(\)/);
 });
 
 test("content-script shows citation counts as a non-wrapping result badge when available", async () => {

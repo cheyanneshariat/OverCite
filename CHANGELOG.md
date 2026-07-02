@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.4
+
+- Fixed a browser runtime error that could show `preferredCitationCount is not defined` when duplicate search results were merged across sources.
+- Replaced failed lookups with a retryable popup state instead of leaving a stale spinner.
+- Removed hidden toast nodes after fade-out so old timeout messages do not linger in the browser accessibility tree.
+- Added a regression check so browser duplicate merging keeps the best available citation count.
+
 ## 0.3.3
 
 - Added a browser setting to return to the original source `.tex` file after Overleaf bibliography insertion.

@@ -923,10 +923,27 @@
     });
     applyOverlayTheme(settings.themeMode ?? "auto");
 
-    const results = await callRuntime({
-      type: MESSAGE_TYPES.SEARCH_ADS,
-      citationContext: { ...citationContext, searchMode: resolvedSearchMode }
-    });
+    let results;
+    try {
+      results = await callRuntime({
+        type: MESSAGE_TYPES.SEARCH_ADS,
+        citationContext: { ...citationContext, searchMode: resolvedSearchMode }
+      });
+    } catch (error) {
+      if (!isCurrentLookup(lookupGeneration)) {
+        return;
+      }
+      console.error("[OverCite content] lookup failed", error);
+      renderOverlay({
+        subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
+        status: error.message || "OverCite could not complete this lookup.",
+        shortcutText: settings.shortcutHelpText,
+        error: true,
+        actions: buildLookupErrorActions(citationContext, resolvedSearchMode)
+      });
+      toast(error.message || "OverCite could not complete this lookup.", "error", { durationMs: 5200 });
+      return;
+    }
     if (!isCurrentLookup(lookupGeneration)) {
       return;
     }
@@ -1013,6 +1030,17 @@
         kind: "tertiary",
         onClick: () => startLookup("direct").catch((error) => toast(error.message, "error"))
       }
+    ];
+  }
+
+  function buildLookupErrorActions(citationContext, searchMode) {
+    return [
+      {
+        label: "Try again",
+        kind: "primary",
+        onClick: () => startLookup(searchMode).catch((error) => toast(error.message, "error"))
+      },
+      ...buildSearchModeActions(citationContext, searchMode)
     ];
   }
 
@@ -2411,12 +2439,19 @@
       toastNode.style.background = "rgba(24, 33, 42, 0.92)";
     }
     window.clearTimeout(toastNode._timeoutId);
+    window.clearTimeout(toastNode._removeTimeoutId);
     const durationMs = Number.isFinite(options?.durationMs)
       ? Math.max(MIN_TOAST_DURATION_MS, options.durationMs)
       : DEFAULT_TOAST_DURATION_MS;
-    toastNode._timeoutId = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       toastNode.classList.remove("visible");
+      toastNode._removeTimeoutId = window.setTimeout(() => {
+        if (toastNode._timeoutId === timeoutId && !toastNode.classList.contains("visible")) {
+          toastNode.remove();
+        }
+      }, 250);
     }, durationMs);
+    toastNode._timeoutId = timeoutId;
   }
 
   async function waitFor(check, timeoutMs) {

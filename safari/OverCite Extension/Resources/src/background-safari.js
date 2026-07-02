@@ -5038,6 +5038,10 @@ const __overciteSafariModules = Object.create(null);
     return primary?.url || secondary?.url || "";
   }
 
+  function preferredCitationCount(primary, secondary) {
+    return Math.max(Number(primary?.citationCount ?? 0) || 0, Number(secondary?.citationCount ?? 0) || 0);
+  }
+
   function candidateSourceCount(candidate) {
     return mergeSourceLabels(candidate?.sourceLabel, "").split(",").map((value) => value.trim()).filter(Boolean).length || 1;
   }

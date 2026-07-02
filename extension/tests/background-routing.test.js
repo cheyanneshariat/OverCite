@@ -48,3 +48,14 @@ test("background simple author-year search filters wrong-author broad matches", 
   assert.match(body, /simpleAuthorYearCandidateMatches\(citationContext, candidate\)/);
   assert.match(body, /firstAuthorMatches\(hint\.surname, candidate\?\.authors\?\.\[0\]\)/);
 });
+
+test("background merged duplicates preserve the best available citation count", async () => {
+  const source = await readBackgroundSource();
+  const mergeBody = extractFunctionBody(source, "mergeCandidates");
+  const preferredCitationCountBody = extractFunctionBody(source, "preferredCitationCount");
+
+  assert.match(mergeBody, /citationCount: preferredCitationCount\(primary, secondary\)/);
+  assert.match(preferredCitationCountBody, /Math\.max/);
+  assert.match(preferredCitationCountBody, /primary\?\.citationCount/);
+  assert.match(preferredCitationCountBody, /secondary\?\.citationCount/);
+});
