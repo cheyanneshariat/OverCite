@@ -34,19 +34,20 @@
 </div>
 
 <p align="center">
-  <a href="docs/assets/overcite-demo-preview-storyboard-apr25.gif">
-    <img src="docs/assets/overcite-demo-preview-storyboard-apr25.gif" alt="OverCite resolving a citation in Overleaf" width="820">
+  <a href="docs/assets/overcite-demo-preview-hawking1975-zoom-text3x-popup1p75x.gif">
+    <img src="docs/assets/overcite-demo-preview-hawking1975-zoom-text3x-popup1p75x.gif" alt="OverCite resolving Hawking1975 in Overleaf" width="820">
   </a>
 </p>
 
-> **Using OverCite in a paper?**
-> If OverCite helped with your manuscript, please acknowledge it with:
->
-> ```tex
-> This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
-> ```
->
-> You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).
+### Using OverCite in a paper?
+
+If OverCite helped with your manuscript, **please acknowledge it** with:
+
+```tex
+This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
+```
+
+You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).
 
 ## Get Started
 
