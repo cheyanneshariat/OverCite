@@ -34,14 +34,6 @@
 </div>
 
 <p align="center">
-  <img src="docs/assets/overcite-users-growth.png" alt="OverCite Chrome Web Store dashboard weekly users over time" width="820">
-</p>
-
-<p align="center">
-  <sub>Chrome growth uses the Chrome Web Store developer dashboard export. The total adds Chrome dashboard users, Firefox average daily users, and VS Code installs.</sub>
-</p>
-
-<p align="center">
   <a href="docs/assets/overcite-demo-preview-storyboard-apr25.gif">
     <img src="docs/assets/overcite-demo-preview-storyboard-apr25.gif" alt="OverCite resolving a citation in Overleaf" width="820">
   </a>
