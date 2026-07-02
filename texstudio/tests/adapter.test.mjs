@@ -22,7 +22,7 @@ test("lineColumnToIndex converts TeXstudio-style cursor positions", () => {
   assert.equal(lineColumnToIndex(text, 1, 4, { lineBase: 1, columnBase: 1 }), 3);
 });
 
-test("normalizeTexstudioSettings preserves v0.3.0 source and key settings", () => {
+test("normalizeTexstudioSettings preserves shared source and key settings", () => {
   const settings = normalizeTexstudioSettings(
     {
       sourceProfile: "general",
@@ -48,7 +48,7 @@ test("normalizeTexstudioSettings preserves v0.3.0 source and key settings", () =
   assert.equal(settings.sourceApiTokens.ncbi, "ncbi-token");
 });
 
-test("resolveTexstudioRequest searches ADS v0.3.0 core and applies the selected result", async () => {
+test("resolveTexstudioRequest searches ADS core and applies the selected result", async () => {
   const projectDir = await makeProject({
     "main.tex": [
       "\\documentclass{article}",
@@ -90,7 +90,7 @@ test("resolveTexstudioRequest searches ADS v0.3.0 core and applies the selected 
   assert.equal(applyTextEdit(activeText, response.activeEdit), response.activeFile.updatedText);
 });
 
-test("resolveTexstudioRequest keeps default raw query compatible with v0.3.0 behavior", async () => {
+test("resolveTexstudioRequest keeps default raw query behavior", async () => {
   const projectDir = await makeProject({
     "main.tex": "\\bibliography{refs}\nContext-only target \\citep{}.",
     "refs.bib": ""
@@ -143,7 +143,7 @@ test("explicit raw query mode rejects empty citation tokens", async () => {
   );
 });
 
-test("resolveTexstudioRequest supports non-ADS v0.3.0 direct DOI lookup", async () => {
+test("resolveTexstudioRequest supports non-ADS direct DOI lookup", async () => {
   const doi = "10.1038/s41586-021-03819-2";
   const projectDir = await makeProject({
     "main.tex": `\\bibliography{refs}\nAlphaFold is resolved with \\citep{${doi}}.`,
@@ -375,15 +375,15 @@ test("loadTexstudioSettings layers user, project, TeXstudio, request, and env se
   });
 
   assert.equal(settings.sourceProfile, "math");
-  assert.equal(settings.primarySource, "arxiv");
-  assert.deepEqual(settings.fallbackSources, ["crossref"]);
+  assert.equal(settings.primarySource, "crossref");
+  assert.deepEqual(settings.fallbackSources, ["arxiv"]);
   assert.equal(settings.citationKeyMode, "authoryear-colon");
   assert.equal(settings.bibliographyInsertMode, "alphabetical");
   assert.equal(settings.sourceApiTokens.ads, "user-ads");
   assert.equal(settings.sourceApiTokens.ncbi, "project-ncbi");
 });
 
-test("applyTexstudioRequest honors v0.3.0 colon keys and alphabetical insertion", async () => {
+test("applyTexstudioRequest honors colon keys and alphabetical insertion", async () => {
   const projectDir = await makeProject({
     "main.tex": "\\bibliography{refs}\nAlphaFold \\citep{Jumper21}.",
     "refs.bib": [

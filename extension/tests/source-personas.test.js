@@ -15,9 +15,9 @@ const PERSONAS = [
       sourceProfile: "physics",
       sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.INSPIRE,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.ADS,
+    expectedFallbacks: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
   },
   {
     id: "biologist",
@@ -25,9 +25,9 @@ const PERSONAS = [
       sourceProfile: "life-sciences",
       sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.PUBMED,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.CROSSREF,
+    expectedFallbacks: [SOURCE_IDS.PUBMED],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.PUBMED]
   },
   {
     id: "cs_researcher",
@@ -35,9 +35,9 @@ const PERSONAS = [
       sourceProfile: "computer-science",
       sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.ARXIV,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.CROSSREF,
+    expectedFallbacks: [SOURCE_IDS.ARXIV],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
   },
   {
     id: "astro_cs_researcher",

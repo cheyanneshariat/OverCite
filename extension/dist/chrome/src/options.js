@@ -15,6 +15,7 @@ const themeInput = document.querySelector("#theme-mode");
 const citationKeyModeInput = document.querySelector("#citation-key-mode");
 const citationKeyExample = document.querySelector("#citation-key-example");
 const bibliographyInsertModeInput = document.querySelector("#bibliography-insert-mode");
+const returnToSourceAfterInsertInput = document.querySelector("#return-to-source-after-insert");
 const defaultSearchModeInput = document.querySelector("#default-search-mode");
 const contextInput = document.querySelector("#context-window-chars");
 const overridesInput = document.querySelector("#project-overrides");
@@ -33,12 +34,12 @@ const SOURCE_PRESETS = Object.freeze({
     fallbackSources: []
   },
   physics: {
-    primarySource: "inspire",
-    fallbackSources: ["crossref"]
+    primarySource: "ads",
+    fallbackSources: ["crossref", "arxiv"]
   },
   math: {
-    primarySource: "arxiv",
-    fallbackSources: ["crossref"]
+    primarySource: "crossref",
+    fallbackSources: ["arxiv"]
   },
   broad: {
     primarySource: "crossref",
@@ -53,12 +54,12 @@ const SOURCE_PRESETS = Object.freeze({
     fallbackSources: ["inspire", "crossref", "ads"]
   },
   "life-sciences": {
-    primarySource: "pubmed",
-    fallbackSources: ["crossref"]
+    primarySource: "crossref",
+    fallbackSources: ["pubmed"]
   },
   "computer-science": {
-    primarySource: "arxiv",
-    fallbackSources: ["crossref"]
+    primarySource: "crossref",
+    fallbackSources: ["arxiv"]
   },
   chemistry: {
     primarySource: "crossref",
@@ -78,13 +79,13 @@ const SOURCE_SUMMARIES = Object.freeze({
   "ads-only": "Astrophysics. Uses ADS/SciX only. Needs an ADS/SciX token.",
   "arxiv-only": "Math. Uses arXiv only.",
   astrophysics: "Astrophysics. Uses ADS/SciX only. Needs an ADS/SciX token.",
-  physics: "Physics. Uses INSPIRE, then Crossref if needed.",
-  math: "Math. Uses arXiv, then Crossref if needed.",
+  physics: "Physics. Uses ADS/SciX first when a token is configured, then Crossref and arXiv if needed.",
+  math: "Math. Uses Crossref first, then arXiv if needed.",
   broad: "General. Uses Crossref / DOI first.",
   "astro-physics": "Astrophysics. Uses ADS/SciX only. Needs an ADS/SciX token.",
   "math-physics": "Math. Uses arXiv, then Crossref if needed.",
-  "life-sciences": "Biology / Medicine. Uses PubMed, then Crossref if needed.",
-  "computer-science": "Computer Science. Uses arXiv, then Crossref if needed.",
+  "life-sciences": "Biology / Medicine. Uses Crossref first, then PubMed if needed.",
+  "computer-science": "Computer Science. Uses Crossref first, then arXiv if needed.",
   chemistry: "Chemistry. Uses Crossref / DOI only.",
   general: "General. Uses Crossref, with DataCite for dataset DOIs.",
   custom: "Custom. Use the advanced source order below."
@@ -132,6 +133,7 @@ function applySettings(settings) {
   themeInput.value = settings.themeMode ?? "auto";
   citationKeyModeInput.value = settings.citationKeyMode ?? "authoryear";
   bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "append";
+  returnToSourceAfterInsertInput.checked = Boolean(settings.returnToSourceAfterInsert);
   defaultSearchModeInput.value = settings.defaultSearchMode ?? "contextual";
   contextInput.value = String(settings.contextWindowChars ?? 500);
   overridesInput.value = stringifyOverridesForField(settings.defaultProjectBibFileOverride);
@@ -162,6 +164,7 @@ form.addEventListener("submit", async (event) => {
       themeMode: themeInput.value,
       citationKeyMode: citationKeyModeInput.value,
       bibliographyInsertMode: bibliographyInsertModeInput.value,
+      returnToSourceAfterInsert: returnToSourceAfterInsertInput.checked,
       defaultSearchMode: defaultSearchModeInput.value,
       contextWindowChars: contextInput.value,
       defaultProjectBibFileOverride: overrides

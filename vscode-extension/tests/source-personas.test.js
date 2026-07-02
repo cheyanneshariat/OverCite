@@ -15,9 +15,9 @@ const PERSONAS = [
       sourceProfile: "physics",
       sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.INSPIRE,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.ADS,
+    expectedFallbacks: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
   },
   {
     id: "math",
@@ -25,9 +25,9 @@ const PERSONAS = [
       sourceProfile: "math",
       sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.ARXIV,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.CROSSREF,
+    expectedFallbacks: [SOURCE_IDS.ARXIV],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
   },
   {
     id: "life_sciences",
@@ -35,9 +35,9 @@ const PERSONAS = [
       sourceProfile: "life-sciences",
       sourceApiTokens: { ncbi: "ncbi-token" }
     },
-    expectedPrimary: SOURCE_IDS.PUBMED,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.PUBMED, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.CROSSREF,
+    expectedFallbacks: [SOURCE_IDS.PUBMED],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.PUBMED]
   },
   {
     id: "computer_science",
@@ -45,9 +45,9 @@ const PERSONAS = [
       sourceProfile: "computer-science",
       sourceApiTokens: {}
     },
-    expectedPrimary: SOURCE_IDS.ARXIV,
-    expectedFallbacks: [SOURCE_IDS.CROSSREF],
-    sources: [SOURCE_IDS.ARXIV, SOURCE_IDS.CROSSREF]
+    expectedPrimary: SOURCE_IDS.CROSSREF,
+    expectedFallbacks: [SOURCE_IDS.ARXIV],
+    sources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
   },
   {
     id: "chemistry",
@@ -306,6 +306,40 @@ test("arXiv runtime cache reuses repeated author-year lookups", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Crossref title search retries once after timeout aborts", async () => {
+  const fetchCalls = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "The ORCA quantum chemistry program package",
+    searchMode: "simple"
+  }, {
+    sourceProfile: "custom",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.CROSSREF], async (url) => {
+    fetchCalls.push(url);
+    if (fetchCalls.length === 1) {
+      const error = new Error("This operation was aborted");
+      error.name = "AbortError";
+      throw error;
+    }
+    return jsonResponse({
+      message: {
+        items: [{
+          DOI: "10.1063/5.0004608",
+          title: ["The ORCA quantum chemistry program package"],
+          author: [{ family: "Neese", given: "Frank" }],
+          issued: { "date-parts": [[2020]] },
+          "container-title": ["The Journal of Chemical Physics"],
+          type: "journal-article"
+        }]
+      }
+    });
+  });
+
+  assert.equal(fetchCalls.length, 2);
+  assert.equal(candidates[0].doi, "10.1063/5.0004608");
+  assert.equal(candidates[0].title, "The ORCA quantum chemistry program package");
 });
 
 test("arXiv rate-limit text falls back to Crossref metadata", async () => {

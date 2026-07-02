@@ -31,7 +31,8 @@ test("buildQuickPickItems exposes generated keys and details", () => {
         authors: ["Shariat, Cheyanne"],
         year: 2025,
         abstract: "A short abstract.",
-        generatedKey: "Shariat25_test"
+        generatedKey: "Shariat25_test",
+        citationCount: 4321
       }
     ],
     {
@@ -42,6 +43,7 @@ test("buildQuickPickItems exposes generated keys and details", () => {
   );
 
   assert.equal(items[0].label, "Shariat25_test");
+  assert.equal(items[0].description, "Shariat, Cheyanne | 2025 · cited by 4,321");
   assert.match(items[0].detail, /Test Title/);
   assert.equal(items[0].candidate.typedToken, "Shariat25");
 });
@@ -450,6 +452,7 @@ test("searchLiterature stops simple title search after an exact primary match", 
                 author: [{ family: "Vaswani", given: "Ashish" }],
                 issued: { "date-parts": [[2017]] },
                 "container-title": ["NeurIPS"],
+                "is-referenced-by-count": 6530,
                 type: "proceedings-article",
                 URL: "https://doi.org/10.5555/attention-journal"
               }
@@ -464,6 +467,538 @@ test("searchLiterature stops simple title search after an exact primary match", 
   assert.equal(calls.length, 1);
   assert.equal(results[0].sourceId, "crossref");
   assert.equal(results[0].doi, "10.5555/attention-journal");
+  assert.equal(results[0].citationCount, 6530);
+});
+
+test("simple ADS-first search returns ADS results before broad fallbacks", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Godel1949",
+      searchMode: "simple",
+      sentenceText: "The Godel incompleteness paper should retrieve the Godel incompleteness paper.",
+      contextText: "The Godel incompleteness paper should retrieve the Godel incompleteness paper.",
+      parsedKeyHint: {
+        surname: "Godel",
+        year: 1949,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "ads",
+      fallbackSources: ["crossref", "arxiv"],
+      sourceApiTokens: { ads: "ads-token" },
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")) {
+        return jsonResponse({
+          response: {
+            docs: [
+              makeDoc("1949Godel", {
+                title: "Godel incompleteness paper",
+                author: ["Godel, Kurt"],
+                year: "1949",
+                abstract: "Godel incompleteness paper.",
+                citation_count: 1200
+              })
+            ]
+          }
+        });
+      }
+      throw new Error(`Simple ADS-first lookup should not call fallback URL: ${url}`);
+    }
+  );
+
+  assert.ok(calls.length >= 1);
+  assert.equal(calls.every((url) => url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")), true);
+  assert.equal(results[0].sourceId, "ads");
+  assert.equal(results[0].generatedKey, "Godel1949");
+});
+
+test("simple search suppresses wrong-author Crossref fallbacks and can use arXiv when it is the only match", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Godel1949",
+      searchMode: "simple",
+      sentenceText: "The Godel incompleteness paper should retrieve the Godel incompleteness paper.",
+      contextText: "The Godel incompleteness paper should retrieve the Godel incompleteness paper.",
+      parsedKeyHint: {
+        surname: "Godel",
+        year: 1949,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "ads",
+      fallbackSources: ["crossref", "arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.5555/wrong-1949",
+                title: ["Automatic Paper Chromatography"],
+                author: [{ family: "Muller", given: "R. H." }],
+                issued: { "date-parts": [[1949]] },
+                "container-title": ["Chromatography"],
+                "is-referenced-by-count": 151,
+                type: "journal-article",
+                URL: "https://doi.org/10.5555/wrong-1949"
+              }
+            ]
+          }
+        });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/math/4910001v1</id>
+              <published>1949-10-01T00:00:00Z</published>
+              <title>Godel incompleteness paper</title>
+              <summary>Godel incompleteness paper.</summary>
+              <author><name>Kurt Godel</name></author>
+              <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="math.LO"/>
+            </entry>
+          </feed>`);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(calls[0].startsWith("https://api.crossref.org/works"));
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
+  assert.equal(results[0].sourceId, "arxiv");
+  assert.equal(results[0].generatedKey, "Godel1949");
+  assert.equal(results.some((candidate) => candidate.title === "Automatic Paper Chromatography"), false);
+});
+
+test("simple fallback search returns a high-confidence earlier fallback without waiting for slower later fallbacks", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Attention Is All You Need",
+      searchMode: "simple",
+      sentenceText: "Attention Is All You Need introduced transformer architectures.",
+      contextText: "Attention Is All You Need introduced transformer architectures.",
+      parsedKeyHint: null
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "ads",
+      fallbackSources: ["crossref", "arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.5555/attention",
+                title: ["Attention Is All You Need"],
+                author: [{ family: "Vaswani", given: "Ashish" }],
+                issued: { "date-parts": [[2017]] },
+                "container-title": ["NeurIPS"],
+                "is-referenced-by-count": 120000,
+                type: "proceedings-article",
+                URL: "https://doi.org/10.5555/attention"
+              }
+            ]
+          }
+        });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return new Promise(() => {});
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "crossref");
+  assert.equal(results[0].title, "Attention Is All You Need");
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
+});
+
+test("simple ranking prefers exact author-year citation count over wrong-year and wrong-author hits", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Godel1949",
+      searchMode: "simple",
+      sentenceText: "The Godel incompleteness paper should retrieve the Godel incompleteness paper.",
+      contextText: "The Godel incompleteness paper should retrieve the Godel incompleteness paper.",
+      parsedKeyHint: {
+        surname: "Godel",
+        year: 1949,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["ads"],
+      sourceApiTokens: { ads: "ads-token" },
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.5555/godel-1964",
+                title: ["On Formally Undecidable Propositions of Principia Mathematica and Related Systems"],
+                author: [{ family: "Godel", given: "Kurt" }],
+                issued: { "date-parts": [[1964]] },
+                "container-title": ["Collected Works"],
+                "is-referenced-by-count": 11,
+                type: "journal-article",
+                URL: "https://doi.org/10.5555/godel-1964"
+              }
+            ]
+          }
+        });
+      }
+      if (url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")) {
+        return jsonResponse({
+          response: {
+            docs: [
+              makeDoc("1949GodelExact", {
+                title: "An Example of a New Type of Cosmological Solutions of Einstein's Field Equations of Gravitation",
+                author: ["Godel, Kurt"],
+                year: "1949",
+                abstract: "Exact Godel 1949 paper.",
+                citation_count: 1116
+              }),
+              makeDoc("2016RichterWrong", {
+                title: "Enhancing photoluminescence yields in lead halide perovskites by photon recycling and light out-coupling",
+                author: ["Richter, Johannes M."],
+                year: "2016",
+                abstract: "Wrong author paper.",
+                citation_count: 351
+              })
+            ]
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "ads");
+  assert.equal(results[0].authors[0], "Godel, Kurt");
+  assert.equal(results[0].year, 1949);
+  assert.equal(results.some((candidate) => candidate.authors[0] === "Richter, Johannes M."), false);
+  assert.ok(results.findIndex((candidate) => candidate.year === 1949) < results.findIndex((candidate) => candidate.year === 1964));
+});
+
+test("simple ranking uses sentence title evidence before citation counts for same author-year ADS hits", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Shariat2025",
+      searchMode: "simple",
+      sentenceText: "The Gaia resolved-triples paper should retrieve 10,000 Resolved Triples from Gaia.",
+      contextText: "The Gaia resolved-triples paper \\citep{Shariat2025} should retrieve 10,000 Resolved Triples from Gaia.",
+      parsedKeyHint: {
+        surname: "Shariat",
+        year: 2025,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "ads",
+      fallbackSources: [],
+      sourceApiTokens: { ads: "ads-token" },
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")) {
+        return jsonResponse({
+          response: {
+            docs: [
+              makeDoc("2025ShariatMerge", {
+                title: "Once a Triple, Not Always a Triple: The Evolution of Hierarchical Triples That Yield Mergers",
+                author: ["Shariat, Cheyanne"],
+                year: "2025",
+                abstract: "Hierarchical triples that yield mergers.",
+                citation_count: 36
+              }),
+              makeDoc("2025ShariatGaia", {
+                title: "10,000 Resolved Triples from Gaia: Empirical Constraints on Triple Star Populations",
+                author: ["Shariat, Cheyanne", "El-Badry, Kareem", "Naoz, Smadar"],
+                year: "2025",
+                abstract: "A catalog of resolved triple star systems from Gaia.",
+                citation_count: 22
+              })
+            ]
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.match(results[0].title, /10,000 Resolved Triples from Gaia/);
+  assert.equal(results[0].citationCount, 22);
+});
+
+test("simple ranking uses sentence title evidence before high-citation same-author physics distractors", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Lu2024",
+      searchMode: "simple",
+      sentenceText: "The graphene fractional quantum anomalous Hall paper should retrieve Fractional quantum anomalous Hall effect in multilayer graphene.",
+      contextText: "The graphene fractional quantum anomalous Hall paper \\citep{Lu2024} should retrieve Fractional quantum anomalous Hall effect in multilayer graphene.",
+      parsedKeyHint: {
+        surname: "Lu",
+        year: 2024,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "ads",
+      fallbackSources: [],
+      sourceApiTokens: { ads: "ads-token" },
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")) {
+        return jsonResponse({
+          response: {
+            docs: [
+              makeDoc("2024LuToolbox", {
+                title: "A comprehensive electron wavefunction analysis toolbox for chemists, Multiwfn",
+                author: ["Lu, Tian"],
+                year: "2024",
+                abstract: "A highly cited toolbox.",
+                citation_count: 1654
+              }),
+              makeDoc("2024LuGraphene", {
+                title: "Fractional quantum anomalous Hall effect in multilayer graphene",
+                author: ["Lu, Zhengguang", "Han, Tonghang"],
+                year: "2024",
+                abstract: "Fractional quantum anomalous Hall effect in multilayer graphene.",
+                citation_count: 509
+              })
+            ]
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.match(results[0].title, /Fractional quantum anomalous Hall effect/);
+  assert.equal(results[0].citationCount, 509);
+});
+
+test("simple ranking lets strong biology title context beat a weak first-author key match", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Doudna2012",
+      searchMode: "simple",
+      sentenceText: "The CRISPR-Cas9 paper should retrieve a programmable dual-RNA-guided DNA endonuclease.",
+      contextText: "The CRISPR-Cas9 paper \\citep{Doudna2012} should retrieve a programmable dual-RNA-guided DNA endonuclease.",
+      parsedKeyHint: {
+        surname: "Doudna",
+        year: 2012,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.5555/doudna-distractor",
+                title: ["Response of Terrestrial Arthropod Assemblages to Coastal Dune Restoration"],
+                author: [{ family: "Doudna", given: "Example" }],
+                issued: { "date-parts": [[2012]] },
+                "container-title": ["Ecology"],
+                "is-referenced-by-count": 3,
+                type: "journal-article",
+                URL: "https://doi.org/10.5555/doudna-distractor"
+              },
+              {
+                DOI: "10.1126/science.1225829",
+                title: ["A Programmable Dual-RNA-Guided DNA Endonuclease in Adaptive Bacterial Immunity"],
+                author: [
+                  { family: "Jinek", given: "Martin" },
+                  { family: "Chylinski", given: "Krzysztof" },
+                  { family: "Doudna", given: "Jennifer A." }
+                ],
+                issued: { "date-parts": [[2012]] },
+                "container-title": ["Science"],
+                "is-referenced-by-count": 15410,
+                type: "journal-article",
+                URL: "https://doi.org/10.1126/science.1225829"
+              }
+            ]
+          }
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.match(results[0].title, /Programmable Dual-RNA/);
+  assert.equal(results[0].generatedKey, "Jinek2012");
+  assert.equal(results[0].citationCount, 15410);
+});
+
+test("simple pre-arXiv Crossref hit does not wait for arXiv fallback", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Godel1949",
+      searchMode: "simple",
+      sentenceText: "The Godel incompleteness paper should retrieve the formally undecidable propositions paper.",
+      contextText: "The Godel incompleteness paper \\citep{Godel1949} should retrieve the formally undecidable propositions paper.",
+      parsedKeyHint: {
+        surname: "Godel",
+        year: 1949,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.5555/godel-1964",
+                title: ["On Formally Undecidable Propositions of Principia Mathematica and Related Systems"],
+                author: [{ family: "Godel", given: "Kurt" }],
+                issued: { "date-parts": [[1964]] },
+                "container-title": ["Collected Works"],
+                "is-referenced-by-count": 11,
+                type: "journal-article",
+                URL: "https://doi.org/10.5555/godel-1964"
+              }
+            ]
+          }
+        });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return new Promise(() => {});
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "crossref");
+  assert.equal(results[0].generatedKey, "Godel1964");
+  assert.equal(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")), false);
+});
+
+test("simple modern wrong-year Crossref title waits for arXiv fallback", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Vaswani2017",
+      searchMode: "simple",
+      sentenceText: "The Transformer paper should retrieve Attention Is All You Need.",
+      contextText: "The Transformer paper \\citep{Vaswani2017} should retrieve Attention Is All You Need.",
+      parsedKeyHint: {
+        surname: "Vaswani",
+        year: 2017,
+        firstInitial: "",
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({
+          message: {
+            items: [
+              {
+                DOI: "10.5555/attention-reprint",
+                title: ["Attention Is All You Need"],
+                author: [{ family: "Vaswani", given: "Ashish" }],
+                issued: { "date-parts": [[2025]] },
+                "container-title": ["Reprint Collection"],
+                "is-referenced-by-count": 53,
+                type: "journal-article",
+                URL: "https://doi.org/10.5555/attention-reprint"
+              }
+            ]
+          }
+        });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/1706.03762v7</id>
+              <published>2017-06-12T00:00:00Z</published>
+              <title>Attention Is All You Need</title>
+              <summary>Transformer architecture.</summary>
+              <author><name>Ashish Vaswani</name></author>
+              <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.CL"/>
+            </entry>
+          </feed>`);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "arxiv");
+  assert.equal(results[0].year, 2017);
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
 });
 
 test("searchLiterature falls back when a long title lead only matches a short prefix", async () => {
@@ -1232,6 +1767,7 @@ test("broad ranking boosts records confirmed by multiple sources and preserves j
                 author: [{ family: "Vaswani", given: "Ashish" }],
                 issued: { "date-parts": [[2017]] },
                 "container-title": ["NeurIPS"],
+                "is-referenced-by-count": 6530,
                 type: "proceedings-article",
                 URL: "https://doi.org/10.5555/attention-journal"
               }
@@ -1248,8 +1784,75 @@ test("broad ranking boosts records confirmed by multiple sources and preserves j
   assert.equal(results[0].sourceId, "crossref");
   assert.equal(results[0].doi, "10.5555/attention-journal");
   assert.equal(results[0].eprint, "1706.03762");
+  assert.equal(results[0].citationCount, 6530);
   assert.match(results[0].sourceLabel, /Crossref/);
   assert.match(results[0].sourceLabel, /arXiv/);
+});
+
+test("arXiv simple results can be enriched with ADS citation counts", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Vaswani2017",
+      searchMode: "simple",
+      sentenceText: "Attention Is All You Need introduced the Transformer architecture.",
+      contextText: "Attention Is All You Need introduced the Transformer architecture.",
+      parsedKeyHint: {
+        surname: "Vaswani",
+        year: 2017,
+        firstInitial: null,
+        suffix: ""
+      }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "arxiv",
+      fallbackSources: [],
+      sourceApiTokens: { ads: "token" },
+      adsApiToken: "token",
+      citationKeyMode: "authoryear",
+      bibliographyInsertMode: "append"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/1706.03762v7</id>
+              <published>2017-06-12T00:00:00Z</published>
+              <title>Attention Is All You Need</title>
+              <summary>Transformer abstract.</summary>
+              <author><name>Ashish Vaswani</name></author>
+              <author><name>Noam Shazeer</name></author>
+              <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.CL"/>
+            </entry>
+          </feed>`);
+      }
+      if (url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")) {
+        const query = new URL(url).searchParams.get("q") ?? "";
+        assert.match(query, /identifier:"1706\.03762"/);
+        return okResponse([
+          makeDoc("2017arXiv170603762V", {
+            title: "Attention Is All You Need",
+            author: ["Vaswani, Ashish", "Shazeer, Noam"],
+            year: "2017",
+            doi: "10.48550/arxiv.1706.03762",
+            identifier: ["arXiv:1706.03762"],
+            citation_count: 98765
+          })
+        ]);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
+  assert.ok(calls.some((url) => url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")));
+  assert.equal(results[0].sourceLabel, "arXiv");
+  assert.equal(results[0].eprint, "1706.03762");
+  assert.equal(results[0].citationCount, 98765);
 });
 
 test("arXiv-primary presets try Crossref first for pre-arXiv papers", async () => {
@@ -1321,16 +1924,14 @@ test("contextual broad search keeps exact title-year matches for collaboration k
     },
     {
       sourceProfile: "physics",
-      primarySource: "inspire",
-      fallbackSources: ["crossref"],
       sourceApiTokens: {},
       citationKeyMode: "authoryear"
     },
     async (input) => {
       const url = String(input);
       calls.push(url);
-      if (url.startsWith("https://inspirehep.net/api/literature")) {
-        return jsonResponse({ hits: { hits: [] } });
+      if (url.startsWith("https://inspirehep.net")) {
+        throw new Error(`Physics preset should not call INSPIRE: ${url}`);
       }
       if (url.startsWith("https://api.crossref.org/works")) {
         return jsonResponse({
@@ -1353,7 +1954,7 @@ test("contextual broad search keeps exact title-year matches for collaboration k
     }
   );
 
-  assert.ok(calls.some((url) => url.startsWith("https://inspirehep.net/api/literature")));
+  assert.equal(calls.some((url) => url.startsWith("https://inspirehep.net")), false);
   assert.ok(calls.some((url) => url.startsWith("https://api.crossref.org/works")));
   assert.equal(results[0].sourceId, "crossref");
   assert.equal(results[0].doi, "10.1038/s41586-024-07824-z");
@@ -1580,11 +2181,13 @@ function makeDoc(bibcode, overrides = {}) {
     year: overrides.year ?? "2025",
     abstract: overrides.abstract ?? "Resolved triples from Gaia constrain triple star populations.",
     doi: [overrides.doi ?? `10.1234/${bibcode}`],
+    identifier: overrides.identifier,
     property: overrides.property,
     doctype: overrides.doctype,
     pub: overrides.pub,
     bibstem: overrides.bibstem,
-    database: overrides.database
+    database: overrides.database,
+    citation_count: overrides.citation_count
   };
 }
 

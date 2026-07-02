@@ -9,7 +9,7 @@ OverCite is a browser extension for Overleaf that searches literature sources fr
 - Configurable source routing with ADS/SciX, arXiv, INSPIRE, Crossref, DataCite, and PubMed support
 - Three search modes: contextual, simple search, and raw query
 - Citation parsing, key generation (including ADS bibcodes), BibTeX dedupe, and bibliography resolution
-- Options page for subject-area preset, primary/fallback sources, optional source tokens, theme preference, and project-level `.bib` overrides
+- Options page for subject-area preset, primary/fallback sources, optional source tokens, theme preference, source-return behavior, and project-level `.bib` overrides
 - Node test suite covering parser, ranking, key generation, dedupe, and an example-TeX harness
 
 ## Current editor strategy
@@ -62,6 +62,8 @@ The options page also lets you choose how inserted citation keys are written:
 - `Informative` for keys like `Perlmutter99_supernovae`
 - `Bibcode` for keys like `2025PASP..137i4201S`
 - `Keep Typed Key` to preserve what you entered when possible
+
+Browser users can also enable `Return to source file after insert` to switch back to the original `.tex` file after OverCite finishes updating the target `.bib` file. When this is enabled, the popup dismisses immediately after insertion and the editor return continues in the background. The default keeps the current behavior and leaves the editor on the bibliography file after insertion.
 
 Short examples:
 

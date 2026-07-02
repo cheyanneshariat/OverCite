@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.3
+
+- Added a browser setting to return to the original source `.tex` file after Overleaf bibliography insertion.
+- Closed the browser insertion popup as soon as insertion finishes when returning to the source editor, so rapid follow-up citations are not blocked by lingering UI.
+- Show citation-count badges in result cards when a provider returns citation metadata.
+- Enrich arXiv result citation counts from ADS/SciX when an ADS/SciX token is configured, with a short timeout so simple search stays responsive.
+- Improved simple-search ranking for title/context evidence, hyphenated author keys, source duplicates, and catalog-vs-paper distractors.
+- Changed the Physics source preset to ADS/SciX first when configured, then Crossref and arXiv if needed, with no INSPIRE in the preset.
+
 ## 0.3.2
 
 - Added experimental TeXstudio support through a local script macro, Node CLI, and one-command setup helper that reuse the v0.3.0 source-routing and insertion core.

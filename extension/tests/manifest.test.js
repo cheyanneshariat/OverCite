@@ -29,10 +29,29 @@ test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   assert.equal(manifest.icons["128"], "icons/icon-128.png");
   assert.equal(manifest.action.default_icon["16"], "icons/icon-16.png");
   assert.equal(manifest.action.default_icon["32"], "icons/icon-32.png");
+  assert.ok(!("default_popup" in manifest.action), "toolbar action should directly trigger OverCite");
+  assert.equal(manifest.commands["open-ezcite"].suggested_key.default, "Alt+Shift+E");
+  assert.equal(manifest.commands["open-ezcite"].suggested_key.mac, "Alt+Shift+E");
+  assert.deepEqual(manifest.content_scripts[0].matches, [
+    "https://overleaf.com/*",
+    "https://www.overleaf.com/*"
+  ]);
+  assert.deepEqual(manifest.content_scripts[0].js, ["src/content-script.js"]);
   assert.equal(manifest.browser_specific_settings.gecko.id, "overcite-addon@example.com");
   assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "140.0");
   assert.deepEqual(
     manifest.browser_specific_settings.gecko.data_collection_permissions.required,
     ["authenticationInfo", "websiteContent"]
   );
+});
+
+test("background trigger path accepts Overleaf project tabs on both hostnames", async () => {
+  const backgroundText = await readFile(new URL("../src/background.js", import.meta.url), "utf8");
+
+  assert.match(backgroundText, /commands\.onCommand\.addListener\(\(command\) => \{/);
+  assert.match(backgroundText, /command !== "open-ezcite"/);
+  assert.match(backgroundText, /action\.onClicked\.addListener\(\(tab\) => \{/);
+  assert.match(backgroundText, /safeSendMessageToTab\(tab\.id, \{ type: "ezcite:openOverlay" \}\)/);
+  assert.match(backgroundText, /parsed\.hostname === "overleaf\.com" \|\| parsed\.hostname === "www\.overleaf\.com"/);
+  assert.match(backgroundText, /parsed\.pathname\.startsWith\("\/project\/"\)/);
 });

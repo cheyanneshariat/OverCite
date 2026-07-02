@@ -2,7 +2,7 @@
 
 OverCite helps you add LaTeX citations in VS Code without leaving the editor.
 
-Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches, and insert the selected BibTeX entry directly into your project bibliography. The default is fast ADS/SciX-only lookup; subject-area presets can add arXiv, INSPIRE, Crossref, DataCite, and PubMed.
+Place your cursor inside a `\cite{...}` command, press `Alt+Shift+E`, review likely matches, and insert the selected BibTeX entry directly into your project bibliography. The default is fast ADS/SciX-only lookup; subject-area presets can add arXiv, Crossref, DataCite, and PubMed, while custom routing can still use INSPIRE.
 
 If OverCite was helpful in preparing your manuscript, you can acknowledge it with:
 

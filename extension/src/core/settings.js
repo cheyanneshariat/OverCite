@@ -62,7 +62,7 @@ export function normalizeSettings(rawSettings = {}) {
     contextWindowChars: Number.isFinite(contextWindowChars) ? Math.min(1200, Math.max(200, contextWindowChars)) : DEFAULT_SETTINGS.contextWindowChars,
     shortcutHelpText: String(rawSettings.shortcutHelpText ?? DEFAULT_SETTINGS.shortcutHelpText).trim() || DEFAULT_SETTINGS.shortcutHelpText,
     themeMode,
-    returnToSourceAfterInsert: false,
+    returnToSourceAfterInsert: normalizeBooleanSetting(rawSettings.returnToSourceAfterInsert, DEFAULT_SETTINGS.returnToSourceAfterInsert),
     citationKeyMode,
     bibliographyInsertMode,
     defaultSearchMode
@@ -85,12 +85,12 @@ const SOURCE_PRESETS = Object.freeze({
     fallbackSources: []
   },
   physics: {
-    primarySource: "inspire",
-    fallbackSources: ["crossref"]
+    primarySource: "ads",
+    fallbackSources: ["crossref", "arxiv"]
   },
   math: {
-    primarySource: "arxiv",
-    fallbackSources: ["crossref"]
+    primarySource: "crossref",
+    fallbackSources: ["arxiv"]
   },
   broad: {
     primarySource: "crossref",
@@ -105,12 +105,12 @@ const SOURCE_PRESETS = Object.freeze({
     fallbackSources: ["inspire", "crossref", "ads"]
   },
   "life-sciences": {
-    primarySource: "pubmed",
-    fallbackSources: ["crossref"]
+    primarySource: "crossref",
+    fallbackSources: ["pubmed"]
   },
   "computer-science": {
-    primarySource: "arxiv",
-    fallbackSources: ["crossref"]
+    primarySource: "crossref",
+    fallbackSources: ["arxiv"]
   },
   chemistry: {
     primarySource: "crossref",
@@ -142,13 +142,16 @@ function normalizeSourceProfile(sourceProfile) {
 
 function normalizePrimarySource(primarySource, sourceProfile) {
   const fallbackPrimary = SOURCE_PRESETS[sourceProfile]?.primarySource ?? DEFAULT_SETTINGS.primarySource;
+  if (sourceProfile !== "custom") {
+    return fallbackPrimary;
+  }
   const normalized = String(primarySource ?? fallbackPrimary).trim();
   return SOURCE_IDS.has(normalized) ? normalized : fallbackPrimary;
 }
 
 function normalizeFallbackSources(fallbackSources, primarySource, sourceProfile) {
   const fallbackPreset = SOURCE_PRESETS[sourceProfile]?.fallbackSources ?? DEFAULT_SETTINGS.fallbackSources;
-  const rawSources = Array.isArray(fallbackSources) ? fallbackSources : fallbackPreset;
+  const rawSources = sourceProfile === "custom" && Array.isArray(fallbackSources) ? fallbackSources : fallbackPreset;
   const normalized = [];
   for (const sourceId of rawSources) {
     const normalizedSource = String(sourceId ?? "").trim();
@@ -176,6 +179,20 @@ function normalizeThemeMode(themeMode) {
     return normalized;
   }
   return DEFAULT_SETTINGS.themeMode;
+}
+
+function normalizeBooleanSetting(value, fallback) {
+  if (value === true || value === false) {
+    return value;
+  }
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  return Boolean(fallback);
 }
 
 function normalizeCitationKeyMode(citationKeyMode) {

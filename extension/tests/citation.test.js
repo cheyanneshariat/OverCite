@@ -13,6 +13,61 @@ test("findCitationAtCursor resolves the active token inside a multi-citation com
   assert.deepEqual(result.tokens, ["Goldberg24", "Shariat25", "Joyce20"]);
 });
 
+test("findCitationAtCursor supports textual citation commands", () => {
+  const source = "\\citet{Doudna2012} introduced a programmable CRISPR endonuclease.";
+  const cursorIndex = source.indexOf("Doudna") + 3;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.command, "\\citet");
+  assert.equal(result.token, "Doudna2012");
+  assert.deepEqual(result.tokens, ["Doudna2012"]);
+});
+
+test("findCitationAtCursor supports plain cite commands with optional notes", () => {
+  const source = "Transformers were introduced in \\cite[see][section 3]{Vaswani2017}.";
+  const cursorIndex = source.indexOf("Vaswani") + 4;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.command, "\\cite[see][section 3]");
+  assert.equal(result.token, "Vaswani2017");
+  assert.deepEqual(result.tokens, ["Vaswani2017"]);
+});
+
+test("findCitationAtCursor supports starred and author/year citation variants", () => {
+  const starred = "The result appears in \\citep*{Watson1953}.";
+  const authorOnly = "\\citeauthor{Doudna2012} introduced a programmable CRISPR endonuclease.";
+  const yearOnly = "The method was published in \\citeyearpar{Kingma2015}.";
+
+  const starredResult = findCitationAtCursor(starred, starred.indexOf("Watson") + 3, 500);
+  const authorResult = findCitationAtCursor(authorOnly, authorOnly.indexOf("Doudna") + 3, 500);
+  const yearResult = findCitationAtCursor(yearOnly, yearOnly.indexOf("Kingma") + 3, 500);
+
+  assert.ok(starredResult);
+  assert.equal(starredResult.command, "\\citep*");
+  assert.equal(starredResult.token, "Watson1953");
+
+  assert.ok(authorResult);
+  assert.equal(authorResult.command, "\\citeauthor");
+  assert.equal(authorResult.token, "Doudna2012");
+
+  assert.ok(yearResult);
+  assert.equal(yearResult.command, "\\citeyearpar");
+  assert.equal(yearResult.token, "Kingma2015");
+});
+
+test("findCitationAtCursor keeps the active repeated multi-citation token isolated", () => {
+  const source = "First \\citep{Planck2020,Shariat2025}. Later \\citep{Shariat2025,Planck2020}.";
+  const cursorIndex = source.lastIndexOf("Planck2020") + 3;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.equal(result.token, "Planck2020");
+  assert.deepEqual(result.tokens, ["Shariat2025", "Planck2020"]);
+  assert.ok(!result.sentenceText.includes("Shariat2025,Planck2020"));
+});
+
 test("findCitationAtCursor preserves literal ADS query tokens with spaces and quotes", () => {
   const source = 'Here is text \\citep{author:"El-Badry" year:2022 title:"magnetic braking"} and more.';
   const cursorIndex = source.indexOf('El-Badry') + 2;

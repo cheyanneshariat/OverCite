@@ -52,7 +52,7 @@ Use project `.overcite-texstudio.json` when one paper or project needs different
 | `sourceProfile` | `astrophysics`, `physics`, `math`, `computer-science`, `life-sciences`, `chemistry`, `general`, `custom` | Subject-area preset. Start here unless you know you need custom routing. |
 | `primarySource` | `ads`, `pubmed`, `crossref`, `arxiv`, `inspire`, `datacite` | Primary source when `sourceProfile` is `custom`. |
 | `fallbackSources` | array of `ads`, `pubmed`, `crossref`, `arxiv`, `inspire`, `datacite` | Backup sources when `sourceProfile` is `custom`. Keep this short. |
-| `adsApiToken` | string | ADS/SciX token for astronomy/physics searches. |
+| `adsApiToken` | string | ADS/SciX token for astronomy or custom ADS/SciX searches. |
 | `ncbiApiKey` | string | Optional NCBI API key for higher-rate PubMed requests. |
 | `sourceApiTokens.ads` | string | Advanced equivalent of `adsApiToken`. |
 | `sourceApiTokens.ncbi` | string | Advanced equivalent of `ncbiApiKey`. |
@@ -67,10 +67,10 @@ Use project `.overcite-texstudio.json` when one paper or project needs different
 | Profile | Default routing |
 | --- | --- |
 | `astrophysics` | ADS/SciX |
-| `physics` | INSPIRE, then Crossref |
-| `math` | arXiv, then Crossref |
-| `computer-science` | arXiv, then Crossref |
-| `life-sciences` | PubMed, then Crossref |
+| `physics` | ADS/SciX when configured, then Crossref and arXiv |
+| `math` | Crossref, then arXiv |
+| `computer-science` | Crossref, then arXiv |
+| `life-sciences` | Crossref, then PubMed |
 | `chemistry` | Crossref |
 | `general` | Crossref, then DataCite |
 | `custom` | Uses `primarySource` and `fallbackSources` |

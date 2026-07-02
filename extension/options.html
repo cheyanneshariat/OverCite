@@ -257,6 +257,25 @@
         accent-color: var(--accent);
       }
 
+      .checkbox-field {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: start;
+        gap: 10px;
+      }
+
+      .checkbox-field input {
+        inline-size: 18px;
+        block-size: 18px;
+        margin-top: 2px;
+        accent-color: var(--accent);
+      }
+
+      .checkbox-copy {
+        display: grid;
+        gap: 5px;
+      }
+
       .actions {
         display: flex;
         align-items: center;
@@ -409,6 +428,13 @@
             <option value="append">Append at end</option>
             <option value="alphabetical">Insert alphabetically</option>
           </select>
+        </label>
+        <label class="checkbox-field">
+          <input id="return-to-source-after-insert" name="returnToSourceAfterInsert" type="checkbox">
+          <span class="checkbox-copy">
+            <span class="label-text">Return to source file after insert</span>
+            <span class="hint">After updating the bibliography, reopen the original <code>.tex</code> file instead of leaving the editor on the <code>.bib</code> file.</span>
+          </span>
         </label>
         <label class="field">
           <span class="label-text">Default search mode</span>

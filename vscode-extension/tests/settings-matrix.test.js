@@ -222,11 +222,11 @@ function routeForCase(index) {
       }
     },
     {
-      source: SOURCE_IDS.INSPIRE,
+      source: SOURCE_IDS.CROSSREF,
       settings: {
         sourceProfile: "physics",
-        primarySource: SOURCE_IDS.INSPIRE,
-        fallbackSources: [],
+        primarySource: SOURCE_IDS.CROSSREF,
+        fallbackSources: [SOURCE_IDS.ARXIV],
         sourceApiTokens: {}
       }
     }

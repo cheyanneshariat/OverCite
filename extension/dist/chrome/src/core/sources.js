@@ -66,12 +66,12 @@ const SOURCE_ROUTING_PRESETS = Object.freeze({
     fallbackSources: []
   },
   physics: {
-    primarySource: SOURCE_IDS.INSPIRE,
-    fallbackSources: [SOURCE_IDS.CROSSREF]
+    primarySource: SOURCE_IDS.ADS,
+    fallbackSources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
   },
   math: {
-    primarySource: SOURCE_IDS.ARXIV,
-    fallbackSources: [SOURCE_IDS.CROSSREF]
+    primarySource: SOURCE_IDS.CROSSREF,
+    fallbackSources: [SOURCE_IDS.ARXIV]
   },
   broad: {
     primarySource: SOURCE_IDS.CROSSREF,
@@ -90,12 +90,12 @@ const SOURCE_ROUTING_PRESETS = Object.freeze({
     fallbackSources: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF, SOURCE_IDS.ADS]
   },
   "life-sciences": {
-    primarySource: SOURCE_IDS.PUBMED,
-    fallbackSources: [SOURCE_IDS.CROSSREF]
+    primarySource: SOURCE_IDS.CROSSREF,
+    fallbackSources: [SOURCE_IDS.PUBMED]
   },
   "computer-science": {
-    primarySource: SOURCE_IDS.ARXIV,
-    fallbackSources: [SOURCE_IDS.CROSSREF]
+    primarySource: SOURCE_IDS.CROSSREF,
+    fallbackSources: [SOURCE_IDS.ARXIV]
   },
   chemistry: {
     primarySource: SOURCE_IDS.CROSSREF,
@@ -125,11 +125,11 @@ const SOURCE_PROFILES = Object.freeze({
     optional: [SOURCE_IDS.ADS]
   },
   physics: {
-    primary: [SOURCE_IDS.INSPIRE],
+    primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
     optional: []
   },
   math: {
-    primary: [SOURCE_IDS.ARXIV],
+    primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
     optional: []
   },
   broad: {
@@ -145,11 +145,11 @@ const SOURCE_PROFILES = Object.freeze({
     optional: [SOURCE_IDS.ADS]
   },
   "life-sciences": {
-    primary: [SOURCE_IDS.PUBMED],
+    primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.PUBMED],
     optional: []
   },
   "computer-science": {
-    primary: [SOURCE_IDS.ARXIV],
+    primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
     optional: []
   },
   chemistry: {
@@ -187,8 +187,12 @@ export function buildSourceRouting(settings = {}) {
   const profileKey = normalizeSourceProfileKey(settings.sourceProfile);
   const profile = SOURCE_ROUTING_PRESETS[profileKey] ? profileKey : "astrophysics";
   const preset = SOURCE_ROUTING_PRESETS[profile];
-  const primarySource = normalizeRoutableSource(settings.primarySource) ?? preset.primarySource;
-  const rawFallbackSources = Array.isArray(settings.fallbackSources) ? settings.fallbackSources : preset.fallbackSources;
+  const primarySource = profile === "custom"
+    ? normalizeRoutableSource(settings.primarySource) ?? preset.primarySource
+    : preset.primarySource;
+  const rawFallbackSources = profile === "custom" && Array.isArray(settings.fallbackSources)
+    ? settings.fallbackSources
+    : preset.fallbackSources;
   const fallbackSources = uniqueStrings(rawFallbackSources)
     .map((sourceId) => normalizeRoutableSource(sourceId))
     .filter((sourceId) => sourceId && sourceId !== primarySource);
@@ -719,6 +723,9 @@ async function searchArxiv(citationContext, fetchImpl) {
     if (!isArxivRecoverableError(error) || directArxivId) {
       throw error;
     }
+    if (citationContext?.searchMode === "simple") {
+      return [];
+    }
     return searchArxivMetadataFallback(citationContext, fetchImpl);
   }
 }
@@ -884,12 +891,25 @@ async function fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers = {}, 
   if (typeof fetchImpl !== "function") {
     throw new Error("No fetch implementation is available.");
   }
-  const response = await fetchWithTimeout(fetchImpl, url.toString(), {
-    headers: {
-      Accept: "application/json",
-      ...headers
+  let response;
+  try {
+    response = await fetchWithTimeout(fetchImpl, url.toString(), {
+      headers: {
+        Accept: "application/json",
+        ...headers
+      }
+    }, retryOptions.timeoutMs);
+  } catch (error) {
+    if (isAbortLikeError(error) && retryOptions.retries > 0) {
+      await sleep(Number(retryOptions.fallbackDelayMs ?? 0) || 0);
+      return fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers, {
+        ...retryOptions,
+        retries: retryOptions.retries - 1,
+        timeoutMs: retryTimeoutMs(retryOptions.timeoutMs)
+      });
     }
-  }, retryOptions.timeoutMs);
+    throw error;
+  }
   if (response.ok) {
     return response.json();
   }
@@ -901,6 +921,20 @@ async function fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers = {}, 
     });
   }
   throw new Error(`${label} failed with status ${response.status}`);
+}
+
+function isAbortLikeError(error) {
+  const name = String(error?.name ?? "");
+  const message = String(error?.message ?? error ?? "");
+  return name === "AbortError" || /\babort(?:ed|error)?\b/i.test(message);
+}
+
+function retryTimeoutMs(timeoutMs) {
+  const current = Number(timeoutMs ?? 3500);
+  if (!Number.isFinite(current) || current <= 0) {
+    return 6500;
+  }
+  return Math.min(Math.max(current + 3000, Math.ceil(current * 1.4)), 12000);
 }
 
 async function fetchText(url, fetchImpl, label) {
@@ -1415,28 +1449,56 @@ function mergeDuplicateCandidates(candidates) {
   const merged = [];
   const seen = new Map();
   for (const candidate of candidates) {
-    const key = duplicateKey(candidate);
-    if (!key || !seen.has(key)) {
-      seen.set(key, merged.length);
+    const keys = duplicateKeys(candidate);
+    const existingIndex = keys.map((key) => seen.get(key)).find((index) => Number.isInteger(index));
+    if (!Number.isInteger(existingIndex)) {
+      const index = merged.length;
+      for (const key of keys) {
+        seen.set(key, index);
+      }
       merged.push(candidate);
       continue;
     }
-    const existing = merged[seen.get(key)];
-    merged[seen.get(key)] = preferCandidate(existing, candidate);
+    const existing = merged[existingIndex];
+    merged[existingIndex] = preferCandidate(existing, candidate);
+    for (const key of keys) {
+      seen.set(key, existingIndex);
+    }
   }
   return merged;
 }
 
 function duplicateKey(candidate) {
+  return duplicateKeys(candidate)[0] ?? "";
+}
+
+function duplicateKeys(candidate) {
+  const keys = [];
+  const arxivKey = arxivIdentityKey(candidate);
+  if (arxivKey) {
+    keys.push(arxivKey);
+  }
   const title = normalizeText(candidate?.title);
   const firstAuthor = firstAuthorFamilyKey(candidate?.authors?.[0]);
   if (title && firstAuthor) {
-    return `work:${title}:${firstAuthor}`;
+    keys.push(`work:${title}:${firstAuthor}`);
   }
   if (candidate?.doi) {
-    return `doi:${candidate.doi.toLowerCase()}`;
+    keys.push(`doi:${candidate.doi.toLowerCase()}`);
   }
-  return candidate?.id ? `${candidate.sourceId}:${candidate.id}` : "";
+  if (candidate?.id) {
+    keys.push(`${candidate.sourceId}:${candidate.id}`);
+  }
+  return [...new Set(keys.filter(Boolean))];
+}
+
+function arxivIdentityKey(candidate) {
+  const eprint = stripArxivVersion(String(candidate?.eprint ?? "").trim().toLowerCase());
+  if (eprint) {
+    return `arxiv:${eprint}`;
+  }
+  const doiMatch = String(candidate?.doi ?? "").toLowerCase().match(/10\.48550\/arxiv\.(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
+  return doiMatch ? `arxiv:${stripArxivVersion(doiMatch[1])}` : "";
 }
 
 function firstAuthorFamilyKey(author) {
@@ -1507,8 +1569,13 @@ function mergeCandidateRecords(primary, secondary) {
     eprint: primary.eprint || secondary.eprint,
     archivePrefix: primary.archivePrefix || secondary.archivePrefix,
     primaryClass: primary.primaryClass || secondary.primaryClass,
+    citationCount: preferredCitationCount(primary, secondary),
     sourceLabel: mergeSourceLabels(primary, secondary)
   };
+}
+
+function preferredCitationCount(primary, secondary) {
+  return Math.max(Number(primary?.citationCount ?? 0) || 0, Number(secondary?.citationCount ?? 0) || 0);
 }
 
 function preferredDoi(primary, secondary) {

@@ -32,6 +32,10 @@ test("build script creates Chrome, Firefox, and Safari resources with platform-s
     path.join(tempDir, "safari", "OverCite Extension", "Resources", "src", "background-safari.js"),
     "utf8"
   );
+  const chromeOptionsHtml = await readFile(path.join(copiedRoot, "dist", "chrome", "options.html"), "utf8");
+  const firefoxOptionsHtml = await readFile(path.join(copiedRoot, "dist", "firefox", "options.html"), "utf8");
+  const chromeSettingsJs = await readFile(path.join(copiedRoot, "dist", "chrome", "src", "core", "settings.js"), "utf8");
+  const firefoxSettingsJs = await readFile(path.join(copiedRoot, "dist", "firefox", "src", "core", "settings.js"), "utf8");
 
   assert.equal(chromeManifest.background.service_worker, "src/background.js");
   assert.equal(chromeManifest.background.type, "module");
@@ -40,6 +44,10 @@ test("build script creates Chrome, Firefox, and Safari resources with platform-s
   assert.equal(firefoxManifest.background.service_worker, "src/background.js");
   assert.equal(firefoxManifest.background.type, "module");
   assert.deepEqual(firefoxManifest.background.scripts, ["src/background.js"]);
+  assert.match(chromeOptionsHtml, /id="return-to-source-after-insert"/);
+  assert.match(firefoxOptionsHtml, /id="return-to-source-after-insert"/);
+  assert.match(chromeSettingsJs, /normalizeBooleanSetting\(rawSettings\.returnToSourceAfterInsert/);
+  assert.match(firefoxSettingsJs, /normalizeBooleanSetting\(rawSettings\.returnToSourceAfterInsert/);
 
   assert.equal(safariManifest.background.service_worker, "src/background-safari.js");
   assert.ok(!("browser_specific_settings" in safariManifest));

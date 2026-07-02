@@ -21,7 +21,7 @@
   <p>
     <img alt="Chrome users" src="https://img.shields.io/chrome-web-store/users/hmjojciemhnfkjnilakhehkgkhkplbdo?label=Chrome%20users&amp;color=34A853&amp;style=for-the-badge">
     <img alt="Firefox users" src="https://img.shields.io/amo/users/overcite?label=Firefox%20users&amp;color=FF7139&amp;style=for-the-badge">
-    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-38-007ACC?style=for-the-badge">
+    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-41-007ACC?style=for-the-badge">
   </p>
 
   <h3>
@@ -32,6 +32,14 @@
     <a href="#acknowledge">Acknowledge</a>
   </h3>
 </div>
+
+<p align="center">
+  <img src="docs/assets/overcite-users-growth.png" alt="OverCite Chrome Web Store dashboard weekly users over time" width="820">
+</p>
+
+<p align="center">
+  <sub>Chrome growth uses the Chrome Web Store developer dashboard export. The total adds Chrome dashboard users, Firefox average daily users, and VS Code installs.</sub>
+</p>
 
 <p align="center">
   <a href="docs/assets/overcite-demo-preview-storyboard-apr25.gif">
@@ -124,6 +132,7 @@ Current settings include:
 - Theme selection
 - Citation key style, including plain author-year keys like `Jumper2021`, underscore keys like `Jumper_2021`, colon keys like `Jumper:2021`, informative keys like `Jumper21_alphafold`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
 - Bibliography entry order, including alphabetical insertion by citation key
+- Browser return behavior, so OverCite can dismiss the popup immediately and switch back to the original `.tex` file after updating the `.bib` file
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
 
@@ -261,7 +270,7 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Release notes: [v0.3.0](docs/releases/v0.3.0.md)
+- Release notes: [v0.3.3](docs/releases/v0.3.3.md)
 - TeXstudio setup: [texstudio/README.md](texstudio/README.md)
 - TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)
