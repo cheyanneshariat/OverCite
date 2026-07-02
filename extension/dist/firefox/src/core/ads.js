@@ -321,7 +321,14 @@ function authorNameMatchesSurnameVariant(authorText, surnameVariant) {
   if (!author || !surname) {
     return false;
   }
-  return author === surname || author.startsWith(`${surname} `) || author.endsWith(` ${surname}`);
+  const compactAuthor = author.replace(/\s+/g, "");
+  const compactSurname = surname.replace(/\s+/g, "");
+  return author === surname ||
+    author.startsWith(`${surname} `) ||
+    author.endsWith(` ${surname}`) ||
+    compactAuthor === compactSurname ||
+    compactAuthor.startsWith(compactSurname) ||
+    compactAuthor.endsWith(compactSurname);
 }
 
 function authorNameMatchesSurnameVariants(authorText, surnameVariants) {
@@ -1018,6 +1025,10 @@ export function rerankAdsCandidates(citationContext, candidates) {
         score += 20;
       }
 
+      if (hint?.year && candidate.year === hint.year && contextualTitleLeadMatches(titleText, leadingPhrase)) {
+        score += 420;
+      }
+
       if (hint?.suffix) {
         const suffix = normalizeText(hint.suffix);
         if (suffix && titleText.includes(suffix)) {
@@ -1091,6 +1102,18 @@ function computeTitleTokenScore(token, titleText) {
     return Math.max(1200 - extraTitleWords * 80, 700);
   }
   return Math.max(700 - extraTitleWords * 60, 350);
+}
+
+function contextualTitleLeadMatches(titleText, leadingPhrase) {
+  if (!titleText || !leadingPhrase || leadingPhrase.split(" ").filter(Boolean).length < 3) {
+    return false;
+  }
+  const leadingTerms = leadingPhrase.split(" ").filter((term) => term.length >= 3 && !CONTEXT_STOPWORDS.has(term));
+  return titleText === leadingPhrase ||
+    titleText.startsWith(leadingPhrase) ||
+    titleText.includes(leadingPhrase) ||
+    leadingPhrase.includes(titleText) ||
+    Boolean(leadingTerms.length >= 3 && leadingTerms.every((term) => titleText.includes(term)));
 }
 
 function rerankDirectAdsCandidates(citationContext, candidates) {
@@ -1225,13 +1248,13 @@ function adsPublicationQualityScore(candidate) {
   if (properties.has("nonarticle")) {
     score -= 320;
   }
-  if (/abstract|meeting|conference|proceeding|bulletin|proposal|grant|award/.test(doctype)) {
+  if (/abstract|meeting|conference|proceeding|bulletin|proposal|grant|award|catalog|catalogue/.test(doctype)) {
     score -= 350;
   }
-  if (/\b(aas|american astronomical society|meeting abstracts?|bulletin|conference|proceedings?|nsf award|grant|proposal)\b/.test(pub)) {
+  if (/\b(aas|american astronomical society|meeting abstracts?|bulletin|conference|proceedings?|nsf award|grant|proposal|vizier|data catalog|online data catalog)\b/.test(pub)) {
     score -= 400;
   }
-  if (/\b(aas|baas|cosp|dps|epsc|nsf)\b/.test(bibstem)) {
+  if (/\b(aas|baas|cosp|dps|epsc|nsf|vizie?r)\b/.test(bibstem)) {
     score -= 320;
   }
 

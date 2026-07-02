@@ -8,6 +8,9 @@
     APPLY_INSERTION: "applyInsertion"
   });
   const THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
+  const DEFAULT_TOAST_DURATION_MS = 2600;
+  const MIN_TOAST_DURATION_MS = 900;
+  const SUCCESS_TOAST_DURATION_MS = 1000;
   const extensionApi = globalThis.browser ?? globalThis.chrome;
   function debugTrace() {
     // Temporary Overleaf live-test tracing removed. Keep the call sites as no-ops
@@ -260,10 +263,16 @@
   let overlay = null;
   let overlayState = null;
   let activeLookupGeneration = 0;
+  let insertionInProgress = false;
+  let insertionThemeMode = null;
+  let queuedLookupAfterInsertion = null;
+  let userFileNavigationSerial = 0;
+  let lastUserFileNavigation = null;
   injectPageBridge();
   installStyles();
   installRuntimeHooks();
   installKeybinding();
+  installUserFileNavigationTracking();
 
   function injectPageBridge() {
     if (document.querySelector("script[data-ezcite-page-bridge]")) {
@@ -307,6 +316,102 @@
       event.preventDefault();
       startLookup().catch((error) => toast(error.message, "error"));
     });
+  }
+
+  function installUserFileNavigationTracking() {
+    const eventName = "PointerEvent" in window ? "pointerdown" : "mousedown";
+    document.addEventListener(eventName, recordUserFileNavigation, true);
+  }
+
+  function recordUserFileNavigation(event) {
+    if (!event.isTrusted) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest("#ezcite-root")) {
+      return;
+    }
+    const fileName = extractFileNameFromUserTarget(target);
+    if (!fileName) {
+      return;
+    }
+    userFileNavigationSerial += 1;
+    lastUserFileNavigation = {
+      serial: userFileNavigationSerial,
+      fileName,
+      timestamp: Date.now()
+    };
+  }
+
+  function extractFileNameFromUserTarget(target) {
+    let element = target;
+    let depth = 0;
+    while (element instanceof Element && element !== document.body && depth < 8) {
+      const candidates = [
+        element.getAttribute("aria-label"),
+        element.getAttribute("title"),
+        element.getAttribute("data-path"),
+        element.textContent
+      ];
+      for (const candidate of candidates) {
+        const fileName = extractLikelyEditorFileName(candidate);
+        if (fileName && isLikelyUserFileNavigationElement(element, candidate)) {
+          return fileName;
+        }
+      }
+      element = element.parentElement;
+      depth += 1;
+    }
+    return "";
+  }
+
+  function isLikelyUserFileNavigationElement(element, text) {
+    const value = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!value || value.length > 180) {
+      return false;
+    }
+    const role = element.getAttribute("role") || "";
+    const testId = element.getAttribute("data-testid") || "";
+    const className = typeof element.className === "string" ? element.className : "";
+    const tagName = element.tagName;
+    return (
+      role === "treeitem" ||
+      role === "tab" ||
+      role === "button" ||
+      tagName === "BUTTON" ||
+      tagName === "A" ||
+      testId.toLowerCase().includes("file") ||
+      className.toLowerCase().includes("file") ||
+      className.toLowerCase().includes("tab") ||
+      className.toLowerCase().includes("entity") ||
+      /\.(tex|bib)\b/i.test(value)
+    );
+  }
+
+  function getUserFileNavigationAfter(serial) {
+    if (serial == null) {
+      return null;
+    }
+    const baseline = Number(serial) || 0;
+    if (lastUserFileNavigation && lastUserFileNavigation.serial > baseline) {
+      return lastUserFileNavigation;
+    }
+    return null;
+  }
+
+  function hasUserFileNavigationAwayAfter(serial, targetFileName) {
+    const navigation = getUserFileNavigationAfter(serial);
+    return Boolean(navigation?.fileName && !matchesFileName(navigation.fileName, targetFileName));
+  }
+
+  function createUserFileNavigationError(targetFileName, navigation) {
+    const error = new Error(`User selected ${navigation?.fileName || "another file"} while OverCite was switching to ${targetFileName}.`);
+    error.name = "OverCiteUserFileNavigation";
+    return error;
+  }
+
+  function isUserFileNavigationError(error) {
+    return error?.name === "OverCiteUserFileNavigation";
   }
 
   function installStyles() {
@@ -549,6 +654,27 @@
         text-transform: uppercase;
       }
 
+      .ezcite-source-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .ezcite-citation-count {
+        flex: 0 0 auto;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(96, 165, 250, 0.26);
+        background: rgba(96, 165, 250, 0.14);
+        color: var(--ez-title-ink);
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
       .ezcite-key {
         display: inline-block;
         padding: 4px 9px;
@@ -574,6 +700,10 @@
         color: var(--ez-meta);
         font-size: 0.84rem;
         line-height: 1.4;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
       }
 
       .ezcite-abstract {
@@ -703,6 +833,7 @@
 
     for (const candidate of results) {
       const button = document.createElement("button");
+      const citationCountLabel = formatCitationCountBadge(candidate.citationCount);
       button.type = "button";
       button.className = "ezcite-result";
       button.innerHTML = `
@@ -710,9 +841,12 @@
           <div class="ezcite-key">${escapeHtml(candidate.generatedKey || "citation")}</div>
           <div class="ezcite-year">${escapeHtml(formatYear(candidate.year))}</div>
         </div>
-        <div class="ezcite-source">${escapeHtml(candidate.sourceLabel || "Literature")}</div>
+        <div class="ezcite-source-row">
+          <div class="ezcite-source">${escapeHtml(candidate.sourceLabel || "Literature")}</div>
+          ${citationCountLabel ? `<div class="ezcite-citation-count">${escapeHtml(citationCountLabel)}</div>` : ""}
+        </div>
         <div class="ezcite-paper-title">${escapeHtml(candidate.title)}</div>
-        <p class="ezcite-meta">${escapeHtml(formatAuthors(candidate.authors, candidate.year))}</p>
+        <p class="ezcite-meta">${escapeHtml(formatCandidateMeta(candidate))}</p>
         <div class="ezcite-abstract-wrap">
           <p class="ezcite-abstract">${escapeHtml(truncate(candidate.abstract, 240))}</p>
         </div>
@@ -730,6 +864,10 @@
   }
 
   async function startLookup(searchMode) {
+    if (insertionInProgress) {
+      queueLookupAfterInsertion(searchMode);
+      return;
+    }
     const lookupGeneration = ++activeLookupGeneration;
     debugTrace("lookup:start", {
       searchMode: normalizeSearchMode(searchMode),
@@ -879,19 +1017,104 @@
   }
 
   async function selectCandidate(candidate) {
-    if (!overlayState) {
+    const state = snapshotOverlayState(overlayState);
+    if (!state) {
       return;
     }
+    if (insertionInProgress) {
+      return;
+    }
+    insertionInProgress = true;
+    state.userFileNavigationSerialAtSelection = userFileNavigationSerial;
+    insertionThemeMode = state.settings?.themeMode ?? "auto";
+    try {
+      await insertCandidateWithState(candidate, state);
+    } finally {
+      insertionInProgress = false;
+      insertionThemeMode = null;
+      drainQueuedLookupAfterInsertion();
+    }
+  }
+
+  function queueLookupAfterInsertion(searchMode) {
+    queuedLookupAfterInsertion = { searchMode };
+  }
+
+  function drainQueuedLookupAfterInsertion() {
+    if (!queuedLookupAfterInsertion) {
+      return;
+    }
+    const { searchMode } = queuedLookupAfterInsertion;
+    queuedLookupAfterInsertion = null;
+    setTimeout(() => {
+      startLookup(searchMode).catch((error) => toast(error.message, "error"));
+    }, 0);
+  }
+
+  function snapshotOverlayState(state) {
+    if (!state) {
+      return null;
+    }
+    return {
+      ...state,
+      settings: {
+        ...state.settings,
+        fallbackSources: [...(state.settings?.fallbackSources ?? [])],
+        sourceApiTokens: { ...(state.settings?.sourceApiTokens ?? {}) },
+        defaultProjectBibFileOverride: { ...(state.settings?.defaultProjectBibFileOverride ?? {}) }
+      },
+      citationContext: state.citationContext
+        ? {
+          ...state.citationContext,
+          tokens: [...(state.citationContext.tokens ?? [])],
+          parsedKeyHint: state.citationContext.parsedKeyHint
+            ? { ...state.citationContext.parsedKeyHint }
+            : state.citationContext.parsedKeyHint
+        }
+        : state.citationContext,
+      originalEditorState: state.originalEditorState
+        ? { ...state.originalEditorState }
+        : state.originalEditorState,
+      projectState: state.projectState
+        ? {
+          ...state.projectState,
+          projectFiles: [...(state.projectState.projectFiles ?? [])]
+        }
+        : state.projectState,
+      results: state.results ? [...state.results] : state.results
+    };
+  }
+
+  function buildDocumentExpectation(text) {
+    if (text == null) {
+      return null;
+    }
+    const value = String(text);
+    return {
+      length: value.length,
+      head: value.slice(0, 200),
+      tail: value.slice(-200)
+    };
+  }
+
+  function replaceTextRange(text, from, to, insert) {
+    const value = String(text ?? "");
+    const start = Math.max(0, Math.min(value.length, Number(from) || 0));
+    const end = Math.max(start, Math.min(value.length, Number(to) || start));
+    return `${value.slice(0, start)}${insert}${value.slice(end)}`;
+  }
+
+  async function insertCandidateWithState(candidate, state) {
     debugTrace("candidate:selected", {
       title: candidate.title,
       generatedKey: candidate.generatedKey,
       bibcode: candidate.bibcode,
       sourceId: candidate.sourceId
     });
-    const diagnostics = createDiagnostics(candidate.title, overlayState.settings.shortcutHelpText);
+    const diagnostics = createDiagnostics(candidate.title, state.settings.shortcutHelpText);
     diagnostics.step("Preparing insertion...");
 
-    const projectState = overlayState.projectState ?? await buildProjectState();
+    const projectState = state.projectState ?? await buildProjectState();
     diagnostics.step("Resolving bibliography target and exporting BibTeX...");
     let [bibTarget, exportedBibtex] = await Promise.all([
       timed("resolveBibTarget", () => callRuntime({
@@ -912,13 +1135,13 @@
         throw new Error("No bibliography file selected.");
       }
       const overrides = {
-        ...overlayState.settings.defaultProjectBibFileOverride,
+        ...state.settings.defaultProjectBibFileOverride,
         [projectState.projectId]: chosen
       };
-      overlayState.settings = await callRuntime({
+      state.settings = await callRuntime({
         type: MESSAGE_TYPES.SAVE_SETTINGS,
         settings: {
-          ...overlayState.settings,
+          ...state.settings,
           defaultProjectBibFileOverride: overrides
         }
       });
@@ -930,30 +1153,28 @@
     }
     debugTrace("bib:target", {
       target: bibTarget.target,
-      originalFileName: overlayState.originalFileName || readActiveFileName()
+      originalFileName: state.originalFileName || readActiveFileName()
     });
 
-    const originalFileName = overlayState.originalFileName || readActiveFileName();
+    const originalFileName = state.originalFileName || readActiveFileName();
     const originalRange = {
-      from: overlayState.citationContext.tokenStart,
-      to: overlayState.citationContext.tokenEnd
+      from: state.citationContext.tokenStart,
+      to: state.citationContext.tokenEnd
     };
-    const optimisticKey = candidate.generatedKey || overlayState.citationContext.token || "citation";
+    const optimisticKey = candidate.generatedKey || state.citationContext.token || "citation";
     const sourceRecoveryPayload = {
       excludeFileName: bibTarget.target,
       preferredFileName: originalFileName,
-      projectFiles: overlayState.projectState?.projectFiles ?? [],
-      originalText: overlayState.originalEditorState?.text ?? "",
-      tokenStart: overlayState.citationContext.tokenStart,
-      tokenEnd: overlayState.citationContext.tokenEnd
+      projectFiles: projectState.projectFiles ?? [],
+      originalText: state.originalEditorState?.text ?? "",
+      tokenStart: state.citationContext.tokenStart,
+      tokenEnd: state.citationContext.tokenEnd
     };
-    const expectedSourceDocument = overlayState.originalEditorState?.text != null
-      ? {
-        length: overlayState.originalEditorState.text.length,
-        head: overlayState.originalEditorState.text.slice(0, 200),
-        tail: overlayState.originalEditorState.text.slice(-200)
-      }
+    const expectedSourceDocument = buildDocumentExpectation(state.originalEditorState?.text);
+    const optimisticSourceText = state.originalEditorState?.text != null
+      ? replaceTextRange(state.originalEditorState.text, originalRange.from, originalRange.to, optimisticKey)
       : null;
+    const expectedOptimisticSourceDocument = buildDocumentExpectation(optimisticSourceText);
     if (originalFileName) {
       diagnostics.step(`Returning to ${originalFileName}...`);
       if (matchesFileName(readActiveFileName(), originalFileName)) {
@@ -987,11 +1208,11 @@
               target: originalFileName,
               activeNow: readActiveFileName()
             });
-            await waitForManualFileSwitch(originalFileName, candidate.title, overlayState.settings.shortcutHelpText);
+            await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText);
           }
         }
       }
-    } else if (overlayState.originalEditorState?.text) {
+    } else if (state.originalEditorState?.text) {
       diagnostics.step("Recovering source file...");
       try {
         await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan(sourceRecoveryPayload), diagnostics);
@@ -1032,7 +1253,7 @@
         activeNow: readActiveFileName()
       });
       if (originalFileName) {
-        await waitForManualFileSwitch(originalFileName, candidate.title, overlayState.settings.shortcutHelpText);
+        await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText);
         diagnostics.step(`Retrying cite key in ${originalFileName}...`);
         await timed("replaceRange:optimisticKey:retry", () => pageRequest("replaceRange", {
           from: originalRange.from,
@@ -1045,7 +1266,7 @@
           activeAfter: readActiveFileName(),
           key: optimisticKey
         });
-      } else if (overlayState.originalEditorState?.text) {
+      } else if (state.originalEditorState?.text) {
         diagnostics.step("Retrying source recovery...");
         await timed("openSourceFileByProjectScan:retry", () => openSourceFileByProjectScan(sourceRecoveryPayload), diagnostics);
         await sleep(150);
@@ -1090,7 +1311,7 @@
             target: bibTarget.target,
             activeNow: readActiveFileName()
           });
-          await waitForManualFileSwitch(bibTarget.target, candidate.title, overlayState.settings.shortcutHelpText);
+          await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText);
         }
       }
     }
@@ -1100,11 +1321,11 @@
       ? await getConfirmedBibEditorState({
         fileName: bibTarget.target,
         diagnostics,
-        originalText: overlayState.originalEditorState?.text ?? "",
-        tokenStart: overlayState.citationContext?.tokenStart ?? 0,
-        tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+        originalText: state.originalEditorState?.text ?? "",
+        tokenStart: state.citationContext?.tokenStart ?? 0,
+        tokenEnd: state.citationContext?.tokenEnd ?? 0
       })
-      : (overlayState.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics));
+      : (state.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics));
     diagnostics.step("Computing bibliography update...");
     const insertion = await timed("applyInsertion", () => callRuntime({
       type: MESSAGE_TYPES.APPLY_INSERTION,
@@ -1113,9 +1334,9 @@
         bibtex: exportedBibtex,
         candidate: {
           ...candidate,
-          keyMode: overlayState.settings.citationKeyMode,
-          typedToken: overlayState.citationContext.token,
-          bibliographyInsertMode: overlayState.settings.bibliographyInsertMode
+          keyMode: state.settings.citationKeyMode,
+          typedToken: state.citationContext.token,
+          bibliographyInsertMode: state.settings.bibliographyInsertMode
         }
       }
     }), diagnostics);
@@ -1142,7 +1363,7 @@
         }, 12000), diagnostics);
       } catch (error) {
         if (switchedToBib) {
-          await waitForManualFileSwitch(bibTarget.target, candidate.title, overlayState.settings.shortcutHelpText);
+          await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText);
           await ensureProjectFileActive(bibTarget.target, diagnostics, "after-manual-write");
           await timed(`replaceDocument:${bibTarget.target}:retry`, () => pageRequest("replaceDocument", {
             text: insertion.updatedBibText,
@@ -1157,10 +1378,10 @@
           throw error;
         }
       }
-      const focusAction = overlayState.settings.bibliographyInsertMode === "alphabetical"
+      const focusAction = state.settings.bibliographyInsertMode === "alphabetical"
         ? () => pageRequest("focusDocumentAnchor", { anchor: insertion.cursorAnchor }, 5000)
         : () => pageRequest("focusDocumentEnd", {}, 5000);
-      const focusLabel = overlayState.settings.bibliographyInsertMode === "alphabetical"
+      const focusLabel = state.settings.bibliographyInsertMode === "alphabetical"
         ? `focusDocumentAnchor:${bibTarget.target}`
         : `focusDocumentEnd:${bibTarget.target}`;
       await timed(focusLabel, focusAction, diagnostics);
@@ -1171,44 +1392,103 @@
       });
     }
 
-    const shouldReturnToSource = Boolean(overlayState.settings.returnToSourceAfterInsert);
+    const shouldReturnToSource = Boolean(state.settings.returnToSourceAfterInsert);
     const needsManualSourceUpdate = insertion.finalKey !== optimisticKey;
+    let shouldOpenSourceForFinalKey = switchedToBib && (shouldReturnToSource || needsManualSourceUpdate);
+    const userFileNavigationSerialAtSelection = state.userFileNavigationSerialAtSelection ?? userFileNavigationSerial;
     let sourceReadyForFinalRewrite = !switchedToBib;
-    if (switchedToBib && shouldReturnToSource) {
+    let automaticReturnCancelledByUser = false;
+    let overlayClosedForBackgroundFinish = false;
+    function getManualFinalFileName() {
+      const navigation = getUserFileNavigationAfter(userFileNavigationSerialAtSelection);
+      if (!navigation?.fileName) {
+        return "";
+      }
+      if (originalFileName && matchesFileName(navigation.fileName, originalFileName)) {
+        return "";
+      }
+      return navigation.fileName;
+    }
+    function shouldCancelAutomaticSourceReturn() {
+      return Boolean(shouldReturnToSource && !needsManualSourceUpdate && getManualFinalFileName());
+    }
+    function closeOverlayForBackgroundFinish() {
+      if (!overlayClosedForBackgroundFinish) {
+        closeOverlay();
+        overlayClosedForBackgroundFinish = true;
+      }
+    }
+    function reportInsertionProgress(label) {
+      if (overlayClosedForBackgroundFinish) {
+        diagnostics.note(label);
+      } else {
+        diagnostics.step(label);
+      }
+    }
+
+    if (shouldReturnToSource) {
+      closeOverlayForBackgroundFinish();
+    }
+
+    if (shouldOpenSourceForFinalKey && shouldCancelAutomaticSourceReturn()) {
+      automaticReturnCancelledByUser = true;
+      shouldOpenSourceForFinalKey = false;
+    }
+
+    if (shouldOpenSourceForFinalKey) {
       const returnTargetLabel = originalFileName || "source file";
-      diagnostics.step(`Returning to ${returnTargetLabel}...`);
+      reportInsertionProgress(`Returning to ${returnTargetLabel}...`);
       try {
         if (originalFileName) {
-          await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, { preferTabsOnly: true }), diagnostics);
+          await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, {
+            preferTabsOnly: true,
+            cancelOnUserFileNavigationAfterSerial: needsManualSourceUpdate ? null : userFileNavigationSerialAtSelection
+          }), diagnostics);
+          sourceReadyForFinalRewrite = true;
         } else {
           throw new Error("Original source filename was unavailable.");
         }
-      } catch {
-        try {
-          await timed("openSourceTabByContent", () => openSourceTabByContent({
-            excludeFileName: bibTarget.target,
-            preferredFileName: originalFileName,
-            originalText: overlayState.originalEditorState?.text ?? "",
-            tokenStart: overlayState.citationContext?.tokenStart ?? 0,
-            tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
-          }), diagnostics);
-        } catch {
+      } catch (error) {
+        if (isUserFileNavigationError(error) && !needsManualSourceUpdate) {
+          automaticReturnCancelledByUser = true;
+          sourceReadyForFinalRewrite = false;
+        } else if (!needsManualSourceUpdate && shouldCancelAutomaticSourceReturn()) {
+          automaticReturnCancelledByUser = true;
+          sourceReadyForFinalRewrite = false;
+        } else {
           try {
-            await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan({
+            await timed("openSourceTabByContent", () => openSourceTabByContent({
               excludeFileName: bibTarget.target,
-              projectFiles: projectState.projectFiles,
-              originalText: overlayState.originalEditorState?.text ?? "",
-              tokenStart: overlayState.citationContext?.tokenStart ?? 0,
-              tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+              preferredFileName: originalFileName,
+              originalText: state.originalEditorState?.text ?? "",
+              tokenStart: state.citationContext?.tokenStart ?? 0,
+              tokenEnd: state.citationContext?.tokenEnd ?? 0
             }), diagnostics);
+            sourceReadyForFinalRewrite = true;
           } catch {
-            sourceReadyForFinalRewrite = false;
+            if (!needsManualSourceUpdate && shouldCancelAutomaticSourceReturn()) {
+              automaticReturnCancelledByUser = true;
+              sourceReadyForFinalRewrite = false;
+            } else {
+              try {
+                await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan({
+                  excludeFileName: bibTarget.target,
+                  projectFiles: projectState.projectFiles,
+                  originalText: state.originalEditorState?.text ?? "",
+                  tokenStart: state.citationContext?.tokenStart ?? 0,
+                  tokenEnd: state.citationContext?.tokenEnd ?? 0
+                }), diagnostics);
+                sourceReadyForFinalRewrite = true;
+              } catch {
+                sourceReadyForFinalRewrite = false;
+              }
+            }
           }
         }
       }
     }
 
-    if (switchedToBib && shouldReturnToSource) {
+    if (shouldOpenSourceForFinalKey && !sourceReadyForFinalRewrite) {
       try {
         const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(3, 200), diagnostics);
         const activeSourceName = activeSourceState.fileName || readActiveFileName();
@@ -1220,17 +1500,17 @@
             await timed("openSourceTabByContent:verify", () => openSourceTabByContent({
               excludeFileName: bibTarget.target,
               preferredFileName: originalFileName,
-              originalText: overlayState.originalEditorState?.text ?? "",
-              tokenStart: overlayState.citationContext?.tokenStart ?? 0,
-              tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+              originalText: state.originalEditorState?.text ?? "",
+              tokenStart: state.citationContext?.tokenStart ?? 0,
+              tokenEnd: state.citationContext?.tokenEnd ?? 0
             }), diagnostics);
           } catch {
             await timed("openSourceFileByProjectScan:verify", () => openSourceFileByProjectScan({
               excludeFileName: bibTarget.target,
               projectFiles: projectState.projectFiles,
-              originalText: overlayState.originalEditorState?.text ?? "",
-              tokenStart: overlayState.citationContext?.tokenStart ?? 0,
-              tokenEnd: overlayState.citationContext?.tokenEnd ?? 0
+              originalText: state.originalEditorState?.text ?? "",
+              tokenStart: state.citationContext?.tokenStart ?? 0,
+              tokenEnd: state.citationContext?.tokenEnd ?? 0
             }), diagnostics);
           }
         }
@@ -1242,7 +1522,9 @@
 
     if (needsManualSourceUpdate && !sourceReadyForFinalRewrite) {
       diagnostics.finish(`Finished in ${formatMs(performance.now() - diagnostics.startedAt)}`);
-      closeOverlay();
+      if (!overlayClosedForBackgroundFinish) {
+        closeOverlay();
+      }
       toast(
         `Inserted ${insertion.finalKey} into ${bibTarget.target}. Update the cite key in your source from ${optimisticKey} to ${insertion.finalKey}.`,
         "notice",
@@ -1251,23 +1533,72 @@
       return;
     }
 
-    if (shouldReturnToSource || (!switchedToBib && needsManualSourceUpdate)) {
-      diagnostics.step(`Finalizing cite key in ${originalFileName || "current file"}...`);
+    if (shouldReturnToSource && shouldOpenSourceForFinalKey && !sourceReadyForFinalRewrite && !automaticReturnCancelledByUser) {
+      diagnostics.finish(`Finished in ${formatMs(performance.now() - diagnostics.startedAt)}`);
+      toast(
+        `${insertion.match ? "Reused" : "Inserted"} ${insertion.finalKey}, but OverCite could not return to ${originalFileName || "the source file"}.`,
+        "notice",
+        { durationMs: 4200 }
+      );
+      return;
+    }
+
+    if (needsManualSourceUpdate && sourceReadyForFinalRewrite) {
+      const finalizingLabel = `Finalizing cite key in ${originalFileName || "current file"}...`;
+      reportInsertionProgress(finalizingLabel);
       await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
         from: optimisticRange.from,
         to: optimisticRange.to,
         insert: insertion.finalKey,
-        expectedFileName: originalFileName
+        expectedFileName: originalFileName,
+        expectedDocument: expectedOptimisticSourceDocument
       }), diagnostics);
     }
 
+    let restoredManualFinalFile = false;
+    const manualFinalFileName = getManualFinalFileName();
+    if (manualFinalFileName && !matchesFileName(readActiveFileName(), manualFinalFileName)) {
+      reportInsertionProgress(`Returning to ${manualFinalFileName}...`);
+      try {
+        await timed(`openProjectFile:${manualFinalFileName}:manual-final`, () => openProjectFile(manualFinalFileName, { preferTabsOnly: false }), diagnostics);
+        restoredManualFinalFile = true;
+      } catch (error) {
+        debugTrace("manual:return-after-insert-failed", {
+          target: manualFinalFileName,
+          message: error.message,
+          activeNow: readActiveFileName()
+        });
+      }
+    } else if (manualFinalFileName) {
+      restoredManualFinalFile = true;
+    }
+
+    if (!restoredManualFinalFile && switchedToBib && needsManualSourceUpdate && !shouldReturnToSource) {
+      reportInsertionProgress(`Returning to ${bibTarget.target}...`);
+      try {
+        await timed(`openProjectFile:${bibTarget.target}:final`, () => openProjectFile(bibTarget.target, { preferTabsOnly: false }), diagnostics);
+      } catch (error) {
+        debugTrace("bib:return-after-final-key-failed", {
+          target: bibTarget.target,
+          message: error.message,
+          activeNow: readActiveFileName()
+        });
+      }
+    }
+
     diagnostics.finish(`Finished in ${formatMs(performance.now() - diagnostics.startedAt)}`);
-    closeOverlay();
-    toast(
-      insertion.match
-        ? `Reused existing bibliography entry: ${insertion.finalKey}`
-        : `Inserted ${insertion.finalKey} into ${bibTarget.target}`
-    );
+    if (!overlayClosedForBackgroundFinish) {
+      closeOverlay();
+    }
+    if (!shouldReturnToSource) {
+      toast(
+        insertion.match
+          ? `Reused existing bibliography entry: ${insertion.finalKey}`
+          : `Inserted ${insertion.finalKey} into ${bibTarget.target}`,
+        "info",
+        { durationMs: SUCCESS_TOAST_DURATION_MS }
+      );
+    }
   }
 
   async function buildProjectState() {
@@ -1341,7 +1672,7 @@
   }
 
   async function openProjectFile(fileName, options = {}) {
-    const { preferTabsOnly = false } = options;
+    const { preferTabsOnly = false, cancelOnUserFileNavigationAfterSerial = null } = options;
     debugTrace("openProjectFile:start", {
       fileName,
       preferTabsOnly,
@@ -1361,10 +1692,16 @@
     let lastError = null;
     for (const candidate of candidates) {
       try {
+        if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
+          throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
+        }
         candidate.scrollIntoView?.({ block: "center", inline: "nearest" });
         candidate.click();
         await sleep(250);
         await waitFor(async () => {
+          if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
+            throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
+          }
           const activeTabName = readActiveFileName();
           if (activeTabName.includes(fileName)) {
             return true;
@@ -1379,6 +1716,13 @@
         });
         return;
       } catch (error) {
+        if (isUserFileNavigationError(error)) {
+          debugTrace("openProjectFile:user-navigation-abort", {
+            fileName,
+            activeNow: readActiveFileName()
+          });
+          throw error;
+        }
         if (!preferTabsOnly && isLikelyFileTreeCandidate(candidate)) {
           await sleep(450);
           if (await isProjectFileActive(fileName)) {
@@ -2025,7 +2369,8 @@
   function closeOverlay() {
     activeLookupGeneration += 1;
     if (overlay) {
-      overlay.hidden = true;
+      overlay.remove();
+      overlay = null;
     }
     overlayState = null;
   }
@@ -2066,7 +2411,9 @@
       toastNode.style.background = "rgba(24, 33, 42, 0.92)";
     }
     window.clearTimeout(toastNode._timeoutId);
-    const durationMs = Number.isFinite(options?.durationMs) ? Math.max(1800, options.durationMs) : 2600;
+    const durationMs = Number.isFinite(options?.durationMs)
+      ? Math.max(MIN_TOAST_DURATION_MS, options.durationMs)
+      : DEFAULT_TOAST_DURATION_MS;
     toastNode._timeoutId = window.setTimeout(() => {
       toastNode.classList.remove("visible");
     }, durationMs);
@@ -2128,7 +2475,7 @@
         }
       ]
     });
-    applyOverlayTheme(overlayState?.settings?.themeMode ?? "auto");
+    applyOverlayTheme(insertionThemeMode ?? overlayState?.settings?.themeMode ?? "auto");
     await waitForContinue;
   }
 
@@ -2144,7 +2491,10 @@
           status: `${label}\nElapsed: ${formatMs(performance.now() - startedAt)}`,
           shortcutText
         });
-        applyOverlayTheme(overlayState?.settings?.themeMode ?? "auto");
+        applyOverlayTheme(insertionThemeMode ?? overlayState?.settings?.themeMode ?? "auto");
+      },
+      note(label) {
+        lastLabel = label;
       },
       finish(_label) {},
       lastLabel() {
@@ -2180,6 +2530,18 @@
     const authorText = Array.isArray(authors) ? authors.slice(0, 3).join("; ") : "";
     const suffix = Array.isArray(authors) && authors.length > 3 ? " et al." : "";
     return [authorText + suffix, year].filter(Boolean).join(" | ");
+  }
+
+  function formatCandidateMeta(candidate) {
+    return formatAuthors(candidate?.authors, candidate?.year);
+  }
+
+  function formatCitationCountBadge(value) {
+    const count = Math.trunc(Number(value));
+    if (!Number.isFinite(count) || count <= 0) {
+      return "";
+    }
+    return `cited by ${count.toLocaleString("en-US")}`;
   }
 
   function formatYear(year) {

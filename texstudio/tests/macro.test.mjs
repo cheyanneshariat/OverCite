@@ -25,7 +25,7 @@ test("TeXstudio macro uses the documented script integration surface", async () 
   assert.doesNotMatch(macro, /slowOperationStarted|slowOperationEnded/);
 });
 
-test("TeXstudio macro is pinned to v0.3.0 mode names", async () => {
+test("TeXstudio macro is pinned to stable mode names", async () => {
   const macro = await fs.readFile(macroPath, "utf8");
   assert.match(macro, /OVERCITE_MODE = "contextual"/);
   assert.doesNotMatch(macro, /v0\.3\.1/);

@@ -1,12 +1,12 @@
 # OverCite for TeXstudio
 
-Experimental TeXstudio integration for the OverCite v0.3.0 core.
+Experimental TeXstudio integration for the shared OverCite core.
 
 The integration is intentionally small:
 
 - TeXstudio runs a script macro.
 - The macro writes a request JSON file next to the root document.
-- `node texstudio/src/cli.mjs` resolves the citation using the v0.3.0 OverCite core.
+- `node texstudio/src/cli.mjs` resolves the citation using the shared OverCite core.
 - TeXstudio shows a result picker, then applies the active cite-key edit.
 - The CLI updates the target `.bib` file.
 
@@ -110,7 +110,7 @@ Example:
 
 Run `Macros` -> `OverCite: Open Settings` or press `Alt+Shift+O` to edit the global JSON file. For all supported settings and values, see `~/.overcite/texstudio/settings-reference.md` or [SETTINGS.md](SETTINGS.md).
 
-The v0.3.0 source settings are supported: `sourceProfile`, `primarySource`, `fallbackSources`, `sourceApiTokens.ads`, `sourceApiTokens.ncbi`, `adsApiToken`, `ncbiApiKey`, `contextWindowChars`, `citationKeyMode`, `bibliographyInsertMode`, `defaultSearchMode`, and `projectBibFileOverrides`.
+The current source settings are supported: `sourceProfile`, `primarySource`, `fallbackSources`, `sourceApiTokens.ads`, `sourceApiTokens.ncbi`, `adsApiToken`, `ncbiApiKey`, `contextWindowChars`, `citationKeyMode`, `bibliographyInsertMode`, `defaultSearchMode`, and `projectBibFileOverrides`.
 
 ## Notes
 
@@ -120,7 +120,7 @@ The v0.3.0 source settings are supported: `sourceProfile`, `primarySource`, `fal
 - If setup looks wrong, run `node texstudio/scripts/install.mjs --doctor` from the OverCite folder.
 - The resolve macros use TeXstudio script APIs documented for 4.x: `editor.document().getRootDocument()`, `editor.text()`, `cursor.lineNumber()`, `writeFile`, `readFile`, `system`, `UniversalInputDialog`, and `cursor.setPosition`.
 - The settings macro opens `~/.overcite/texstudio-settings.json` in the system default editor. If a platform needs a different open command, rerun the installer with `--open-command`.
-- This integration deliberately follows OverCite v0.3.0 behavior, not the reverted v0.3.1 raw-query patch.
+- This integration deliberately follows the shared OverCite routing and raw-query behavior used by the browser and VS Code packages.
 
 ## Test
 

@@ -52,20 +52,20 @@ test("Astrophysics profile plans no broad provider calls", async () => {
   assert.deepEqual(candidates, []);
 });
 
-test("Math profile uses arXiv first with Crossref fallback", () => {
+test("Math profile uses Crossref first with arXiv fallback", () => {
   const routing = buildSourceRouting({
     sourceProfile: "math"
   });
-  assert.equal(routing.primarySource, SOURCE_IDS.ARXIV);
+  assert.equal(routing.primarySource, SOURCE_IDS.CROSSREF);
   assert.equal(routing.primarySourceAvailable, true);
-  assert.deepEqual(routing.fallbackSources, [SOURCE_IDS.CROSSREF]);
-  assert.deepEqual(routing.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.deepEqual(routing.fallbackSources, [SOURCE_IDS.ARXIV]);
+  assert.deepEqual(routing.availableFallbackSources, [SOURCE_IDS.ARXIV]);
 
   const plan = buildSourcePlan({
     sourceProfile: "math",
     sourceApiTokens: {}
   });
-  assert.deepEqual(plan.primarySources, [SOURCE_IDS.ARXIV]);
+  assert.deepEqual(plan.primarySources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]);
   assert.deepEqual(plan.optionalEnhancers, []);
 });
 
@@ -130,23 +130,43 @@ test("source routing presets choose minimal field-oriented sources", () => {
   assert.deepEqual(astrophysics.availableFallbackSources, []);
 
   const physics = buildSourceRouting({ sourceProfile: "physics" });
-  assert.equal(physics.primarySource, SOURCE_IDS.INSPIRE);
-  assert.deepEqual(physics.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.equal(physics.primarySource, SOURCE_IDS.ADS);
+  assert.equal(physics.primarySourceAvailable, false);
+  assert.deepEqual(physics.availableFallbackSources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]);
+  assert.equal([physics.primarySource, ...physics.availableFallbackSources].includes(SOURCE_IDS.INSPIRE), false);
+
+  const physicsWithAds = buildSourceRouting({
+    sourceProfile: "physics",
+    sourceApiTokens: { ads: "ads-token" }
+  });
+  assert.equal(physicsWithAds.primarySource, SOURCE_IDS.ADS);
+  assert.equal(physicsWithAds.primarySourceAvailable, true);
+  assert.deepEqual(physicsWithAds.availableFallbackSources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]);
+
+  const stalePhysics = buildSourceRouting({
+    sourceProfile: "physics",
+    primarySource: SOURCE_IDS.INSPIRE,
+    fallbackSources: [SOURCE_IDS.CROSSREF]
+  });
+  assert.equal(stalePhysics.primarySource, SOURCE_IDS.ADS);
+  assert.equal(stalePhysics.primarySourceAvailable, false);
+  assert.deepEqual(stalePhysics.availableFallbackSources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]);
+  assert.equal([stalePhysics.primarySource, ...stalePhysics.availableFallbackSources].includes(SOURCE_IDS.INSPIRE), false);
 
   const math = buildSourceRouting({ sourceProfile: "math" });
-  assert.equal(math.primarySource, SOURCE_IDS.ARXIV);
-  assert.deepEqual(math.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.equal(math.primarySource, SOURCE_IDS.CROSSREF);
+  assert.deepEqual(math.availableFallbackSources, [SOURCE_IDS.ARXIV]);
   assert.deepEqual(math.missingCredentialSources, []);
 
   const computerScience = buildSourceRouting({ sourceProfile: "computer-science" });
-  assert.equal(computerScience.primarySource, SOURCE_IDS.ARXIV);
+  assert.equal(computerScience.primarySource, SOURCE_IDS.CROSSREF);
   assert.equal(computerScience.primarySourceAvailable, true);
-  assert.deepEqual(computerScience.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.deepEqual(computerScience.availableFallbackSources, [SOURCE_IDS.ARXIV]);
   assert.deepEqual(computerScience.missingCredentialSources, []);
 
   const lifeSciences = buildSourceRouting({ sourceProfile: "life-sciences" });
-  assert.equal(lifeSciences.primarySource, SOURCE_IDS.PUBMED);
-  assert.deepEqual(lifeSciences.availableFallbackSources, [SOURCE_IDS.CROSSREF]);
+  assert.equal(lifeSciences.primarySource, SOURCE_IDS.CROSSREF);
+  assert.deepEqual(lifeSciences.availableFallbackSources, [SOURCE_IDS.PUBMED]);
   assert.deepEqual(lifeSciences.missingCredentialSources, []);
 
   const chemistry = buildSourceRouting({ sourceProfile: "chemistry" });
@@ -170,6 +190,132 @@ test("source routing preserves custom fallback order while dropping duplicates a
   assert.deepEqual(routing.availableFallbackSources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.DATACITE, SOURCE_IDS.PUBMED]);
 });
 
+test("broad provider candidates expose citation counts when upstream sources supply them", async () => {
+  const baseContext = {
+    searchMode: "direct",
+    parsedKeyHint: null,
+    sentenceText: "Citation count metadata should be preserved for this paper.",
+    contextText: "Citation count metadata should be preserved for this paper."
+  };
+
+  const crossref = await searchBroadCandidatesForSources({
+    ...baseContext,
+    token: "10.5555/crossref-count"
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], async (url) => {
+    assert.match(String(url), /^https:\/\/api\.crossref\.org\/works\//);
+    return jsonResponse({
+      message: {
+        DOI: "10.5555/crossref-count",
+        title: ["Counted Crossref Paper"],
+        author: [{ family: "Kauffmann", given: "Guinevere" }],
+        issued: { "date-parts": [[2003]] },
+        "container-title": ["Monthly Notices"],
+        "is-referenced-by-count": 3834,
+        type: "journal-article",
+        URL: "https://doi.org/10.5555/crossref-count"
+      }
+    });
+  });
+
+  const datacite = await searchBroadCandidatesForSources({
+    ...baseContext,
+    token: "10.5555/datacite-count",
+    sentenceText: "Citation count metadata should be preserved for this dataset."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.DATACITE], async (url) => {
+    assert.match(String(url), /^https:\/\/api\.datacite\.org\/dois\//);
+    return jsonResponse({
+      data: {
+        id: "10.5555/datacite-count",
+        attributes: {
+          doi: "10.5555/datacite-count",
+          titles: [{ title: "Counted DataCite Dataset" }],
+          creators: [{ name: "Example, Data" }],
+          publicationYear: 2024,
+          descriptions: [{ description: "Dataset abstract." }],
+          citationCount: 42,
+          publisher: "Zenodo",
+          types: { resourceTypeGeneral: "Dataset" },
+          url: "https://doi.org/10.5555/datacite-count"
+        }
+      }
+    });
+  });
+
+  const inspire = await searchBroadCandidatesForSources({
+    ...baseContext,
+    token: "10.5555/inspire-count"
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.INSPIRE], async (url) => {
+    assert.match(String(url), /^https:\/\/inspirehep\.net\/api\/doi\//);
+    return jsonResponse(inspireRecord({
+      id: "12345",
+      title: "Counted INSPIRE Paper",
+      authors: ["Atlas Collaboration"],
+      year: 2024,
+      doi: "10.5555/inspire-count",
+      citationCount: 509,
+      journal: "Physics Letters"
+    }));
+  });
+
+  assert.equal(crossref[0].citationCount, 3834);
+  assert.equal(datacite[0].citationCount, 42);
+  assert.equal(inspire[0].citationCount, 509);
+});
+
+test("broad provider candidates suppress citation counts when upstream sources do not supply them", async () => {
+  const pubmed = await searchBroadCandidatesForSources({
+    token: "PubMed count unavailable",
+    searchMode: "direct",
+    parsedKeyHint: null,
+    sentenceText: "PubMed count unavailable.",
+    contextText: "PubMed count unavailable."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.PUBMED], async (url) => {
+    const value = String(url);
+    if (value.startsWith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")) {
+      return jsonResponse({ esearchresult: { idlist: ["123"] } });
+    }
+    if (value.startsWith("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")) {
+      return jsonResponse({
+        result: {
+          "123": {
+            uid: "123",
+            title: "PubMed Count Unavailable",
+            pubdate: "2024",
+            fulljournalname: "Test Medicine",
+            authors: [{ name: "Example A" }],
+            articleids: [{ idtype: "doi", value: "10.5555/pubmed-no-count" }]
+          }
+        }
+      });
+    }
+    throw new Error(`Unexpected PubMed URL ${url}`);
+  });
+
+  const arxiv = await searchBroadCandidatesForSources({
+    token: "arXiv:2401.01234",
+    searchMode: "direct",
+    parsedKeyHint: null,
+    sentenceText: "arXiv count unavailable.",
+    contextText: "arXiv count unavailable."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.ARXIV], async (url) => {
+    assert.match(String(url), /^https:\/\/export\.arxiv\.org\/api\/query/);
+    return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <entry>
+          <id>http://arxiv.org/abs/2401.01234v1</id>
+          <published>2024-01-01T00:00:00Z</published>
+          <title>arXiv Count Unavailable</title>
+          <summary>Preprint abstract.</summary>
+          <author><name>Example Author</name></author>
+          <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="astro-ph.GA"/>
+        </entry>
+      </feed>`);
+  });
+
+  assert.equal(pubmed[0].citationCount, 0);
+  assert.equal(arxiv[0].citationCount, 0);
+});
+
 test("legacy joint profiles map to minimal subject-area presets", () => {
   const plan = buildSourcePlan({ sourceProfile: "astro-physics", sourceApiTokens: {} });
 
@@ -180,7 +326,7 @@ test("legacy joint profiles map to minimal subject-area presets", () => {
 
   const mathPlan = buildSourcePlan({ sourceProfile: "math-physics", sourceApiTokens: { ads: "token" } });
   assert.equal(mathPlan.profile, "math");
-  assert.deepEqual(mathPlan.primarySources, [SOURCE_IDS.ARXIV]);
+  assert.deepEqual(mathPlan.primarySources, [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]);
   assert.deepEqual(mathPlan.optionalEnhancers, []);
 
   const adsPlan = buildSourcePlan({ sourceProfile: "ads-only", sourceApiTokens: { ads: "token" } });
@@ -409,6 +555,40 @@ test("Crossref DOI lookup retries once after rate limiting", async () => {
 
   assert.equal(fetchCalls.length, 2);
   assert.equal(candidates[0].doi, "10.1038/s41586-021-03819-2");
+});
+
+test("Crossref title search retries once after timeout aborts", async () => {
+  const fetchCalls = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "The ORCA quantum chemistry program package",
+    searchMode: "simple"
+  }, {
+    sourceProfile: "custom",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.CROSSREF], async (url) => {
+    fetchCalls.push(url);
+    if (fetchCalls.length === 1) {
+      const error = new Error("This operation was aborted");
+      error.name = "AbortError";
+      throw error;
+    }
+    return jsonResponse({
+      message: {
+        items: [{
+          DOI: "10.1063/5.0004608",
+          title: ["The ORCA quantum chemistry program package"],
+          author: [{ family: "Neese", given: "Frank" }],
+          issued: { "date-parts": [[2020]] },
+          "container-title": ["The Journal of Chemical Physics"],
+          type: "journal-article"
+        }]
+      }
+    });
+  });
+
+  assert.equal(fetchCalls.length, 2);
+  assert.equal(candidates[0].doi, "10.1063/5.0004608");
+  assert.equal(candidates[0].title, "The ORCA quantum chemistry program package");
 });
 
 test("raw arXiv identifier queries use arXiv id_list lookup", async () => {
@@ -956,8 +1136,78 @@ test("duplicate broad records keep arXiv identity for preprints with registry-ye
   assert.equal(candidates[0].year, 2017);
   assert.equal(candidates[0].doi, "10.65215/2q58a426");
   assert.equal(candidates[0].eprint, "1706.03762");
+  assert.equal(candidates[0].citationCount, 6530);
   assert.match(candidates[0].sourceLabel, /Crossref/);
   assert.match(candidates[0].sourceLabel, /arXiv/);
+});
+
+test("duplicate broad records merge arXiv DOI title drift and keep citation counts", async () => {
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Vaswani2017",
+    searchMode: "simple",
+    parsedKeyHint: { surname: "Vaswani", year: 2017 },
+    sentenceText: "Attention Is All You Need introduced the Transformer architecture.",
+    contextText: "Attention Is All You Need introduced the Transformer architecture."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV], async (url) => {
+    if (url.startsWith("https://api.crossref.org/works")) {
+      return jsonResponse({
+        message: {
+          items: [
+            {
+              DOI: "10.48550/arxiv.1706.03762",
+              title: ["Attention-based neural sequence transduction"],
+              issued: { "date-parts": [[2017]] },
+              "is-referenced-by-count": 12345,
+              author: [
+                { family: "Vaswani", given: "Ashish" },
+                { family: "Shazeer", given: "Noam" }
+              ],
+              "container-title": ["arXiv"],
+              abstract: "Transformer abstract.",
+              type: "posted-content",
+              URL: "https://doi.org/10.48550/arxiv.1706.03762"
+            }
+          ]
+        }
+      });
+    }
+    if (url.startsWith("https://export.arxiv.org/api/query")) {
+      return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>http://arxiv.org/abs/1706.03762v7</id>
+            <published>2017-06-12T00:00:00Z</published>
+            <title>Attention Is All You Need</title>
+            <summary>Transformer abstract.</summary>
+            <author><name>Ashish Vaswani</name></author>
+            <author><name>Noam Shazeer</name></author>
+            <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.CL"/>
+          </entry>
+        </feed>`);
+    }
+    return jsonResponse({ message: { items: [] }, data: [] });
+  });
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].eprint, "1706.03762");
+  assert.equal(candidates[0].citationCount, 12345);
+  assert.match(candidates[0].sourceLabel, /Crossref/);
+  assert.match(candidates[0].sourceLabel, /arXiv/);
+});
+
+test("simple arXiv rate limits do not use the internal Crossref metadata fallback", async () => {
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Vaswani2017",
+    searchMode: "simple",
+    parsedKeyHint: { surname: "Vaswani", year: 2017 },
+    sentenceText: "Attention Is All You Need introduced the Transformer architecture.",
+    contextText: "Attention Is All You Need introduced the Transformer architecture."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.ARXIV], async (url) => {
+    assert.ok(url.startsWith("https://export.arxiv.org/api/query"));
+    return rateLimitedTextResponse();
+  });
+
+  assert.deepEqual(candidates, []);
 });
 
 test("fielded raw ADS queries skip broad providers", async () => {

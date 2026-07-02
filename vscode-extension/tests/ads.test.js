@@ -139,12 +139,24 @@ test("simple title search prefers exact title matches over high-overlap near mat
 test("rerankAdsCandidates demotes ADS non-paper records below refereed journal articles", () => {
   const candidates = rerankAdsCandidates(
     {
-      token: "El-Badry2023",
+      token: "ElBadry2023",
       contextText: "The closest black hole is a Sun-like star orbiting a black hole in Gaia.",
       sentenceText: "A Sun-like star orbiting a black hole is the target publication.",
-      parsedKeyHint: { surname: "El-Badry", year: 2023, suffix: "" }
+      parsedKeyHint: { surname: "ElBadry", year: 2023, suffix: "" }
     },
     [
+      {
+        bibcode: "2023yCat..13510151E",
+        title: "VizieR Online Data Catalog: Gaia BH candidates",
+        authors: ["El-Badry, Kareem"],
+        year: 2023,
+        abstract: "Catalog tables for Gaia black hole candidates.",
+        citationCount: 0,
+        property: ["NONARTICLE"],
+        doctype: "catalog",
+        pub: "VizieR Online Data Catalog",
+        bibstem: ["yCat"]
+      },
       {
         bibcode: "2023AAS...24111701E",
         title: "Dormant black holes and neutron stars in stellar binaries",
@@ -218,6 +230,50 @@ test("rerankAdsCandidates prefers matching author and year", () => {
 
   assert.equal(candidates[0].bibcode, "good");
   assert.ok(candidates[0].score > candidates[1].score);
+});
+
+test("rerankAdsCandidates lets matching author-year title lead beat wrong-year same-author papers", () => {
+  const candidates = rerankAdsCandidates(
+    {
+      token: "Dirac1928",
+      searchMode: "contextual",
+      sentenceText: "The Quantum Theory of the Electron is the target publication for Dirac equation quantum theory electron.",
+      contextText: "The Quantum Theory of the Electron is the target publication for Dirac equation quantum theory electron.",
+      parsedKeyHint: {
+        surname: "Dirac",
+        year: 1928,
+        suffix: ""
+      }
+    },
+    [
+      {
+        bibcode: "wrong",
+        title: "The Conditions for a Quantum Field Theory to be Relativistic",
+        authors: ["Dirac, P. A."],
+        year: 1962,
+        abstract: "",
+        citationCount: 65,
+        property: ["ARTICLE", "REFEREED"],
+        doctype: "article",
+        pub: "Reviews of Modern Physics",
+        bibstem: ["RvMP"]
+      },
+      {
+        bibcode: "right",
+        title: "The Quantum Theory of the Electron",
+        authors: ["Dirac, P. A. M."],
+        year: 1928,
+        abstract: "",
+        citationCount: 2153,
+        property: ["ARTICLE", "REFEREED"],
+        doctype: "article",
+        pub: "Proceedings of the Royal Society of London Series A",
+        bibstem: ["RSPSA"]
+      }
+    ]
+  );
+
+  assert.equal(candidates[0].bibcode, "right");
 });
 
 test("direct search mode applies only light token matching boosts and otherwise preserves ADS order", () => {

@@ -248,7 +248,7 @@ const __overciteSafariModules = Object.create(null);
       contextWindowChars: Number.isFinite(contextWindowChars) ? Math.min(1200, Math.max(200, contextWindowChars)) : DEFAULT_SETTINGS.contextWindowChars,
       shortcutHelpText: String(rawSettings.shortcutHelpText ?? DEFAULT_SETTINGS.shortcutHelpText).trim() || DEFAULT_SETTINGS.shortcutHelpText,
       themeMode,
-      returnToSourceAfterInsert: false,
+      returnToSourceAfterInsert: normalizeBooleanSetting(rawSettings.returnToSourceAfterInsert, DEFAULT_SETTINGS.returnToSourceAfterInsert),
       citationKeyMode,
       bibliographyInsertMode,
       defaultSearchMode
@@ -271,12 +271,12 @@ const __overciteSafariModules = Object.create(null);
       fallbackSources: []
     },
     physics: {
-      primarySource: "inspire",
-      fallbackSources: ["crossref"]
+      primarySource: "ads",
+      fallbackSources: ["crossref", "arxiv"]
     },
     math: {
-      primarySource: "arxiv",
-      fallbackSources: ["crossref"]
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"]
     },
     broad: {
       primarySource: "crossref",
@@ -291,12 +291,12 @@ const __overciteSafariModules = Object.create(null);
       fallbackSources: ["inspire", "crossref", "ads"]
     },
     "life-sciences": {
-      primarySource: "pubmed",
-      fallbackSources: ["crossref"]
+      primarySource: "crossref",
+      fallbackSources: ["pubmed"]
     },
     "computer-science": {
-      primarySource: "arxiv",
-      fallbackSources: ["crossref"]
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"]
     },
     chemistry: {
       primarySource: "crossref",
@@ -328,13 +328,16 @@ const __overciteSafariModules = Object.create(null);
 
   function normalizePrimarySource(primarySource, sourceProfile) {
     const fallbackPrimary = SOURCE_PRESETS[sourceProfile]?.primarySource ?? DEFAULT_SETTINGS.primarySource;
+    if (sourceProfile !== "custom") {
+      return fallbackPrimary;
+    }
     const normalized = String(primarySource ?? fallbackPrimary).trim();
     return SOURCE_IDS.has(normalized) ? normalized : fallbackPrimary;
   }
 
   function normalizeFallbackSources(fallbackSources, primarySource, sourceProfile) {
     const fallbackPreset = SOURCE_PRESETS[sourceProfile]?.fallbackSources ?? DEFAULT_SETTINGS.fallbackSources;
-    const rawSources = Array.isArray(fallbackSources) ? fallbackSources : fallbackPreset;
+    const rawSources = sourceProfile === "custom" && Array.isArray(fallbackSources) ? fallbackSources : fallbackPreset;
     const normalized = [];
     for (const sourceId of rawSources) {
       const normalizedSource = String(sourceId ?? "").trim();
@@ -362,6 +365,20 @@ const __overciteSafariModules = Object.create(null);
       return normalized;
     }
     return DEFAULT_SETTINGS.themeMode;
+  }
+
+  function normalizeBooleanSetting(value, fallback) {
+    if (value === true || value === false) {
+      return value;
+    }
+    const normalized = String(value ?? "").trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+      return false;
+    }
+    return Boolean(fallback);
   }
 
   function normalizeCitationKeyMode(citationKeyMode) {
@@ -1067,7 +1084,14 @@ const __overciteSafariModules = Object.create(null);
     if (!author || !surname) {
       return false;
     }
-    return author === surname || author.startsWith(`${surname} `) || author.endsWith(` ${surname}`);
+    const compactAuthor = author.replace(/\s+/g, "");
+    const compactSurname = surname.replace(/\s+/g, "");
+    return author === surname ||
+      author.startsWith(`${surname} `) ||
+      author.endsWith(` ${surname}`) ||
+      compactAuthor === compactSurname ||
+      compactAuthor.startsWith(compactSurname) ||
+      compactAuthor.endsWith(compactSurname);
   }
 
   function authorNameMatchesSurnameVariants(authorText, surnameVariants) {
@@ -1764,6 +1788,10 @@ const __overciteSafariModules = Object.create(null);
           score += 20;
         }
 
+        if (hint?.year && candidate.year === hint.year && contextualTitleLeadMatches(titleText, leadingPhrase)) {
+          score += 420;
+        }
+
         if (hint?.suffix) {
           const suffix = normalizeText(hint.suffix);
           if (suffix && titleText.includes(suffix)) {
@@ -1837,6 +1865,18 @@ const __overciteSafariModules = Object.create(null);
       return Math.max(1200 - extraTitleWords * 80, 700);
     }
     return Math.max(700 - extraTitleWords * 60, 350);
+  }
+
+  function contextualTitleLeadMatches(titleText, leadingPhrase) {
+    if (!titleText || !leadingPhrase || leadingPhrase.split(" ").filter(Boolean).length < 3) {
+      return false;
+    }
+    const leadingTerms = leadingPhrase.split(" ").filter((term) => term.length >= 3 && !CONTEXT_STOPWORDS.has(term));
+    return titleText === leadingPhrase ||
+      titleText.startsWith(leadingPhrase) ||
+      titleText.includes(leadingPhrase) ||
+      leadingPhrase.includes(titleText) ||
+      Boolean(leadingTerms.length >= 3 && leadingTerms.every((term) => titleText.includes(term)));
   }
 
   function rerankDirectAdsCandidates(citationContext, candidates) {
@@ -1971,13 +2011,13 @@ const __overciteSafariModules = Object.create(null);
     if (properties.has("nonarticle")) {
       score -= 320;
     }
-    if (/abstract|meeting|conference|proceeding|bulletin|proposal|grant|award/.test(doctype)) {
+    if (/abstract|meeting|conference|proceeding|bulletin|proposal|grant|award|catalog|catalogue/.test(doctype)) {
       score -= 350;
     }
-    if (/\b(aas|american astronomical society|meeting abstracts?|bulletin|conference|proceedings?|nsf award|grant|proposal)\b/.test(pub)) {
+    if (/\b(aas|american astronomical society|meeting abstracts?|bulletin|conference|proceedings?|nsf award|grant|proposal|vizier|data catalog|online data catalog)\b/.test(pub)) {
       score -= 400;
     }
-    if (/\b(aas|baas|cosp|dps|epsc|nsf)\b/.test(bibstem)) {
+    if (/\b(aas|baas|cosp|dps|epsc|nsf|vizie?r)\b/.test(bibstem)) {
       score -= 320;
     }
 
@@ -2056,12 +2096,12 @@ const __overciteSafariModules = Object.create(null);
       fallbackSources: []
     },
     physics: {
-      primarySource: SOURCE_IDS.INSPIRE,
-      fallbackSources: [SOURCE_IDS.CROSSREF]
+      primarySource: SOURCE_IDS.ADS,
+      fallbackSources: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV]
     },
     math: {
-      primarySource: SOURCE_IDS.ARXIV,
-      fallbackSources: [SOURCE_IDS.CROSSREF]
+      primarySource: SOURCE_IDS.CROSSREF,
+      fallbackSources: [SOURCE_IDS.ARXIV]
     },
     broad: {
       primarySource: SOURCE_IDS.CROSSREF,
@@ -2080,12 +2120,12 @@ const __overciteSafariModules = Object.create(null);
       fallbackSources: [SOURCE_IDS.INSPIRE, SOURCE_IDS.CROSSREF, SOURCE_IDS.ADS]
     },
     "life-sciences": {
-      primarySource: SOURCE_IDS.PUBMED,
-      fallbackSources: [SOURCE_IDS.CROSSREF]
+      primarySource: SOURCE_IDS.CROSSREF,
+      fallbackSources: [SOURCE_IDS.PUBMED]
     },
     "computer-science": {
-      primarySource: SOURCE_IDS.ARXIV,
-      fallbackSources: [SOURCE_IDS.CROSSREF]
+      primarySource: SOURCE_IDS.CROSSREF,
+      fallbackSources: [SOURCE_IDS.ARXIV]
     },
     chemistry: {
       primarySource: SOURCE_IDS.CROSSREF,
@@ -2115,11 +2155,11 @@ const __overciteSafariModules = Object.create(null);
       optional: [SOURCE_IDS.ADS]
     },
     physics: {
-      primary: [SOURCE_IDS.INSPIRE],
+      primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
       optional: []
     },
     math: {
-      primary: [SOURCE_IDS.ARXIV],
+      primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
       optional: []
     },
     broad: {
@@ -2135,11 +2175,11 @@ const __overciteSafariModules = Object.create(null);
       optional: [SOURCE_IDS.ADS]
     },
     "life-sciences": {
-      primary: [SOURCE_IDS.PUBMED],
+      primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.PUBMED],
       optional: []
     },
     "computer-science": {
-      primary: [SOURCE_IDS.ARXIV],
+      primary: [SOURCE_IDS.CROSSREF, SOURCE_IDS.ARXIV],
       optional: []
     },
     chemistry: {
@@ -2177,8 +2217,12 @@ const __overciteSafariModules = Object.create(null);
     const profileKey = normalizeSourceProfileKey(settings.sourceProfile);
     const profile = SOURCE_ROUTING_PRESETS[profileKey] ? profileKey : "astrophysics";
     const preset = SOURCE_ROUTING_PRESETS[profile];
-    const primarySource = normalizeRoutableSource(settings.primarySource) ?? preset.primarySource;
-    const rawFallbackSources = Array.isArray(settings.fallbackSources) ? settings.fallbackSources : preset.fallbackSources;
+    const primarySource = profile === "custom"
+      ? normalizeRoutableSource(settings.primarySource) ?? preset.primarySource
+      : preset.primarySource;
+    const rawFallbackSources = profile === "custom" && Array.isArray(settings.fallbackSources)
+      ? settings.fallbackSources
+      : preset.fallbackSources;
     const fallbackSources = uniqueStrings(rawFallbackSources)
       .map((sourceId) => normalizeRoutableSource(sourceId))
       .filter((sourceId) => sourceId && sourceId !== primarySource);
@@ -2709,6 +2753,9 @@ const __overciteSafariModules = Object.create(null);
       if (!isArxivRecoverableError(error) || directArxivId) {
         throw error;
       }
+      if (citationContext?.searchMode === "simple") {
+        return [];
+      }
       return searchArxivMetadataFallback(citationContext, fetchImpl);
     }
   }
@@ -2874,12 +2921,25 @@ const __overciteSafariModules = Object.create(null);
     if (typeof fetchImpl !== "function") {
       throw new Error("No fetch implementation is available.");
     }
-    const response = await fetchWithTimeout(fetchImpl, url.toString(), {
-      headers: {
-        Accept: "application/json",
-        ...headers
+    let response;
+    try {
+      response = await fetchWithTimeout(fetchImpl, url.toString(), {
+        headers: {
+          Accept: "application/json",
+          ...headers
+        }
+      }, retryOptions.timeoutMs);
+    } catch (error) {
+      if (isAbortLikeError(error) && retryOptions.retries > 0) {
+        await sleep(Number(retryOptions.fallbackDelayMs ?? 0) || 0);
+        return fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers, {
+          ...retryOptions,
+          retries: retryOptions.retries - 1,
+          timeoutMs: retryTimeoutMs(retryOptions.timeoutMs)
+        });
       }
-    }, retryOptions.timeoutMs);
+      throw error;
+    }
     if (response.ok) {
       return response.json();
     }
@@ -2891,6 +2951,20 @@ const __overciteSafariModules = Object.create(null);
       });
     }
     throw new Error(`${label} failed with status ${response.status}`);
+  }
+
+  function isAbortLikeError(error) {
+    const name = String(error?.name ?? "");
+    const message = String(error?.message ?? error ?? "");
+    return name === "AbortError" || /\babort(?:ed|error)?\b/i.test(message);
+  }
+
+  function retryTimeoutMs(timeoutMs) {
+    const current = Number(timeoutMs ?? 3500);
+    if (!Number.isFinite(current) || current <= 0) {
+      return 6500;
+    }
+    return Math.min(Math.max(current + 3000, Math.ceil(current * 1.4)), 12000);
   }
 
   async function fetchText(url, fetchImpl, label) {
@@ -3405,28 +3479,56 @@ const __overciteSafariModules = Object.create(null);
     const merged = [];
     const seen = new Map();
     for (const candidate of candidates) {
-      const key = duplicateKey(candidate);
-      if (!key || !seen.has(key)) {
-        seen.set(key, merged.length);
+      const keys = duplicateKeys(candidate);
+      const existingIndex = keys.map((key) => seen.get(key)).find((index) => Number.isInteger(index));
+      if (!Number.isInteger(existingIndex)) {
+        const index = merged.length;
+        for (const key of keys) {
+          seen.set(key, index);
+        }
         merged.push(candidate);
         continue;
       }
-      const existing = merged[seen.get(key)];
-      merged[seen.get(key)] = preferCandidate(existing, candidate);
+      const existing = merged[existingIndex];
+      merged[existingIndex] = preferCandidate(existing, candidate);
+      for (const key of keys) {
+        seen.set(key, existingIndex);
+      }
     }
     return merged;
   }
 
   function duplicateKey(candidate) {
+    return duplicateKeys(candidate)[0] ?? "";
+  }
+
+  function duplicateKeys(candidate) {
+    const keys = [];
+    const arxivKey = arxivIdentityKey(candidate);
+    if (arxivKey) {
+      keys.push(arxivKey);
+    }
     const title = normalizeText(candidate?.title);
     const firstAuthor = firstAuthorFamilyKey(candidate?.authors?.[0]);
     if (title && firstAuthor) {
-      return `work:${title}:${firstAuthor}`;
+      keys.push(`work:${title}:${firstAuthor}`);
     }
     if (candidate?.doi) {
-      return `doi:${candidate.doi.toLowerCase()}`;
+      keys.push(`doi:${candidate.doi.toLowerCase()}`);
     }
-    return candidate?.id ? `${candidate.sourceId}:${candidate.id}` : "";
+    if (candidate?.id) {
+      keys.push(`${candidate.sourceId}:${candidate.id}`);
+    }
+    return [...new Set(keys.filter(Boolean))];
+  }
+
+  function arxivIdentityKey(candidate) {
+    const eprint = stripArxivVersion(String(candidate?.eprint ?? "").trim().toLowerCase());
+    if (eprint) {
+      return `arxiv:${eprint}`;
+    }
+    const doiMatch = String(candidate?.doi ?? "").toLowerCase().match(/10\.48550\/arxiv\.(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
+    return doiMatch ? `arxiv:${stripArxivVersion(doiMatch[1])}` : "";
   }
 
   function firstAuthorFamilyKey(author) {
@@ -3497,8 +3599,13 @@ const __overciteSafariModules = Object.create(null);
       eprint: primary.eprint || secondary.eprint,
       archivePrefix: primary.archivePrefix || secondary.archivePrefix,
       primaryClass: primary.primaryClass || secondary.primaryClass,
+      citationCount: preferredCitationCount(primary, secondary),
       sourceLabel: mergeSourceLabels(primary, secondary)
     };
+  }
+
+  function preferredCitationCount(primary, secondary) {
+    return Math.max(Number(primary?.citationCount ?? 0) || 0, Number(secondary?.citationCount ?? 0) || 0);
   }
 
   function preferredDoi(primary, secondary) {
@@ -3795,6 +3902,7 @@ const __overciteSafariModules = Object.create(null);
   const { getSettings, saveSettings } = __overciteSafariModules["src/core/settings.js"].exports;
   const { buildSourceRouting, exportCandidateBibtex, searchBroadCandidatesForSources, SOURCE_IDS } = __overciteSafariModules["src/core/sources.js"].exports;
   const extensionApi = globalThis.browser ?? globalThis.chrome;
+  const ARXIV_CITATION_ENRICHMENT_TIMEOUT_MS = 900;
 
   extensionApi.runtime.onInstalled.addListener(async () => {
     const settings = await getSettings();
@@ -3855,6 +3963,7 @@ const __overciteSafariModules = Object.create(null);
     const adsApiToken = settings.sourceApiTokens?.ads || settings.adsApiToken;
     const routing = buildSourceRouting(settings);
     const primarySource = choosePrimarySourceForQuery(routing, citationContext);
+    const fallbackSources = availableSearchSources(routing).filter((sourceId) => sourceId !== primarySource);
     const candidates = [];
     const errors = [];
 
@@ -3870,10 +3979,12 @@ const __overciteSafariModules = Object.create(null);
 
     const primaryRanked = finalizeCandidates(citationContext, settings, primaryCandidates);
     if (primaryRanked.length && isHighConfidenceResult(citationContext, primaryRanked[0], primarySource)) {
-      return primaryRanked;
+      return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken);
+    }
+    if (shouldKeepSimplePrimaryResult(citationContext, primaryRanked[0], primarySource, fallbackSources)) {
+      return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken);
     }
 
-    const fallbackSources = availableSearchSources(routing).filter((sourceId) => sourceId !== primarySource);
     if (fallbackSources.length) {
       const fallbackResult = await searchFallbackSources({
         citationContext,
@@ -3884,7 +3995,7 @@ const __overciteSafariModules = Object.create(null);
         errors
       });
       if (fallbackResult) {
-        return fallbackResult;
+        return maybeEnrichArxivCitationCounts(citationContext, settings, fallbackResult, adsApiToken);
       }
     }
 
@@ -3898,17 +4009,90 @@ const __overciteSafariModules = Object.create(null);
       console.warn("[OverCite background] literature provider failed after another provider returned results", error);
     }
 
-    return finalizeCandidates(citationContext, settings, candidates);
+    return maybeEnrichArxivCitationCounts(citationContext, settings, finalizeCandidates(citationContext, settings, candidates), adsApiToken);
+  }
+
+  async function maybeEnrichArxivCitationCounts(citationContext, settings, candidates, adsApiToken) {
+    const arxivNeedingCounts = candidates
+      .slice(0, 5)
+      .filter((candidate) => isArxivIdentified(candidate) && !(Number(candidate?.citationCount ?? 0) > 0) && String(candidate?.eprint ?? "").trim());
+    if (!arxivNeedingCounts.length || !adsApiToken) {
+      return candidates;
+    }
+
+    const enrichment = enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken)
+      .catch(() => candidates);
+    return Promise.race([
+      enrichment,
+      delay(ARXIV_CITATION_ENRICHMENT_TIMEOUT_MS).then(() => candidates)
+    ]);
+  }
+
+  async function enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken) {
+    const query = buildArxivAdsCitationQuery(arxivNeedingCounts);
+    if (!query) {
+      return candidates;
+    }
+    const docs = await fetchSearchCandidates([query], { ...citationContext, searchMode: "direct" }, adsApiToken);
+    const adsCandidates = docs.map((doc) => ({
+      ...mapAdsDocToCandidate(doc),
+      sourceId: SOURCE_IDS.ADS,
+      sourceLabel: "ADS/SciX"
+    }));
+    if (!adsCandidates.length) {
+      return candidates;
+    }
+    return candidates.map((candidate) => {
+      if (!isArxivIdentified(candidate) || Number(candidate?.citationCount ?? 0) > 0) {
+        return candidate;
+      }
+      const match = adsCandidates.find((adsCandidate) => adsCandidateMatchesArxivCandidate(adsCandidate, candidate));
+      const citationCount = Number(match?.citationCount ?? 0) || 0;
+      return citationCount > 0 ? { ...candidate, citationCount } : candidate;
+    });
+  }
+
+  function buildArxivAdsCitationQuery(candidates) {
+    const clauses = [...new Set(candidates
+      .map((candidate) => String(candidate?.eprint ?? "").trim().replace(/v\d+$/i, ""))
+      .filter(Boolean))]
+      .slice(0, 5)
+      .map((eprint) => `identifier:"${escapeAdsQueryValue(eprint)}"`);
+    return clauses.join(" OR ");
+  }
+
+  function adsCandidateMatchesArxivCandidate(adsCandidate, arxivCandidate) {
+    const adsEprint = String(adsCandidate?.eprint ?? "").toLowerCase().replace(/v\d+$/i, "");
+    const arxivEprint = String(arxivCandidate?.eprint ?? "").toLowerCase().replace(/v\d+$/i, "");
+    if (adsEprint && arxivEprint && adsEprint === arxivEprint) {
+      return true;
+    }
+    const adsDoi = String(adsCandidate?.doi ?? "").toLowerCase();
+    const arxivDoi = String(arxivCandidate?.doi ?? "").toLowerCase();
+    if (adsDoi && arxivDoi && adsDoi === arxivDoi) {
+      return true;
+    }
+    return normalizeSearchText(adsCandidate?.title) === normalizeSearchText(arxivCandidate?.title) &&
+      yearsCompatible(adsCandidate?.year, arxivCandidate?.year) &&
+      firstAuthorMatches(parseAuthorName(arxivCandidate?.authors?.[0]).family, adsCandidate?.authors?.[0]);
+  }
+
+  function escapeAdsQueryValue(value) {
+    return String(value ?? "").replace(/"/g, '\\"');
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   function choosePrimarySourceForQuery(routing, citationContext) {
     if (directArxivToken(citationContext) && availableSearchSources(routing).includes(SOURCE_IDS.ARXIV)) {
       return SOURCE_IDS.ARXIV;
     }
-    if (shouldPreferCrossrefForPreArxivPaper(routing, citationContext)) {
-      return SOURCE_IDS.CROSSREF;
+    if (directPubMedToken(citationContext) && availableSearchSources(routing).includes(SOURCE_IDS.PUBMED)) {
+      return SOURCE_IDS.PUBMED;
     }
-    if (shouldPreferCrossrefForGeneralPhysicsPaper(routing, citationContext)) {
+    if (shouldPreferCrossrefForPreArxivPaper(routing, citationContext)) {
       return SOURCE_IDS.CROSSREF;
     }
     if (isDatasetSoftwareLookup(citationContext) && availableSearchSources(routing).includes(SOURCE_IDS.DATACITE)) {
@@ -3917,25 +4101,29 @@ const __overciteSafariModules = Object.create(null);
     return routing.primarySource;
   }
 
+  function shouldKeepSimplePrimaryResult(citationContext, candidate, primarySource, fallbackSources) {
+    if (citationContext?.searchMode !== "simple" ||
+        !candidate ||
+        primarySource === SOURCE_IDS.ARXIV ||
+        !fallbackSources.length ||
+        fallbackSources.some((sourceId) => sourceId !== SOURCE_IDS.ARXIV) ||
+        simpleContextTitleRank(citationContext, candidate) < 460000) {
+      return false;
+    }
+    const hintYear = Number(citationContext?.parsedKeyHint?.year);
+    const candidateYear = Number(candidate?.year);
+    if (Number.isFinite(hintYear) && Number.isFinite(candidateYear) && candidateYear === hintYear) {
+      return true;
+    }
+    return Number.isFinite(hintYear) && hintYear < 1991;
+  }
+
   function shouldPreferCrossrefForPreArxivPaper(routing, citationContext) {
     if (routing.primarySource !== SOURCE_IDS.ARXIV || !availableSearchSources(routing).includes(SOURCE_IDS.CROSSREF)) {
       return false;
     }
     const year = citationYear(citationContext);
     return Boolean(year && year < 1991);
-  }
-
-  function shouldPreferCrossrefForGeneralPhysicsPaper(routing, citationContext) {
-    if (routing.profile !== "physics" ||
-        routing.primarySource !== SOURCE_IDS.INSPIRE ||
-        !availableSearchSources(routing).includes(SOURCE_IDS.CROSSREF)) {
-      return false;
-    }
-    const text = normalizeSearchText(`${citationContext?.token ?? ""} ${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`);
-    if (/\b(?:atlas|cms|lhcb|katrin|km3net|cern|lhc|higgs|boson|baryon|meson|quark|lepton|neutrino|muon|tau|hadron|collider|particle|standard model|cp violation|gauge boson|nonabelian|qcd|electroweak|supersymmetry|supergravity|ads cft)\b/.test(text)) {
-      return false;
-    }
-    return /\b(?:graphene|moire|hall effect|thin film|nickelate|ambient pressure|la3ni2o7|surface code)\b/.test(text);
   }
 
   function citationYear(citationContext) {
@@ -3967,6 +4155,38 @@ const __overciteSafariModules = Object.create(null);
   }
 
   async function searchFallbackSources({ citationContext, settings, adsApiToken, fallbackSources, candidates, errors }) {
+    if (citationContext?.searchMode === "simple") {
+      const pending = fallbackSources.map((sourceId, index) => {
+        let promise;
+        promise = Promise.resolve()
+          .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken))
+          .then(
+            (value) => ({ status: "fulfilled", sourceId, index, value, promise }),
+            (reason) => ({ status: "rejected", sourceId, index, reason, promise })
+          );
+        return promise;
+      });
+      const unsettled = new Set(pending);
+      const settledIndexes = new Set();
+      while (unsettled.size) {
+        const batch = await Promise.race(unsettled);
+        unsettled.delete(batch.promise);
+        settledIndexes.add(batch.index);
+        if (batch.status === "fulfilled") {
+          candidates.push(...batch.value);
+        } else {
+          errors.push(batch.reason);
+        }
+        const ranked = finalizeCandidates(citationContext, settings, candidates);
+        if (ranked.length &&
+            isHighConfidenceResult(citationContext, ranked[0], ranked[0].sourceId) &&
+            canReturnSimpleFallback(ranked[0], fallbackSources, settledIndexes)) {
+          return ranked;
+        }
+      }
+      return null;
+    }
+
     const pending = fallbackSources.map((sourceId) => {
       let promise;
       promise = Promise.resolve()
@@ -3994,6 +4214,19 @@ const __overciteSafariModules = Object.create(null);
     }
 
     return null;
+  }
+
+  function canReturnSimpleFallback(candidate, fallbackSources, settledIndexes) {
+    const sourceIndex = fallbackSources.indexOf(candidate?.sourceId);
+    if (sourceIndex < 0) {
+      return false;
+    }
+    for (let index = 0; index < sourceIndex; index += 1) {
+      if (!settledIndexes.has(index)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   async function searchRoutedSource(sourceId, citationContext, settings, adsApiToken) {
@@ -4096,6 +4329,14 @@ const __overciteSafariModules = Object.create(null);
     return token.match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i)?.[1] ?? "";
   }
 
+  function directPubMedToken(citationContext) {
+    if (citationContext?.searchMode !== "direct") {
+      return "";
+    }
+    const token = String(citationContext?.token ?? "").trim();
+    return token.match(/^(?:pmid\s*:?\s*|https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/)?(\d{5,9})(?:\/)?$/i)?.[1] ?? "";
+  }
+
   function isDatasetSoftwareLookup(citationContext) {
     const text = normalizeSearchText([
       citationContext?.token,
@@ -4112,7 +4353,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function firstAuthorMatches(expectedSurname, firstAuthor) {
-    return authorFamilyMatches(expectedSurname, firstAuthor);
+    return authorFamilyStrictlyMatches(expectedSurname, firstAuthor);
   }
 
   function contextTitleOverlap(citationContext, candidate) {
@@ -4139,7 +4380,10 @@ const __overciteSafariModules = Object.create(null);
           computePublicationTypeBoost(candidate)
       };
     });
-    return filterContextualAuthorHintMismatches(citationContext, ranked.sort((left, right) => right.score - left.score));
+    return rerankSimpleSearchCandidates(
+      citationContext,
+      filterContextualAuthorHintMismatches(citationContext, ranked.sort((left, right) => right.score - left.score))
+    );
   }
 
   function filterContextualAuthorHintMismatches(citationContext, candidates) {
@@ -4151,8 +4395,12 @@ const __overciteSafariModules = Object.create(null);
 
   function filterContextualAuthorYearMismatches(citationContext, candidates) {
     const hint = citationContext?.parsedKeyHint;
-    if (citationContext?.searchMode === "direct" || citationContext?.searchMode === "simple" || !hint?.surname || !hint?.year) {
+    if (citationContext?.searchMode === "direct" || !hint?.surname || !hint?.year) {
       return candidates;
+    }
+    if (citationContext?.searchMode === "simple") {
+      const matches = candidates.filter((candidate) => simpleAuthorYearCandidateMatches(citationContext, candidate));
+      return matches.length ? matches : candidates;
     }
     return candidates.filter((candidate) =>
       candidate.sourceId === SOURCE_IDS.ADS ||
@@ -4163,6 +4411,135 @@ const __overciteSafariModules = Object.create(null);
     );
   }
 
+  function rerankSimpleSearchCandidates(citationContext, candidates) {
+    if (citationContext?.searchMode !== "simple") {
+      return candidates;
+    }
+    return [...candidates].sort((left, right) =>
+      simpleSearchRank(citationContext, right) - simpleSearchRank(citationContext, left) ||
+      (Number(right.citationCount ?? 0) || 0) - (Number(left.citationCount ?? 0) || 0) ||
+      (right.score ?? 0) - (left.score ?? 0)
+    );
+  }
+
+  function simpleSearchRank(citationContext, candidate) {
+    const hint = citationContext?.parsedKeyHint;
+    const contextRank = simpleContextTitleRank(citationContext, candidate);
+    const titleRank = simpleTitleRank(citationContext, candidate);
+    if (!hint?.surname) {
+      return contextRank + titleRank;
+    }
+    const firstAuthorMatch = firstAuthorMatches(hint.surname, candidate?.authors?.[0]);
+    const anyAuthorMatch = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
+    const authorRank = firstAuthorMatch ? 60000 : (anyAuthorMatch ? 45000 : 0);
+    if (!hint.year) {
+      return contextRank + authorRank + titleRank;
+    }
+    const yearRank = simpleYearRank(candidate?.year, hint.year);
+    return contextRank + authorRank + yearRank + titleRank;
+  }
+
+  function simpleYearRank(candidateYear, hintYear) {
+    const candidate = Number(candidateYear);
+    const hint = Number(hintYear);
+    if (!Number.isFinite(candidate) || !Number.isFinite(hint)) {
+      return 0;
+    }
+    if (candidate === hint) {
+      return 90000;
+    }
+    if (Math.abs(candidate - hint) === 1) {
+      return 20000;
+    }
+    return 0;
+  }
+
+  function simpleContextTitleRank(citationContext, candidate) {
+    const title = normalizeSearchText(candidate?.title);
+    if (!title) {
+      return 0;
+    }
+    let best = 0;
+    for (const phrase of simpleContextTitlePhrases(citationContext)) {
+      const normalizedPhrase = normalizeSearchText(phrase);
+      if (!normalizedPhrase || normalizedPhrase.split(" ").length < 2) {
+        continue;
+      }
+      if (title === normalizedPhrase) {
+        best = Math.max(best, 520000);
+        continue;
+      }
+      if (title.includes(normalizedPhrase) || normalizedPhrase.includes(title)) {
+        best = Math.max(best, 460000);
+        continue;
+      }
+      const terms = simpleEvidenceTerms(normalizedPhrase);
+      if (!terms.length) {
+        continue;
+      }
+      const matched = terms.filter((term) => title.includes(term)).length;
+      if (matched >= 4) {
+        best = Math.max(best, 180000 + (matched * 22000) + Math.round((matched / terms.length) * 60000));
+      } else if (matched >= 2) {
+        best = Math.max(best, 30000 + (matched * 10000));
+      }
+    }
+    return best;
+  }
+
+  function simpleContextTitlePhrases(citationContext) {
+    const text = String(`${citationContext?.sentenceText ?? ""}. ${citationContext?.contextText ?? ""}`);
+    const phrases = [];
+    for (const match of text.matchAll(/\b(?:should\s+)?(?:retrieve|find|return)\s+(.+?)(?:[.;]|\n|$)/gi)) {
+      phrases.push(match[1]);
+    }
+    const lead = extractSentenceLead(citationContext?.sentenceText);
+    if (lead) {
+      phrases.push(lead);
+    }
+    return [...new Set(phrases.map(cleanSimpleContextPhrase).filter(Boolean))];
+  }
+
+  function cleanSimpleContextPhrase(value) {
+    return String(value ?? "")
+      .replace(/^\s*(?:the|a|an)\s+/i, "")
+      .replace(/\s+(?:paper|result|record|entry)\s*$/i, "")
+      .trim();
+  }
+
+  function simpleEvidenceTerms(value) {
+    return [...new Set(normalizeSearchText(value).split(" ").filter((term) =>
+      (term.length >= 4 || /^\d+$/.test(term)) && !BROAD_CONTEXT_STOPWORDS.has(term)
+    ))];
+  }
+
+  function simpleTitleRank(citationContext, candidate) {
+    const token = normalizeSearchText(citationContext?.token);
+    const title = normalizeSearchText(candidate?.title);
+    if (!token || !title) {
+      return 0;
+    }
+    if (title === token) {
+      return 3000;
+    }
+    if (title.startsWith(token) || token.startsWith(title)) {
+      return 1500;
+    }
+    if (title.includes(token)) {
+      return 700;
+    }
+    return 0;
+  }
+
+  function simpleAuthorYearCandidateMatches(citationContext, candidate) {
+    const hint = citationContext?.parsedKeyHint;
+    if (!hint?.surname) {
+      return true;
+    }
+    return firstAuthorMatches(hint.surname, candidate?.authors?.[0]) ||
+      (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
+  }
+
   function filterSurnameOnlyAuthorMismatches(citationContext, candidates) {
     const hint = citationContext?.parsedKeyHint;
     if (citationContext?.searchMode === "direct" || !hint?.surname || hint?.year) {
@@ -4170,7 +4547,7 @@ const __overciteSafariModules = Object.create(null);
     }
     const authorMatches = candidates.filter((candidate) =>
       firstAuthorMatches(hint.surname, candidate?.authors?.[0]) ||
-      (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author))
+      (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author))
     );
     return authorMatches.length ? authorMatches : candidates;
   }
@@ -4282,8 +4659,8 @@ const __overciteSafariModules = Object.create(null);
       return 0;
     }
     const firstAuthor = candidate?.authors?.[0] ?? "";
-    const firstAuthorMatchesHint = authorFamilyMatches(hint.surname, firstAuthor);
-    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author));
+    const firstAuthorMatchesHint = firstAuthorMatches(hint.surname, firstAuthor);
+    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
     let boost = 0;
 
     if (firstAuthorMatchesHint) {
@@ -4307,7 +4684,7 @@ const __overciteSafariModules = Object.create(null);
     }
 
     if (hint.year && !firstAuthorMatchesHint && looseAuthorTextMatches(hint.surname, firstAuthor)) {
-      boost -= 180;
+      boost -= 1600;
     }
 
     if (strongFirstAuthorContextMatch(citationContext, candidate)) {
@@ -4331,8 +4708,8 @@ const __overciteSafariModules = Object.create(null);
     if (!Number.isFinite(candidateYear) || !Number.isFinite(hintYear)) {
       return -350;
     }
-    const firstAuthorMatchesHint = authorFamilyMatches(hint.surname, candidate?.authors?.[0]);
-    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author));
+    const firstAuthorMatchesHint = firstAuthorMatches(hint.surname, candidate?.authors?.[0]);
+    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
     if (candidateYear === hintYear) {
       return anyAuthorMatchesHint ? 7000 : 1200;
     }
@@ -4394,7 +4771,7 @@ const __overciteSafariModules = Object.create(null);
     if (firstAuthorMatches(hint.surname, candidate?.authors?.[0])) {
       return false;
     }
-    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyMatches(hint.surname, author));
+    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
     return anyAuthorMatchesHint && contextSupportScore(citationContext, candidate) >= 12;
   }
 
@@ -4476,6 +4853,15 @@ const __overciteSafariModules = Object.create(null);
     if (!expected || !family) {
       return false;
     }
+    const compactExpected = expected.replace(/\s+/g, "");
+    const compactFamily = family.replace(/\s+/g, "");
+    const compactFull = full.replace(/\s+/g, "");
+    if (compactExpected && (
+        compactFamily === compactExpected ||
+        compactFull.startsWith(compactExpected) ||
+        compactFull.endsWith(compactExpected))) {
+      return true;
+    }
     if (expected.includes(" ")) {
       return family === expected ||
         family.startsWith(`${expected} `) ||
@@ -4484,6 +4870,17 @@ const __overciteSafariModules = Object.create(null);
         full.endsWith(` ${expected}`);
     }
     return family === expected;
+  }
+
+  function authorFamilyStrictlyMatches(expectedSurname, author) {
+    const expected = normalizeSearchText(expectedSurname);
+    const { family } = parseAuthorName(author);
+    if (!expected || !family) {
+      return false;
+    }
+    const compactExpected = expected.replace(/\s+/g, "");
+    const compactFamily = family.replace(/\s+/g, "");
+    return Boolean(compactExpected && compactFamily === compactExpected);
   }
 
   function authorGivenInitialMatches(expectedInitial, author) {
@@ -4560,24 +4957,32 @@ const __overciteSafariModules = Object.create(null);
     const merged = [];
     const seen = new Map();
     for (const candidate of candidates) {
-      const key = candidateMergeKey(candidate);
-      if (!key || !seen.has(key)) {
-        seen.set(key, merged.length);
+      const keys = candidateMergeKeys(candidate);
+      const existingIndex = keys.map((key) => seen.get(key)).find((index) => Number.isInteger(index));
+      if (!Number.isInteger(existingIndex)) {
+        const index = merged.length;
+        for (const key of keys) {
+          seen.set(key, index);
+        }
         merged.push(candidate);
         continue;
       }
-      const current = merged[seen.get(key)];
+      const current = merged[existingIndex];
       const primary = preferredMergedCandidate(current, candidate);
       const secondary = primary === current ? candidate : current;
-      merged[seen.get(key)] = {
+      merged[existingIndex] = {
         ...primary,
         abstract: primary.abstract || secondary.abstract,
         doi: preferredDoi(primary, secondary),
         eprint: primary.eprint || secondary.eprint,
         archivePrefix: primary.archivePrefix || secondary.archivePrefix,
         url: preferredUrl(primary, secondary),
+        citationCount: preferredCitationCount(primary, secondary),
         sourceLabel: mergeSourceLabels(current.sourceLabel, candidate.sourceLabel)
       };
+      for (const key of keys) {
+        seen.set(key, existingIndex);
+      }
     }
     return merged;
   }
@@ -4681,16 +5086,37 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function candidateMergeKey(candidate) {
+    return candidateMergeKeys(candidate)[0] ?? "";
+  }
+
+  function candidateMergeKeys(candidate) {
+    const keys = [];
+    const arxivKey = arxivIdentityMergeKey(candidate);
+    if (arxivKey) {
+      keys.push(arxivKey);
+    }
     const title = String(candidate?.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const firstAuthor = parseAuthorName(candidate?.authors?.[0]).family ||
       String(candidate?.authors?.[0] ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     if (title && firstAuthor && candidate?.year) {
-      return `title:${title}:${firstAuthor}:${candidate.year}`;
+      keys.push(`title:${title}:${firstAuthor}:${candidate.year}`);
     }
     if (candidate?.doi) {
-      return `doi:${String(candidate.doi).toLowerCase()}`;
+      keys.push(`doi:${String(candidate.doi).toLowerCase()}`);
     }
-    return candidate?.bibcode ? `ads:${candidate.bibcode}` : "";
+    if (candidate?.bibcode) {
+      keys.push(`ads:${candidate.bibcode}`);
+    }
+    return [...new Set(keys.filter(Boolean))];
+  }
+
+  function arxivIdentityMergeKey(candidate) {
+    const eprint = String(candidate?.eprint ?? "").trim().toLowerCase().replace(/v\d+$/i, "");
+    if (eprint) {
+      return `arxiv:${eprint}`;
+    }
+    const doiMatch = String(candidate?.doi ?? "").toLowerCase().match(/10\.48550\/arxiv\.(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
+    return doiMatch ? `arxiv:${doiMatch[1].replace(/v\d+$/i, "")}` : "";
   }
 
   function mergeSourceLabels(left, right) {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { getSettings, getStorageArea, normalizeSettings, saveSettings } from "../src/core/settings.js";
 
@@ -12,7 +13,26 @@ test("normalizeSettings accepts valid theme modes and defaults invalid ones to a
 
 test("normalizeSettings defaults to staying on the bibliography tab after insert", () => {
   assert.equal(normalizeSettings({}).returnToSourceAfterInsert, false);
-  assert.equal(normalizeSettings({ returnToSourceAfterInsert: true }).returnToSourceAfterInsert, false);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: false }).returnToSourceAfterInsert, false);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "not-a-boolean" }).returnToSourceAfterInsert, false);
+});
+
+test("normalizeSettings can return to the source file after browser bibliography insert", () => {
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: true }).returnToSourceAfterInsert, true);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "true" }).returnToSourceAfterInsert, true);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "1" }).returnToSourceAfterInsert, true);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "false" }).returnToSourceAfterInsert, false);
+});
+
+test("options page exposes the source-return browser setting", async () => {
+  const optionsHtml = await readFile(new URL("../options.html", import.meta.url), "utf8");
+  const optionsJs = await readFile(new URL("../src/options.js", import.meta.url), "utf8");
+
+  assert.match(optionsHtml, /id="return-to-source-after-insert"/);
+  assert.match(optionsHtml, /name="returnToSourceAfterInsert"/);
+  assert.match(optionsHtml, /Return to source file after insert/);
+  assert.match(optionsJs, /returnToSourceAfterInsertInput\.checked = Boolean\(settings\.returnToSourceAfterInsert\)/);
+  assert.match(optionsJs, /returnToSourceAfterInsert: returnToSourceAfterInsertInput\.checked/);
 });
 
 test("normalizeSettings accepts valid citation key modes and defaults invalid ones to author-year", () => {
@@ -90,21 +110,21 @@ test("normalizeSettings applies field presets when routing is not customized", (
   assert.deepEqual(astrophysics.fallbackSources, []);
 
   const physics = normalizeSettings({ sourceProfile: "physics" });
-  assert.equal(physics.primarySource, "inspire");
-  assert.deepEqual(physics.fallbackSources, ["crossref"]);
+  assert.equal(physics.primarySource, "ads");
+  assert.deepEqual(physics.fallbackSources, ["crossref", "arxiv"]);
 
   const math = normalizeSettings({ sourceProfile: "math" });
-  assert.equal(math.primarySource, "arxiv");
-  assert.deepEqual(math.fallbackSources, ["crossref"]);
+  assert.equal(math.primarySource, "crossref");
+  assert.deepEqual(math.fallbackSources, ["arxiv"]);
 
   const settings = normalizeSettings({ sourceProfile: "computer-science" });
 
-  assert.equal(settings.primarySource, "arxiv");
-  assert.deepEqual(settings.fallbackSources, ["crossref"]);
+  assert.equal(settings.primarySource, "crossref");
+  assert.deepEqual(settings.fallbackSources, ["arxiv"]);
 
   const lifeSciences = normalizeSettings({ sourceProfile: "life-sciences" });
-  assert.equal(lifeSciences.primarySource, "pubmed");
-  assert.deepEqual(lifeSciences.fallbackSources, ["crossref"]);
+  assert.equal(lifeSciences.primarySource, "crossref");
+  assert.deepEqual(lifeSciences.fallbackSources, ["pubmed"]);
 
   const chemistry = normalizeSettings({ sourceProfile: "chemistry" });
   assert.equal(chemistry.primarySource, "crossref");
@@ -197,6 +217,25 @@ test("getSettings applies source presets for partially migrated stored settings"
   const settings = await getSettings({ storage: { local } });
 
   assert.equal(settings.sourceProfile, "computer-science");
-  assert.equal(settings.primarySource, "arxiv");
-  assert.deepEqual(settings.fallbackSources, ["crossref"]);
+  assert.equal(settings.primarySource, "crossref");
+  assert.deepEqual(settings.fallbackSources, ["arxiv"]);
+});
+
+test("Physics preset uses ADS/SciX then Crossref and arXiv without INSPIRE", () => {
+  const settings = normalizeSettings({ sourceProfile: "physics" });
+
+  assert.equal(settings.primarySource, "ads");
+  assert.deepEqual(settings.fallbackSources, ["crossref", "arxiv"]);
+  assert.equal([settings.primarySource, ...settings.fallbackSources].includes("inspire"), false);
+});
+
+test("normalizeSettings migrates stale non-custom Physics routing away from INSPIRE", () => {
+  const settings = normalizeSettings({
+    sourceProfile: "physics",
+    primarySource: "inspire",
+    fallbackSources: ["crossref"]
+  });
+
+  assert.equal(settings.primarySource, "ads");
+  assert.deepEqual(settings.fallbackSources, ["crossref", "arxiv"]);
 });

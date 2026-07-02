@@ -2,7 +2,7 @@
   "name": "overcite-vscode",
   "displayName": "OverCite",
   "description": "Search literature sources from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "publisher": "CheyanneShariat",
   "icon": "icon.png",
   "homepage": "https://github.com/cheyanneshariat/OverCite",
@@ -82,10 +82,10 @@
           ],
           "enumDescriptions": [
             "Astrophysics preset using ADS/SciX only.",
-            "Physics preset using INSPIRE, then Crossref if needed.",
-            "Math preset using arXiv, then Crossref if needed.",
-            "Computer science preset using arXiv, then Crossref if needed.",
-            "Biology / medicine preset using PubMed, then Crossref if needed.",
+            "Physics preset using ADS/SciX first when configured, then Crossref and arXiv if needed.",
+            "Math preset using Crossref first, then arXiv if needed.",
+            "Computer science preset using Crossref first, then arXiv if needed.",
+            "Biology / medicine preset using Crossref first, then PubMed if needed.",
             "Chemistry preset using Crossref / DOI only.",
             "General preset using Crossref / DOI only.",
             "Use overcite.primarySource and overcite.fallbackSources."

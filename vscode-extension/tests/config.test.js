@@ -31,12 +31,20 @@ test("normalizeVsCodeSettings supports subject-area source presets and custom ro
   assert.deepEqual(astrophysics.fallbackSources, []);
 
   const physics = normalizeVsCodeSettings({ sourceProfile: "physics" });
-  assert.equal(physics.primarySource, "inspire");
-  assert.deepEqual(physics.fallbackSources, ["crossref"]);
+  assert.equal(physics.primarySource, "ads");
+  assert.deepEqual(physics.fallbackSources, ["crossref", "arxiv"]);
+
+  const stalePhysics = normalizeVsCodeSettings({
+    sourceProfile: "physics",
+    primarySource: "inspire",
+    fallbackSources: ["crossref"]
+  });
+  assert.equal(stalePhysics.primarySource, "ads");
+  assert.deepEqual(stalePhysics.fallbackSources, ["crossref", "arxiv"]);
 
   const math = normalizeVsCodeSettings({ sourceProfile: "math" });
-  assert.equal(math.primarySource, "arxiv");
-  assert.deepEqual(math.fallbackSources, ["crossref"]);
+  assert.equal(math.primarySource, "crossref");
+  assert.deepEqual(math.fallbackSources, ["arxiv"]);
 
   const chemistry = normalizeVsCodeSettings({
     sourceProfile: "chemistry",
@@ -50,13 +58,13 @@ test("normalizeVsCodeSettings supports subject-area source presets and custom ro
     sourceProfile: "computer-science",
     sourceApiTokens: { ncbi: " ncbi " }
   });
-  assert.equal(cs.primarySource, "arxiv");
-  assert.deepEqual(cs.fallbackSources, ["crossref"]);
+  assert.equal(cs.primarySource, "crossref");
+  assert.deepEqual(cs.fallbackSources, ["arxiv"]);
   assert.deepEqual(cs.sourceApiTokens, { ncbi: "ncbi" });
 
   const lifeSciences = normalizeVsCodeSettings({ sourceProfile: "life-sciences" });
-  assert.equal(lifeSciences.primarySource, "pubmed");
-  assert.deepEqual(lifeSciences.fallbackSources, ["crossref"]);
+  assert.equal(lifeSciences.primarySource, "crossref");
+  assert.deepEqual(lifeSciences.fallbackSources, ["pubmed"]);
 
   const general = normalizeVsCodeSettings({ sourceProfile: "general" });
   assert.equal(general.primarySource, "crossref");
