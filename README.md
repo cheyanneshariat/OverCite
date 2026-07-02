@@ -47,7 +47,7 @@ If OverCite helped with your manuscript, please acknowledge it with:
 This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
 ```
 
-<sub>You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).</sub>
+> You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).
 
 ## Get Started
 
