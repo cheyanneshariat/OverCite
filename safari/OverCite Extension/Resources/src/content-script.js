@@ -2288,7 +2288,7 @@
     const response = await withTimeout(
       extensionApi.runtime.sendMessage(message),
       15000,
-      "Timed out waiting for the OverCite background worker."
+      "Timed out waiting for the OverCite background worker. Refresh the Overleaf page and try again."
     );
     if (!response?.ok) {
       throw new Error(response?.error ?? "Unknown OverCite error");

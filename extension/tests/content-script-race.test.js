@@ -199,6 +199,14 @@ test("content-script replaces lookup failures with retryable error UI", async ()
   assert.match(errorActionsBody, /\.\.\.buildSearchModeActions\(citationContext, searchMode\)/);
 });
 
+test("content-script tells users to refresh Overleaf after background worker timeouts", async () => {
+  const source = await readContentScript();
+  const callRuntimeBody = extractFunctionBody(source, "callRuntime");
+
+  assert.match(callRuntimeBody, /Timed out waiting for the OverCite background worker/);
+  assert.match(callRuntimeBody, /Refresh the Overleaf page and try again/);
+});
+
 test("content-script uses a short non-blocking success notice after insertion", async () => {
   const source = await readContentScript();
   const insertBody = extractFunctionBody(source, "insertCandidateWithState");
