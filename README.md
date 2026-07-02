@@ -39,6 +39,15 @@
   </a>
 </p>
 
+> **Using OverCite in a paper?**
+> If OverCite helped with your manuscript, please acknowledge it with:
+>
+> ```tex
+> This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
+> ```
+>
+> You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).
+
 ## Get Started
 
 Install OverCite from the place where you write:
