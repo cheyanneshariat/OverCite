@@ -5,8 +5,11 @@ import { readFile } from "node:fs/promises";
 test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   const manifestText = await readFile(new URL("../manifest.json", import.meta.url), "utf8");
   const manifest = JSON.parse(manifestText);
+  const packageText = await readFile(new URL("../package.json", import.meta.url), "utf8");
+  const packageJson = JSON.parse(packageText);
 
   assert.equal(manifest.manifest_version, 3);
+  assert.equal(manifest.version, packageJson.version);
   assert.equal(manifest.background.service_worker, "src/background.js");
   assert.equal(manifest.background.type, "module");
   assert.deepEqual(manifest.background.preferred_environment, ["document", "service_worker"]);
@@ -38,11 +41,24 @@ test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   ]);
   assert.deepEqual(manifest.content_scripts[0].js, ["src/content-script.js"]);
   assert.equal(manifest.browser_specific_settings.gecko.id, "overcite-addon@example.com");
-  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "140.0");
+  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "142.0");
   assert.deepEqual(
     manifest.browser_specific_settings.gecko.data_collection_permissions.required,
     ["authenticationInfo", "websiteContent"]
   );
+});
+
+test("Safari wrapper marketing versions match the browser package version", async () => {
+  const packageText = await readFile(new URL("../package.json", import.meta.url), "utf8");
+  const packageJson = JSON.parse(packageText);
+  const projectText = await readFile(
+    new URL("../../safari/OverCite.xcodeproj/project.pbxproj", import.meta.url),
+    "utf8"
+  );
+  const versions = [...projectText.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((match) => match[1]);
+
+  assert.ok(versions.length > 0, "missing Safari MARKETING_VERSION settings");
+  assert.deepEqual([...new Set(versions)], [packageJson.version]);
 });
 
 test("background trigger path accepts Overleaf project tabs on both hostnames", async () => {

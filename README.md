@@ -272,7 +272,7 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Release notes: [v0.3.4](docs/releases/v0.3.4.md)
+- Release notes: [v0.3.6](docs/releases/v0.3.6.md)
 - TeXstudio setup: [texstudio/README.md](texstudio/README.md)
 - TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)

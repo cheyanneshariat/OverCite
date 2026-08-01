@@ -27,12 +27,19 @@
   function findActiveEditorView() {
     const EditorView = codeMirrorApi?.EditorView ?? globalThis.CodeMirror?.EditorView;
     const candidates = [
+      ...findEditorsControlledByActiveFileTabs(),
+      ...document.querySelectorAll('[role="tabpanel"]:not([hidden]) .cm-editor'),
       document.activeElement?.closest?.(".cm-editor"),
       document.querySelector(".cm-editor.cm-focused"),
       ...document.querySelectorAll(".cm-editor")
     ].filter(Boolean).filter(isVisibleEditorElement);
+    const seen = new Set();
 
     for (const candidate of candidates) {
+      if (seen.has(candidate)) {
+        continue;
+      }
+      seen.add(candidate);
       const fallbackView = readEditorViewFromDom(candidate);
       if (fallbackView) {
         return fallbackView;
@@ -53,6 +60,25 @@
     return null;
   }
 
+  function findEditorsControlledByActiveFileTabs() {
+    const editors = [];
+    for (const tab of findActiveFileTabElements()) {
+      const controlledId = tab.getAttribute("aria-controls");
+      if (!controlledId) {
+        continue;
+      }
+      const panel = document.getElementById(controlledId);
+      if (!panel) {
+        continue;
+      }
+      if (panel.matches?.(".cm-editor")) {
+        editors.push(panel);
+      }
+      editors.push(...panel.querySelectorAll(".cm-editor"));
+    }
+    return editors;
+  }
+
   function readEditorViewFromDom(element) {
     const cmView = element?.cmView;
     const view = cmView?.rootView?.view ?? cmView?.view ?? null;
@@ -66,9 +92,23 @@
     if (!(element instanceof Element)) {
       return false;
     }
-    const style = window.getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
-      return false;
+    if (typeof element.checkVisibility === "function") {
+      try {
+        if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+          return false;
+        }
+      } catch {
+        // Older browsers do not accept checkVisibility options.
+      }
+    }
+    for (let current = element; current instanceof Element; current = current.parentElement) {
+      if (current.hidden || current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
+        return false;
+      }
+      const style = window.getComputedStyle(current);
+      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+        return false;
+      }
     }
     const rect = element.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
@@ -82,19 +122,46 @@
       '.active[role="tab"]',
       '.active .tab-label',
       '.file-tab.active',
-      '.cm-file-tab.active',
-      '.ol-cm-breadcrumbs',
-      '.ol-cm-toolbar-wrapper',
-      '.cm-panels-top'
+      '.cm-file-tab.active'
     ];
     for (const selector of selectors) {
-      const element = document.querySelector(selector);
+      for (const element of document.querySelectorAll(selector)) {
+        const fileName = extractLikelyEditorFileNameFromElement(element);
+        if (fileName) {
+          return fileName;
+        }
+      }
+    }
+    for (const element of document.querySelectorAll('.ol-cm-breadcrumbs')) {
       const fileName = extractLikelyEditorFileNameFromElement(element);
       if (fileName) {
         return fileName;
       }
     }
     return "";
+  }
+
+  function findActiveFileTabElements() {
+    const selectors = [
+      '[role="tab"][aria-selected="true"]',
+      '[role="tab"][data-active="true"]',
+      '[data-testid="editor-tab-active"]',
+      '.active[role="tab"]',
+      '.file-tab.active',
+      '.cm-file-tab.active'
+    ];
+    const tabs = [];
+    const seen = new Set();
+    for (const selector of selectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        if (seen.has(element) || !extractLikelyEditorFileNameFromElement(element)) {
+          continue;
+        }
+        seen.add(element);
+        tabs.push(element);
+      }
+    }
+    return tabs;
   }
 
   function extractLikelyEditorFileNameFromElement(element) {
@@ -150,12 +217,20 @@
   }
 
   function matchesFileName(activeFileName, targetFileName) {
-    const active = String(activeFileName ?? "").trim();
-    const target = String(targetFileName ?? "").trim();
+    const active = normalizeComparableFileName(activeFileName);
+    const target = normalizeComparableFileName(targetFileName);
     if (!active || !target) {
       return false;
     }
-    return active === target || active.includes(target);
+    return active === target || active.endsWith(`/${target}`) || target.endsWith(`/${active}`);
+  }
+
+  function normalizeComparableFileName(fileName) {
+    return String(fileName ?? "")
+      .replace(/\\\\/g, "/")
+      .replace(/^\.\//, "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   function assertExpectedActiveFile(expectedFileName) {
@@ -301,5 +376,13 @@
     });
     view.focus();
     return true;
+  }
+
+  if (globalThis.__OVERCITE_PAGE_BRIDGE_TEST__) {
+    globalThis.__OVERCITE_PAGE_BRIDGE_TEST_HOOKS__ = {
+      findActiveEditorView,
+      matchesFileName,
+      readActiveFileName
+    };
   }
 })();
