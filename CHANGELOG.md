@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.6
+
+- Fixed severe Overleaf slowdowns by keeping file-navigation tracking dormant outside citation insertion and avoiding broad ancestor text scans for PDF, editor, and grammar-tool clicks.
+- Added a packaged-browser regression that verifies unrelated clicks do not inspect large DOM subtrees.
+
+## 0.3.5
+
+- Fixed active-editor detection for Overleaf's current multi-panel UI, where the sidebar and source editor can both expose selected tabs.
+- Prevented stale or hidden CodeMirror editors from redirecting citation insertion to unrelated files such as `old_text.tex`.
+- Replaced partial filename checks with exact path-aware matching before source or bibliography writes.
+- Raised the Firefox minimum version to 142, matching the manifest's data-collection permission metadata.
+- Replaced dynamic result-card HTML with explicit DOM construction so the Firefox package lints without warnings.
+- Added end-to-end Chrome coverage for `Rice2021`, bibliography insertion, stale-editor isolation, and both return-to-source settings.
+
 ## 0.3.4
 
 - Fixed a browser runtime error that could show `preferredCitationCount is not defined` when duplicate search results were merged across sources.

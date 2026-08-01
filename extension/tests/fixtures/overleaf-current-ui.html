@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OverCite current Overleaf UI regression fixture</title>
+  <style>
+    body { margin: 0; font: 14px system-ui, sans-serif; }
+    #app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+    #sidebar { padding: 12px; border-right: 1px solid #ccc; }
+    #editor-area { padding: 12px; }
+    [role="tab"] { display: inline-block; padding: 8px; cursor: pointer; }
+    [role="treeitem"] { padding: 6px; cursor: pointer; }
+    [role="tabpanel"] { min-height: 360px; }
+    .cm-editor { min-height: 320px; padding: 12px; border: 1px solid #aaa; white-space: pre-wrap; }
+    #unrelated-interaction-zone { margin-top: 12px; padding: 8px; border: 1px solid #ddd; }
+    #old-panel { position: fixed; left: -10000px; top: 0; width: 600px; height: 400px; }
+    #test-result { display: none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div role="tab" aria-selected="true">File tree</div>
+      <div role="tree">
+        <div role="treeitem" data-testid="file-tree-item">main.tex</div>
+        <div role="treeitem" data-testid="file-tree-item">old_text.tex</div>
+        <div role="treeitem" data-testid="file-tree-item">references.bib</div>
+      </div>
+    </aside>
+    <main id="editor-area">
+      <div role="tablist" aria-label="Open files">
+        <div id="main-tab" role="tab" aria-selected="true" aria-controls="main-panel">main.tex <button>Close</button></div>
+        <div id="bib-tab" role="tab" aria-selected="false" aria-controls="bib-panel">references.bib <button>Close</button></div>
+        <div id="old-tab" role="tab" aria-selected="false" aria-controls="old-panel">old_text.tex <button>Close</button></div>
+      </div>
+      <div class="ol-cm-breadcrumbs">old_text.tex</div>
+      <section id="main-panel" role="tabpanel">
+        <div id="main-editor" class="cm-editor" tabindex="0"></div>
+      </section>
+      <section id="bib-panel" role="tabpanel" hidden>
+        <div id="bib-editor" class="cm-editor" tabindex="0"></div>
+      </section>
+      <section id="old-panel" role="tabpanel">
+        <div id="old-editor" class="cm-editor cm-focused" tabindex="0"></div>
+      </section>
+      <section id="unrelated-interaction-zone" aria-label="Synthetic PDF and grammar tools">
+        <button id="unrelated-control" type="button">Search the compiled PDF</button>
+        <div id="synthetic-pdf-text"></div>
+      </section>
+    </main>
+  </div>
+  <pre id="test-result"></pre>
+  <script>
+    (() => {
+      window.__OVERCITE_START_REGRESSION__ = false;
+      window.__OVERCITE_UNRELATED_TEXT_READS__ = 0;
+      const textContentDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+      Object.defineProperty(Node.prototype, "textContent", {
+        configurable: true,
+        get() {
+          if (this instanceof Element && this.closest("#unrelated-interaction-zone")) {
+            window.__OVERCITE_UNRELATED_TEXT_READS__ += 1;
+          }
+          return textContentDescriptor.get.call(this);
+        },
+        set(value) {
+          textContentDescriptor.set.call(this, value);
+        }
+      });
+      document.getElementById("synthetic-pdf-text").replaceChildren(
+        ...Array.from({ length: 1500 }, (_, index) => {
+          const span = document.createElement("span");
+          span.textContent = `Rendered PDF word ${index} with grammar annotation. `;
+          return span;
+        })
+      );
+      const documents = {
+        "main.tex": String.raw`\documentclass{article}
+\begin{document}
+This source confusion is also found in previous M51 studies. \citet{Rice2021} found at least one HST source within 0.5 arcsec.
+\bibliography{references}
+\end{document}`,
+        "references.bib": "",
+        "old_text.tex": String.raw`\documentclass{article}
+\begin{document}
+This is unrelated archival text with \citet{Wrong1999}.
+\end{document}`
+      };
+      const initialOldText = documents["old_text.tex"];
+      const editorByFile = {
+        "main.tex": document.getElementById("main-editor"),
+        "references.bib": document.getElementById("bib-editor"),
+        "old_text.tex": document.getElementById("old-editor")
+      };
+      const tabByFile = {
+        "main.tex": document.getElementById("main-tab"),
+        "references.bib": document.getElementById("bib-tab"),
+        "old_text.tex": document.getElementById("old-tab")
+      };
+      const panelByFile = {
+        "main.tex": document.getElementById("main-panel"),
+        "references.bib": document.getElementById("bib-panel"),
+        "old_text.tex": document.getElementById("old-panel")
+      };
+      const cursor = documents["main.tex"].indexOf("Rice2021") + 4;
+
+      function makeDoc(fileName) {
+        return {
+          toString: () => documents[fileName],
+          get length() { return documents[fileName].length; }
+        };
+      }
+
+      function makeView(fileName, selectionAnchor) {
+        const editor = editorByFile[fileName];
+        const state = {
+          doc: makeDoc(fileName),
+          selection: { main: { from: selectionAnchor, to: selectionAnchor } }
+        };
+        const view = {
+          state,
+          dispatch(transaction) {
+            if (transaction.changes) {
+              const from = transaction.changes.from;
+              const to = transaction.changes.to;
+              const insert = String(transaction.changes.insert ?? "");
+              documents[fileName] = documents[fileName].slice(0, from) + insert + documents[fileName].slice(to);
+              state.doc = makeDoc(fileName);
+            }
+            if (transaction.selection) {
+              const anchor = Number(transaction.selection.anchor ?? transaction.selection.from ?? 0);
+              state.selection = { main: { from: anchor, to: anchor } };
+            }
+            editor.textContent = documents[fileName];
+          },
+          focus() {
+            for (const candidate of Object.values(editorByFile)) {
+              candidate.classList.remove("cm-focused");
+            }
+            editor.classList.add("cm-focused");
+            editor.focus();
+          }
+        };
+        editor.cmView = { rootView: { view } };
+        editor.textContent = documents[fileName];
+      }
+
+      function activateFile(fileName) {
+        for (const [candidate, tab] of Object.entries(tabByFile)) {
+          const active = candidate === fileName;
+          tab.setAttribute("aria-selected", String(active));
+          if (candidate !== "old_text.tex") {
+            panelByFile[candidate].hidden = !active;
+          }
+        }
+      }
+
+      makeView("main.tex", cursor);
+      makeView("references.bib", 0);
+      makeView("old_text.tex", 0);
+      for (const [fileName, tab] of Object.entries(tabByFile)) {
+        tab.addEventListener("click", () => activateFile(fileName));
+      }
+      for (const row of document.querySelectorAll("[role='treeitem']")) {
+        row.addEventListener("click", () => activateFile(row.textContent.trim()));
+      }
+
+      const observedErrors = [];
+      new MutationObserver(() => {
+        for (const node of document.querySelectorAll("#ezcite-toast.error, .ezcite-status.error")) {
+          const message = node.textContent.trim();
+          if (message && !observedErrors.includes(message)) {
+            observedErrors.push(message);
+          }
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+      function activeEditorFile() {
+        for (const tab of document.querySelectorAll("#editor-area [role='tab'][aria-selected='true']")) {
+          const match = tab.textContent.match(/[A-Za-z0-9_.-]+\.(?:tex|bib)/);
+          if (match) return match[0];
+        }
+        return "";
+      }
+
+      function publishResult(payload) {
+        const node = document.getElementById("test-result");
+        node.dataset.payload = btoa(JSON.stringify(payload));
+        node.textContent = JSON.stringify(payload);
+      }
+
+      async function waitFor(predicate, timeoutMs, label) {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error(`Timed out waiting for ${label}`);
+      }
+
+      async function run() {
+        const query = new URLSearchParams(location.search);
+        const shouldReturn = query.get("return") === "1";
+        const manualNavigation = query.get("manual") === "1";
+        const expectedFinalFile = manualNavigation
+          ? "old_text.tex"
+          : (shouldReturn ? "main.tex" : "references.bib");
+        await waitFor(() => window.__OVERCITE_PAGE_BRIDGE_READY__, 5000, "the page bridge");
+        await waitFor(() => window.__OVERCITE_START_REGRESSION__, 5000, "the regression start signal");
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          bubbles: true,
+          altKey: true,
+          shiftKey: true,
+          code: "KeyE"
+        }));
+        const resultButton = await waitFor(() => document.querySelector(".ezcite-result"), 5000, "a search result");
+        resultButton.click();
+        window.__OVERCITE_INSERTION_STARTED__ = true;
+        await waitFor(() => documents["references.bib"].includes("@article{Rice2021"), 12000, "bibliography insertion");
+        await waitFor(() => !document.getElementById("ezcite-root"), 12000, "the popup to close");
+        await waitFor(() => activeEditorFile() === expectedFinalFile, 12000, "the expected final editor");
+        publishResult({
+          ok: documents["main.tex"].includes(String.raw`\citet{Rice2021}`)
+            && documents["references.bib"].includes("@article{Rice2021")
+            && documents["old_text.tex"] === initialOldText
+            && observedErrors.length === 0,
+          returnToSourceAfterInsert: shouldReturn,
+          manualNavigation,
+          expectedFinalFile,
+          activeFile: activeEditorFile(),
+          sourceHasRice: documents["main.tex"].includes(String.raw`\citet{Rice2021}`),
+          bibliographyHasRice: documents["references.bib"].includes("@article{Rice2021"),
+          oldTextUnchanged: documents["old_text.tex"] === initialOldText,
+          observedErrors
+        });
+      }
+
+      run().catch((error) => publishResult({
+        ok: false,
+        error: error.message,
+        activeFile: activeEditorFile(),
+        mainText: documents["main.tex"],
+        bibText: documents["references.bib"],
+        oldText: documents["old_text.tex"],
+        observedErrors
+      }));
+    })();
+  </script>
+</body>
+</html>

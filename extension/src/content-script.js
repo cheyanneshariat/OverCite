@@ -324,7 +324,7 @@
   }
 
   function recordUserFileNavigation(event) {
-    if (!event.isTrusted) {
+    if (!event.isTrusted || !insertionInProgress) {
       return;
     }
     const target = event.target;
@@ -344,48 +344,34 @@
   }
 
   function extractFileNameFromUserTarget(target) {
-    let element = target;
-    let depth = 0;
-    while (element instanceof Element && element !== document.body && depth < 8) {
-      const candidates = [
-        element.getAttribute("aria-label"),
-        element.getAttribute("title"),
-        element.getAttribute("data-path"),
-        element.textContent
-      ];
-      for (const candidate of candidates) {
-        const fileName = extractLikelyEditorFileName(candidate);
-        if (fileName && isLikelyUserFileNavigationElement(element, candidate)) {
-          return fileName;
-        }
+    const navigationElement = target.closest([
+      "[role='treeitem']",
+      "[role='tab']",
+      "[data-testid='editor-tab-active']",
+      "[data-testid*='editor-tab']",
+      "[data-testid*='file-tree'] [role='button']",
+      "[data-testid*='file-tree'] button",
+      "[data-testid*='file-tree'] a",
+      "[data-path]",
+      ".file-tab",
+      "[class~='entity']"
+    ].join(","));
+    if (!navigationElement || navigationElement.closest("#ezcite-root")) {
+      return "";
+    }
+    const candidates = [
+      navigationElement.getAttribute("data-path"),
+      navigationElement.getAttribute("aria-label"),
+      navigationElement.getAttribute("title"),
+      navigationElement.textContent
+    ];
+    for (const candidate of candidates) {
+      const fileName = extractLikelyEditorFileName(candidate);
+      if (fileName) {
+        return fileName;
       }
-      element = element.parentElement;
-      depth += 1;
     }
     return "";
-  }
-
-  function isLikelyUserFileNavigationElement(element, text) {
-    const value = String(text ?? "").replace(/\s+/g, " ").trim();
-    if (!value || value.length > 180) {
-      return false;
-    }
-    const role = element.getAttribute("role") || "";
-    const testId = element.getAttribute("data-testid") || "";
-    const className = typeof element.className === "string" ? element.className : "";
-    const tagName = element.tagName;
-    return (
-      role === "treeitem" ||
-      role === "tab" ||
-      role === "button" ||
-      tagName === "BUTTON" ||
-      tagName === "A" ||
-      testId.toLowerCase().includes("file") ||
-      className.toLowerCase().includes("file") ||
-      className.toLowerCase().includes("tab") ||
-      className.toLowerCase().includes("entity") ||
-      /\.(tex|bib)\b/i.test(value)
-    );
   }
 
   function getUserFileNavigationAfter(serial) {
@@ -836,21 +822,28 @@
       const citationCountLabel = formatCitationCountBadge(candidate.citationCount);
       button.type = "button";
       button.className = "ezcite-result";
-      button.innerHTML = `
-        <div class="ezcite-result-topline">
-          <div class="ezcite-key">${escapeHtml(candidate.generatedKey || "citation")}</div>
-          <div class="ezcite-year">${escapeHtml(formatYear(candidate.year))}</div>
-        </div>
-        <div class="ezcite-source-row">
-          <div class="ezcite-source">${escapeHtml(candidate.sourceLabel || "Literature")}</div>
-          ${citationCountLabel ? `<div class="ezcite-citation-count">${escapeHtml(citationCountLabel)}</div>` : ""}
-        </div>
-        <div class="ezcite-paper-title">${escapeHtml(candidate.title)}</div>
-        <p class="ezcite-meta">${escapeHtml(formatCandidateMeta(candidate))}</p>
-        <div class="ezcite-abstract-wrap">
-          <p class="ezcite-abstract">${escapeHtml(truncate(candidate.abstract, 240))}</p>
-        </div>
-      `;
+      const topLine = document.createElement("div");
+      topLine.className = "ezcite-result-topline";
+      topLine.append(
+        createTextElement("div", "ezcite-key", candidate.generatedKey || "citation"),
+        createTextElement("div", "ezcite-year", formatYear(candidate.year))
+      );
+      const sourceRow = document.createElement("div");
+      sourceRow.className = "ezcite-source-row";
+      sourceRow.append(createTextElement("div", "ezcite-source", candidate.sourceLabel || "Literature"));
+      if (citationCountLabel) {
+        sourceRow.append(createTextElement("div", "ezcite-citation-count", citationCountLabel));
+      }
+      const abstractWrap = document.createElement("div");
+      abstractWrap.className = "ezcite-abstract-wrap";
+      abstractWrap.append(createTextElement("p", "ezcite-abstract", truncate(candidate.abstract, 240)));
+      button.append(
+        topLine,
+        sourceRow,
+        createTextElement("div", "ezcite-paper-title", candidate.title),
+        createTextElement("p", "ezcite-meta", formatCandidateMeta(candidate)),
+        abstractWrap
+      );
       button.addEventListener("click", () => {
         selectCandidate(candidate).catch((error) => {
           console.error("[OverCite content] candidate selection failed", error);
@@ -860,7 +853,24 @@
       body.appendChild(button);
     }
 
-    footer.innerHTML = `<span>Pick a paper to rewrite the cite key and update your bibliography.</span><span><strong>Trigger:</strong> ${escapeHtml(shortcutText)}</span>`;
+    const footerInstruction = createTextElement(
+      "span",
+      "",
+      "Pick a paper to rewrite the cite key and update your bibliography."
+    );
+    const footerTrigger = document.createElement("span");
+    const footerTriggerLabel = createTextElement("strong", "", "Trigger:");
+    footerTrigger.append(footerTriggerLabel, document.createTextNode(` ${shortcutText}`));
+    footer.replaceChildren(footerInstruction, footerTrigger);
+  }
+
+  function createTextElement(tagName, className, text) {
+    const element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    element.textContent = String(text ?? "");
+    return element;
   }
 
   async function startLookup(searchMode) {
@@ -1223,7 +1233,7 @@
             await timed(`openProjectFile:${originalFileName}:project`, () => openProjectFile(originalFileName, { preferTabsOnly: false }), diagnostics);
             await sleep(250);
             const recoveredFileName = readActiveFileName();
-            if (recoveredFileName && recoveredFileName.includes(originalFileName)) {
+            if (matchesFileName(recoveredFileName, originalFileName)) {
               debugTrace("source:return-recovered", {
                 target: originalFileName,
                 activeAfter: recoveredFileName
@@ -1521,7 +1531,7 @@
         const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(3, 200), diagnostics);
         const activeSourceName = activeSourceState.fileName || readActiveFileName();
         const looksLikeSourceFile = originalFileName
-          ? activeSourceName.includes(originalFileName)
+          ? matchesFileName(activeSourceName, originalFileName)
           : Boolean(activeSourceName && activeSourceName !== bibTarget.target && /\.tex$/i.test(activeSourceName));
         if (!looksLikeSourceFile) {
           try {
@@ -1671,15 +1681,21 @@
     const selectors = [
       "[role='tab'][aria-selected='true']",
       "[role='tab'][data-active='true']",
+      "[data-testid='editor-tab-active']",
       ".active[role='tab']",
       ".file-tab.active",
-      ".tab.active",
-      ".ol-cm-breadcrumbs",
-      ".ol-cm-toolbar-wrapper",
-      ".cm-panels-top"
+      ".tab.active"
     ];
     for (const selector of selectors) {
-      const fileName = extractLikelyEditorFileNameFromElement(document.querySelector(selector));
+      for (const element of document.querySelectorAll(selector)) {
+        const fileName = extractLikelyEditorFileNameFromElement(element);
+        if (fileName) {
+          return fileName;
+        }
+      }
+    }
+    for (const element of document.querySelectorAll(".ol-cm-breadcrumbs")) {
+      const fileName = extractLikelyEditorFileNameFromElement(element);
       if (fileName) {
         return fileName;
       }
@@ -1731,12 +1747,12 @@
             throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
           }
           const activeTabName = readActiveFileName();
-          if (activeTabName.includes(fileName)) {
+          if (matchesFileName(activeTabName, fileName)) {
             return true;
           }
           const state = await getEditorStateWithRetry(3, 250);
           const activeFileName = state.fileName || activeTabName;
-          return activeFileName.includes(fileName);
+          return matchesFileName(activeFileName, fileName);
         }, 3500);
         debugTrace("openProjectFile:ok", {
           fileName,
@@ -1781,12 +1797,20 @@
   }
 
   function matchesFileName(activeFileName, targetFileName) {
-    const active = String(activeFileName ?? "").trim();
-    const target = String(targetFileName ?? "").trim();
+    const active = normalizeComparableFileName(activeFileName);
+    const target = normalizeComparableFileName(targetFileName);
     if (!active || !target) {
       return false;
     }
-    return active === target || active.includes(target);
+    return active === target || active.endsWith(`/${target}`) || target.endsWith(`/${active}`);
+  }
+
+  function normalizeComparableFileName(fileName) {
+    return String(fileName ?? "")
+      .replace(/\\\\/g, "/")
+      .replace(/^\.\//, "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   async function ensureProjectFileActive(fileName, diagnostics, reasonLabel) {
@@ -2552,13 +2576,6 @@
       return `${Math.round(value)} ms`;
     }
     return `${(value / 1000).toFixed(2)} s`;
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
   }
 
   function formatAuthors(authors, year) {

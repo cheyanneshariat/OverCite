@@ -91,6 +91,32 @@ test("content-script final source rewrite only runs when the final key changes",
   assert.match(insertBody, /expectedDocument: expectedOptimisticSourceDocument/);
 });
 
+test("content-script targets source and bibliography before applying the return-to-editor preference", async () => {
+  const source = await readContentScript();
+  const insertBody = extractFunctionBody(source, "insertCandidateWithState");
+  const optimisticWriteIndex = insertBody.indexOf('pageRequest("replaceRange"');
+  const bibliographyWriteIndex = insertBody.indexOf('pageRequest("replaceDocument"');
+  const returnPreferenceIndex = insertBody.indexOf("const shouldReturnToSource");
+
+  assert.ok(optimisticWriteIndex >= 0, "missing source cite-key write");
+  assert.ok(bibliographyWriteIndex > optimisticWriteIndex, "bibliography write should follow source write");
+  assert.ok(returnPreferenceIndex > bibliographyWriteIndex, "return preference must only control final focus");
+});
+
+test("content-script scans every selected tab and uses exact filename comparisons", async () => {
+  const source = await readContentScript();
+  const readActiveFileNameBody = extractFunctionBody(source, "readActiveFileName");
+  const matchesFileNameBody = extractFunctionBody(source, "matchesFileName");
+  const openProjectFileBody = extractFunctionBody(source, "openProjectFile");
+
+  assert.match(readActiveFileNameBody, /document\.querySelectorAll\(selector\)/);
+  assert.doesNotMatch(readActiveFileNameBody, /ol-cm-toolbar-wrapper|cm-panels-top/);
+  assert.match(matchesFileNameBody, /endsWith\(`\/\$\{target\}`\)/);
+  assert.doesNotMatch(matchesFileNameBody, /\.includes\(/);
+  assert.match(openProjectFileBody, /matchesFileName\(activeTabName, fileName\)/);
+  assert.match(openProjectFileBody, /matchesFileName\(activeFileName, fileName\)/);
+});
+
 test("content-script reopens source for final-key reconciliation even when final focus stays in bib", async () => {
   const source = await readContentScript();
   const insertBody = extractFunctionBody(source, "insertCandidateWithState");
@@ -107,6 +133,8 @@ test("content-script reopens source for final-key reconciliation even when final
 
 test("content-script honors user file navigation during optional return-to-source", async () => {
   const source = await readContentScript();
+  const recordNavigationBody = extractFunctionBody(source, "recordUserFileNavigation");
+  const extractNavigationBody = extractFunctionBody(source, "extractFileNameFromUserTarget");
   const insertBody = extractFunctionBody(source, "insertCandidateWithState");
   const openProjectFileBody = extractFunctionBody(source, "openProjectFile");
 
@@ -114,7 +142,17 @@ test("content-script honors user file navigation during optional return-to-sourc
   assert.match(source, /let lastUserFileNavigation = null/);
   assert.match(source, /function installUserFileNavigationTracking\(\)/);
   assert.match(source, /event\.isTrusted/);
+  assert.match(recordNavigationBody, /!insertionInProgress/);
   assert.match(source, /target\.closest\("#ezcite-root"\)/);
+  assert.ok(
+    recordNavigationBody.indexOf("!insertionInProgress") < recordNavigationBody.indexOf("event.target"),
+    "idle pointer events must return before inspecting their DOM target"
+  );
+  assert.match(extractNavigationBody, /target\.closest\(/);
+  assert.match(extractNavigationBody, /\[role='treeitem'\]/);
+  assert.match(extractNavigationBody, /\[role='tab'\]/);
+  assert.doesNotMatch(extractNavigationBody, /parentElement|while \(/);
+  assert.doesNotMatch(source, /function isLikelyUserFileNavigationElement\(/);
   assert.match(source, /function getUserFileNavigationAfter\(serial\)/);
   assert.match(source, /if \(serial == null\) \{\s*return null;\s*\}/s);
   assert.match(source, /function hasUserFileNavigationAwayAfter\(serial, targetFileName\)/);

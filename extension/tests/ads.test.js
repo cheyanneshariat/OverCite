@@ -17,6 +17,25 @@ test("buildAdsQuery prefers fielded author/year search from parsed key hints", (
   );
 });
 
+test("Rice2021 builds a focused first-author/year query from the M51 citation context", () => {
+  const queries = buildAdsQueries({
+    token: "Rice2021",
+    searchMode: "contextual",
+    sentenceText: "This source confusion is also found in previous M51 studies. The study found at least one HST source near the X-ray position.",
+    contextText: "M51 Chandra X-ray sources have multiple optical HST counterpart candidates.",
+    parsedKeyHint: {
+      surname: "Rice",
+      year: 2021,
+      suffix: ""
+    }
+  });
+
+  assert.match(queries[0], /^first_author:"Rice" year:2021/);
+  assert.ok(queries.some((query) => query.includes('first_author:"Rice"')));
+  assert.ok(queries.includes('first_author:"Rice" year:2021'));
+  assert.ok(queries.some((query) => /M51|Chandra|X-ray|optical|HST/i.test(query)));
+});
+
 test("simple search mode uses author-year queries without contextual expansion", () => {
   const queries = buildAdsQueries({
     token: "Shariat25",
