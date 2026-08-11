@@ -7,6 +7,11 @@ import { buildSourceRouting, exportCandidateBibtex, searchBroadCandidatesForSour
 
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 const ARXIV_CITATION_ENRICHMENT_TIMEOUT_MS = 900;
+const ADS_SEARCH_REQUEST_TIMEOUT_MS = 6500;
+const ADS_SEARCH_BUDGET_MS = 12000;
+const ADS_EXPORT_TIMEOUT_MS = 12000;
+const LITERATURE_SEARCH_BUDGET_MS = 30000;
+const RUNTIME_FETCH_MARKER = Symbol.for("overcite.runtimeFetch");
 
 extensionApi.runtime.onInstalled.addListener(async () => {
   const settings = await getSettings();
@@ -63,6 +68,14 @@ async function handleMessage(message) {
 }
 
 async function searchLiterature(citationContext) {
+  return runWithAbortDeadline(
+    (signal) => searchLiteratureWithinBudget(citationContext, signal),
+    LITERATURE_SEARCH_BUDGET_MS,
+    "Literature search"
+  );
+}
+
+async function searchLiteratureWithinBudget(citationContext, searchSignal) {
   const settings = await getSettings();
   const adsApiToken = settings.sourceApiTokens?.ads || settings.adsApiToken;
   const routing = buildSourceRouting(settings);
@@ -73,7 +86,7 @@ async function searchLiterature(citationContext) {
 
   const shouldSearchPrimary = isSourceSearchableAsPrimary(routing, primarySource);
   const primaryCandidates = shouldSearchPrimary
-    ? await searchRoutedSource(primarySource, citationContext, settings, adsApiToken)
+    ? await searchRoutedSource(primarySource, citationContext, settings, adsApiToken, searchSignal)
       .catch((error) => {
         errors.push(error);
         return [];
@@ -83,10 +96,10 @@ async function searchLiterature(citationContext) {
 
   const primaryRanked = finalizeCandidates(citationContext, settings, primaryCandidates);
   if (primaryRanked.length && isHighConfidenceResult(citationContext, primaryRanked[0], primarySource)) {
-    return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken);
+    return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken, searchSignal);
   }
   if (shouldKeepSimplePrimaryResult(citationContext, primaryRanked[0], primarySource, fallbackSources)) {
-    return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken);
+    return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken, searchSignal);
   }
 
   if (fallbackSources.length) {
@@ -96,10 +109,11 @@ async function searchLiterature(citationContext) {
       adsApiToken,
       fallbackSources,
       candidates,
-      errors
+      errors,
+      searchSignal
     });
     if (fallbackResult) {
-      return maybeEnrichArxivCitationCounts(citationContext, settings, fallbackResult, adsApiToken);
+      return maybeEnrichArxivCitationCounts(citationContext, settings, fallbackResult, adsApiToken, searchSignal);
     }
   }
 
@@ -113,10 +127,10 @@ async function searchLiterature(citationContext) {
     console.warn("[OverCite background] literature provider failed after another provider returned results", error);
   }
 
-  return maybeEnrichArxivCitationCounts(citationContext, settings, finalizeCandidates(citationContext, settings, candidates), adsApiToken);
+  return maybeEnrichArxivCitationCounts(citationContext, settings, finalizeCandidates(citationContext, settings, candidates), adsApiToken, searchSignal);
 }
 
-async function maybeEnrichArxivCitationCounts(citationContext, settings, candidates, adsApiToken) {
+async function maybeEnrichArxivCitationCounts(citationContext, settings, candidates, adsApiToken, searchSignal = null) {
   const arxivNeedingCounts = candidates
     .slice(0, 5)
     .filter((candidate) => isArxivIdentified(candidate) && !(Number(candidate?.citationCount ?? 0) > 0) && String(candidate?.eprint ?? "").trim());
@@ -124,7 +138,7 @@ async function maybeEnrichArxivCitationCounts(citationContext, settings, candida
     return candidates;
   }
 
-  const enrichment = enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken)
+  const enrichment = enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken, searchSignal)
     .catch(() => candidates);
   return Promise.race([
     enrichment,
@@ -132,12 +146,14 @@ async function maybeEnrichArxivCitationCounts(citationContext, settings, candida
   ]);
 }
 
-async function enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken) {
+async function enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken, searchSignal = null) {
   const query = buildArxivAdsCitationQuery(arxivNeedingCounts);
   if (!query) {
     return candidates;
   }
-  const docs = await fetchSearchCandidates([query], { ...citationContext, searchMode: "direct" }, adsApiToken);
+  const docs = await fetchSearchCandidates([query], { ...citationContext, searchMode: "direct" }, adsApiToken, {
+    externalSignal: searchSignal
+  });
   const adsCandidates = docs.map((doc) => ({
     ...mapAdsDocToCandidate(doc),
     sourceId: SOURCE_IDS.ADS,
@@ -258,12 +274,12 @@ function isSourceSearchableAsPrimary(routing, sourceId) {
     : routing.availableFallbackSources.includes(sourceId);
 }
 
-async function searchFallbackSources({ citationContext, settings, adsApiToken, fallbackSources, candidates, errors }) {
+async function searchFallbackSources({ citationContext, settings, adsApiToken, fallbackSources, candidates, errors, searchSignal }) {
   if (citationContext?.searchMode === "simple") {
     const pending = fallbackSources.map((sourceId, index) => {
       let promise;
       promise = Promise.resolve()
-        .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken))
+        .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken, searchSignal))
         .then(
           (value) => ({ status: "fulfilled", sourceId, index, value, promise }),
           (reason) => ({ status: "rejected", sourceId, index, reason, promise })
@@ -294,7 +310,7 @@ async function searchFallbackSources({ citationContext, settings, adsApiToken, f
   const pending = fallbackSources.map((sourceId) => {
     let promise;
     promise = Promise.resolve()
-      .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken))
+      .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken, searchSignal))
       .then(
         (value) => ({ status: "fulfilled", sourceId, value, promise }),
         (reason) => ({ status: "rejected", sourceId, reason, promise })
@@ -333,20 +349,35 @@ function canReturnSimpleFallback(candidate, fallbackSources, settledIndexes) {
   return true;
 }
 
-async function searchRoutedSource(sourceId, citationContext, settings, adsApiToken) {
+async function searchRoutedSource(sourceId, citationContext, settings, adsApiToken, searchSignal = null) {
   if (sourceId === SOURCE_IDS.ADS) {
     if (!adsApiToken) {
       throw new Error("No ADS/SciX API token is configured for ADS/SciX search.");
     }
     const queries = buildAdsQueries(citationContext);
-    const mergedDocs = await fetchSearchCandidates(queries, citationContext, adsApiToken);
-    return mergedDocs.map((doc) => ({
+    const mapDocs = (docs) => docs.map((doc) => ({
       ...mapAdsDocToCandidate(doc),
       sourceId: SOURCE_IDS.ADS,
       sourceLabel: "ADS/SciX"
     }));
+    const mergedDocs = await fetchSearchCandidates(queries, citationContext, adsApiToken, {
+      externalSignal: searchSignal,
+      shouldStop(docs) {
+        const ranked = finalizeCandidates(citationContext, settings, mapDocs(docs));
+        return Boolean(
+          ranked.length &&
+          isHighConfidenceResult(citationContext, ranked[0], SOURCE_IDS.ADS)
+        );
+      }
+    });
+    return mapDocs(mergedDocs);
   }
-  return searchBroadCandidatesForSources(citationContext, settings, [sourceId]);
+  return searchBroadCandidatesForSources(
+    citationContext,
+    settings,
+    [sourceId],
+    fetchWithParentSignal(globalThis.fetch, searchSignal)
+  );
 }
 
 function finalizeCandidates(citationContext, settings, candidates) {
@@ -1231,33 +1262,109 @@ function mergeSourceLabels(left, right) {
   return [...new Set(String(`${left ?? ""},${right ?? ""}`).split(",").map((value) => value.trim()).filter(Boolean))].join(", ");
 }
 
-async function fetchSearchCandidates(queries, citationContext, adsApiToken) {
+async function fetchSearchCandidates(queries, citationContext, adsApiToken, options = {}) {
   const mergedDocs = [];
   const seenBibcodes = new Set();
+  const errors = [];
+  const startedAt = Date.now();
+  const requestTimeoutMs = positiveNumber(options.requestTimeoutMs, ADS_SEARCH_REQUEST_TIMEOUT_MS);
+  const totalTimeoutMs = positiveNumber(options.totalTimeoutMs, ADS_SEARCH_BUDGET_MS);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const shouldStop = typeof options.shouldStop === "function" ? options.shouldStop : () => false;
+  const lookupController = new AbortController();
+  const externalSignal = options.externalSignal ?? null;
+  const abortFromExternal = () => lookupController.abort();
+  if (externalSignal?.aborted) {
+    lookupController.abort();
+  } else {
+    externalSignal?.addEventListener?.("abort", abortFromExternal, { once: true });
+  }
   const initialQueries = citationContext?.searchMode === "simple" ? queries.slice(0, 1) : queries.slice(0, 2);
 
-  if (initialQueries.length) {
-    const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken)));
-    for (const [index, docs] of initialBatches.entries()) {
-      mergeDocs(mergedDocs, seenBibcodes, docs, index);
-    }
+  function remainingBudgetMs() {
+    return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
   }
 
-  const initialIndex = initialQueries.length - 1;
-  if (initialQueries.length && shouldStopAfterQuery(initialIndex, mergedDocs.length, citationContext)) {
+  function fetchQuery(query) {
+    const remainingMs = remainingBudgetMs();
+    if (remainingMs <= 0) {
+      return Promise.reject(createAdsSearchTimeoutError(totalTimeoutMs));
+    }
+    return fetchAdsDocs(
+      query,
+      adsApiToken,
+      Math.min(requestTimeoutMs, remainingMs),
+      fetchImpl,
+      lookupController.signal
+    );
+  }
+
+  try {
+    if (initialQueries.length) {
+      const pending = new Set(initialQueries.map((query, index) => {
+        let promise;
+        promise = fetchQuery(query).then(
+          (docs) => ({ ok: true, docs, index, promise }),
+          (error) => ({ ok: false, error, index, promise })
+        );
+        return promise;
+      }));
+
+      while (pending.size) {
+        const batch = await Promise.race(pending);
+        pending.delete(batch.promise);
+        if (batch.ok) {
+          mergeDocs(mergedDocs, seenBibcodes, batch.docs, batch.index);
+          if (shouldStop(mergedDocs)) {
+            return mergedDocs;
+          }
+        } else {
+          errors.push(batch.error);
+        }
+      }
+    }
+
+    const initialIndex = initialQueries.length - 1;
+    if (initialQueries.length && shouldStopAfterQuery(initialIndex, mergedDocs.length, citationContext)) {
+      return mergedDocs;
+    }
+
+    for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
+      const index = offset + initialQueries.length;
+      if (remainingBudgetMs() <= 0) {
+        errors.push(createAdsSearchTimeoutError(totalTimeoutMs));
+        break;
+      }
+      try {
+        const docs = await fetchQuery(query);
+        mergeDocs(mergedDocs, seenBibcodes, docs, index);
+      } catch (error) {
+        errors.push(error);
+      }
+      if (shouldStop(mergedDocs) || shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
+        break;
+      }
+    }
+
+    if (!mergedDocs.length && errors.length) {
+      throw errors[0];
+    }
     return mergedDocs;
+  } finally {
+    // Abort any slower initial request after a progressive result wins, and
+    // guarantee that a caller retry does not overlap abandoned ADS work.
+    lookupController.abort();
+    externalSignal?.removeEventListener?.("abort", abortFromExternal);
   }
+}
 
-  for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
-    const index = offset + initialQueries.length;
-    const docs = await fetchAdsDocs(query, adsApiToken);
-    mergeDocs(mergedDocs, seenBibcodes, docs, index);
-    if (shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
-      break;
-    }
-  }
+function positiveNumber(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
 
-  return mergedDocs;
+function createAdsSearchTimeoutError(timeoutMs) {
+  return new Error(`ADS/SciX search took longer than ${(timeoutMs / 1000).toFixed(1)} seconds.`);
 }
 
 function mergeDocs(target, seenBibcodes, docs, queryIndex) {
@@ -1277,7 +1384,7 @@ function shouldStopAfterQuery(index, mergedCount, citationContext) {
     return false;
   }
   const hasExplicitYear = Boolean(citationContext?.parsedKeyHint?.year);
-  if (hasExplicitYear && index === 0 && mergedCount >= 6) {
+  if (hasExplicitYear && index <= 1 && mergedCount >= 6) {
     return true;
   }
   if (hasExplicitYear && index >= 3 && mergedCount >= 6) {
@@ -1302,41 +1409,126 @@ async function exportBibtex(candidateOrBibcode) {
     return exportCandidateBibtex(candidate);
   }
 
-  const response = await fetch("https://api.adsabs.harvard.edu/v1/export/bibtex", {
+  const { response, payload } = await fetchJsonWithDeadline(globalThis.fetch, "https://api.adsabs.harvard.edu/v1/export/bibtex", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${adsApiToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ bibcode: [bibcode] })
-  });
+  }, ADS_EXPORT_TIMEOUT_MS, "ADS BibTeX export");
 
   if (!response.ok) {
     throw new Error(`ADS BibTeX export failed with status ${response.status}`);
   }
 
-  const payload = await response.json();
   return payload.export?.trim?.() ?? "";
 }
 
-async function fetchAdsDocs(query, adsApiToken) {
+async function fetchAdsDocs(
+  query,
+  adsApiToken,
+  timeoutMs = ADS_SEARCH_REQUEST_TIMEOUT_MS,
+  fetchImpl = globalThis.fetch,
+  signal = null
+) {
   const url = new URL("https://api.adsabs.harvard.edu/v1/search/query");
   url.searchParams.set("q", query);
   url.searchParams.set("rows", "12");
   url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,identifier,citation_count,property,doctype,pub,bibstem,database");
 
-  const response = await fetch(url, {
+  const { response, payload } = await fetchJsonWithDeadline(fetchImpl, url, {
     headers: {
       Authorization: `Bearer ${adsApiToken}`
     }
-  });
+  }, timeoutMs, "ADS/SciX search", signal);
 
   if (!response.ok) {
     throw new Error(`ADS search failed with status ${response.status}`);
   }
 
-  const payload = await response.json();
   return payload?.response?.docs ?? [];
+}
+
+async function fetchJsonWithDeadline(fetchImpl, url, options, timeoutMs, label, externalSignal = null) {
+  if (typeof fetchImpl !== "function") {
+    throw new Error(`No fetch implementation is available for ${label}.`);
+  }
+  return runWithAbortDeadline(async (signal) => {
+    const response = await fetchImpl(url, {
+      ...options,
+      signal
+    });
+    if (!response.ok) {
+      return { response, payload: null };
+    }
+    const payload = await response.json();
+    return { response, payload };
+  }, timeoutMs, label, externalSignal);
+}
+
+async function runWithAbortDeadline(task, timeoutMs, label, externalSignal = null) {
+  const controller = new AbortController();
+  let timedOut = false;
+  let rejectCancellation = null;
+  const cancellation = new Promise((_, reject) => {
+    rejectCancellation = reject;
+  });
+  const abortFromExternal = () => {
+    controller.abort();
+    rejectCancellation?.(new Error(`${label} was cancelled.`));
+  };
+  if (externalSignal?.aborted) {
+    abortFromExternal();
+  } else {
+    externalSignal?.addEventListener?.("abort", abortFromExternal, { once: true });
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+    rejectCancellation?.(new Error(`${label} timed out.`));
+  }, positiveNumber(timeoutMs, ADS_SEARCH_REQUEST_TIMEOUT_MS));
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => task(controller.signal)),
+      cancellation
+    ]);
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`${label} timed out.`);
+    }
+    if (externalSignal?.aborted) {
+      throw new Error(`${label} was cancelled.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    controller.abort();
+    externalSignal?.removeEventListener?.("abort", abortFromExternal);
+  }
+}
+
+function fetchWithParentSignal(fetchImpl, parentSignal) {
+  if (!parentSignal) {
+    return fetchImpl;
+  }
+  const wrappedFetch = (url, options = {}) => {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (parentSignal.aborted || options.signal?.aborted) {
+      controller.abort();
+    } else {
+      // Keep these listeners through response-body parsing. The outer search
+      // controller always aborts in its deadline wrapper's finally block.
+      parentSignal.addEventListener("abort", abort, { once: true });
+      options.signal?.addEventListener?.("abort", abort, { once: true });
+    }
+    return fetchImpl(url, { ...options, signal: controller.signal });
+  };
+  if (fetchImpl === globalThis.fetch || fetchImpl?.[RUNTIME_FETCH_MARKER] === true) {
+    Object.defineProperty(wrappedFetch, RUNTIME_FETCH_MARKER, { value: true });
+  }
+  return wrappedFetch;
 }
 
 async function openOverlayForActiveTab() {
@@ -1373,4 +1565,15 @@ async function safeSendMessageToTab(tabId, message) {
     throw error;
   }
   return true;
+}
+
+if (globalThis.__OVERCITE_BACKGROUND_TEST__) {
+  globalThis.__OVERCITE_BACKGROUND_TEST_HOOKS__ = {
+    fetchSearchCandidates,
+    fetchAdsDocs,
+    fetchJsonWithDeadline,
+    exportBibtex,
+    searchRoutedSource,
+    searchLiterature
+  };
 }

@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   returnToSourceAfterInsert: false,
   citationKeyMode: "authoryear",
   bibliographyInsertMode: "append",
-  defaultSearchMode: "contextual"
+  defaultSearchMode: "simple"
 });
 
 export const TITLE_STOPWORDS = new Set([

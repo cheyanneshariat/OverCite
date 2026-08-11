@@ -51,11 +51,12 @@ test("normalizeSettings accepts valid bibliography insert modes and defaults inv
   assert.equal(normalizeSettings({ bibliographyInsertMode: "other" }).bibliographyInsertMode, "append");
 });
 
-test("normalizeSettings accepts valid default search modes and defaults invalid ones to contextual", () => {
+test("normalizeSettings accepts valid default search modes and defaults invalid ones to simple", () => {
+  assert.equal(normalizeSettings({}).defaultSearchMode, "simple");
   assert.equal(normalizeSettings({ defaultSearchMode: "simple" }).defaultSearchMode, "simple");
   assert.equal(normalizeSettings({ defaultSearchMode: "direct" }).defaultSearchMode, "direct");
   assert.equal(normalizeSettings({ defaultSearchMode: "contextual" }).defaultSearchMode, "contextual");
-  assert.equal(normalizeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "contextual");
+  assert.equal(normalizeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "simple");
 });
 
 test("normalizeSettings accepts source profiles and defaults invalid ones to Astrophysics", () => {

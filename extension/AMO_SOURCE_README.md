@@ -11,7 +11,7 @@ Build steps
 1. Change into the extension directory:
    cd extension
 2. Install dependencies:
-   npm install
+   npm ci
 3. Run the browser build:
    npm run build
 

@@ -36,6 +36,21 @@ test("Rice2021 builds a focused first-author/year query from the M51 citation co
   assert.ok(queries.some((query) => /M51|Chandra|X-ray|optical|HST/i.test(query)));
 });
 
+test("contextual opening pair covers compact and inferred hyphenated surnames", () => {
+  for (const [surname, inferred] of [["VanRoestel", "Van-Roestel"], ["ElBadry", "El-Badry"]]) {
+    const queries = buildAdsQueries({
+      token: `${surname}2021`,
+      searchMode: "contextual",
+      sentenceText: "A precise paper title with classification methods and infrastructure",
+      contextText: "A precise paper title with classification methods and infrastructure",
+      parsedKeyHint: { surname, year: 2021, suffix: "" }
+    });
+
+    assert.match(queries[0], new RegExp(`first_author:\"${surname}\"`));
+    assert.match(queries[1], new RegExp(`first_author:\"${inferred}\"`));
+  }
+});
+
 test("simple search mode uses author-year queries without contextual expansion", () => {
   const queries = buildAdsQueries({
     token: "Shariat25",
@@ -472,6 +487,25 @@ test("buildAdsQueries adds cautious fallbacks for surname variants and nearby ye
   assert.ok(queries.includes('first_author:"El-Badry" year:2025'));
   assert.ok(queries.includes('author:"ElBadry" year:2024'));
   assert.ok(queries.some((query) => query.includes('full:"gaia"')));
+});
+
+test("contextual VanRoestel keys try the raw surname before a synthesized hyphen variant", () => {
+  const queries = buildAdsQueries({
+    token: "VanRoestel_2021",
+    sentenceText: "The ZTF Source Classification Project methods and infrastructure",
+    contextText: "The ZTF Source Classification Project methods and infrastructure",
+    searchMode: "contextual",
+    parsedKeyHint: {
+      surname: "VanRoestel",
+      year: 2021
+    }
+  });
+
+  const firstRawIndex = queries.findIndex((query) => query.includes('first_author:"VanRoestel"'));
+  const firstHyphenatedIndex = queries.findIndex((query) => query.includes('first_author:"Van-Roestel"'));
+  assert.ok(firstRawIndex >= 0, "missing raw VanRoestel query");
+  assert.ok(firstHyphenatedIndex >= 0, "missing Van-Roestel fallback query");
+  assert.ok(firstRawIndex < firstHyphenatedIndex, "raw surname should be tried before punctuation inference");
 });
 
 test("collaboration-style keys add collaboration-aware query variants", () => {

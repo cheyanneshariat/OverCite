@@ -604,8 +604,12 @@ export function buildAdsQueries(citationContext) {
   }
   const queries = new Set();
   const hint = citationContext?.parsedKeyHint;
-  const primarySurname = hint?.surname
-    ? (buildSurnameVariants(hint.surname)[0] ?? hint.surname)
+  // Keep the surname exactly as typed for the first contextual queries. Some
+  // compact family names (for example VanRoestel) are valid ADS author forms;
+  // punctuation variants remain available later as fallbacks.
+  const primarySurname = hint?.surname ?? null;
+  const inferredSurname = primarySurname
+    ? buildSurnameVariants(primarySurname).find((surname) => surname !== primarySurname) ?? null
     : null;
   const token = String(citationContext?.token ?? "").trim();
   const isEmptyTokenLookup = !token;
@@ -678,6 +682,35 @@ export function buildAdsQueries(citationContext) {
     : null;
   const titleAbstractKeywordQuery = buildTitleAbstractKeywordQuery(citationContext);
 
+  function preferredSurnameQuery(surname) {
+    if (!surname) {
+      return null;
+    }
+    if (hint?.year) {
+      return (hint.firstInitial
+        ? buildFirstAuthorYearInitialTitleAbstractPhraseQuery(surname, hint.firstInitial, hint.year, citationContext)
+        : null)
+        ?? buildFirstAuthorYearTitleAbstractPhraseQuery(surname, hint.year, citationContext)
+        ?? (hint.firstInitial
+          ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(surname, hint.firstInitial, hint.year, citationContext)
+          : null)
+        ?? buildFirstAuthorYearTitleAbstractKeywordQuery(surname, hint.year, citationContext)
+        ?? (hint.firstInitial
+          ? buildFirstAuthorYearInitialSentencePhraseQuery(surname, hint.firstInitial, hint.year, citationContext)
+          : null)
+        ?? buildFirstAuthorYearSentencePhraseQuery(surname, hint.year, citationContext)
+        ?? (hint.firstInitial
+          ? buildFirstAuthorYearInitialQuery(surname, hint.firstInitial, hint.year)
+          : null)
+        ?? buildFirstAuthorOrCollaborationYearQuery(surname, hint.year);
+    }
+    return buildFirstAuthorLeadingTitleAbstractPhraseQuery(surname, citationContext)
+      ?? buildFirstAuthorTitleAbstractPhraseQuery(surname, citationContext)
+      ?? buildFirstAuthorTitleAbstractKeywordQuery(surname, citationContext)
+      ?? buildFirstAuthorSentencePhraseQuery(surname, citationContext)
+      ?? buildFirstAuthorOrCollaborationQuery(surname);
+  }
+
   if (isEmptyTokenLookup) {
     if (leadTrailTitleAbstractQuery) {
       queries.add(leadTrailTitleAbstractQuery);
@@ -702,6 +735,12 @@ export function buildAdsQueries(citationContext) {
     }
     queries.add(primaryQuery);
   } else if (hint?.surname && hint?.year) {
+    // Run the strongest raw and inferred surname forms as the progressive
+    // opening pair. This covers both compact ADS names (VanRoestel) and
+    // punctuation-normalized names (El-Badry) without serially walking the
+    // full contextual query expansion.
+    queries.add(preferredSurnameQuery(primarySurname));
+    queries.add(preferredSurnameQuery(inferredSurname));
     if (primaryFirstAuthorYearInitialTitleAbstractPhraseQuery) {
       queries.add(primaryFirstAuthorYearInitialTitleAbstractPhraseQuery);
     }

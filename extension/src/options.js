@@ -134,7 +134,7 @@ function applySettings(settings) {
   citationKeyModeInput.value = settings.citationKeyMode ?? "authoryear";
   bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "append";
   returnToSourceAfterInsertInput.checked = Boolean(settings.returnToSourceAfterInsert);
-  defaultSearchModeInput.value = settings.defaultSearchMode ?? "contextual";
+  defaultSearchModeInput.value = settings.defaultSearchMode ?? "simple";
   contextInput.value = String(settings.contextWindowChars ?? 500);
   overridesInput.value = stringifyOverridesForField(settings.defaultProjectBibFileOverride);
   applyTheme(settings.themeMode ?? "auto");

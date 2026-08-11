@@ -49,6 +49,7 @@ const ROUTABLE_SOURCES = new Set([
 
 const ARXIV_CACHE_TTL_MS = 10 * 60 * 1000;
 const ARXIV_MIN_REQUEST_SPACING_MS = 3200;
+const RUNTIME_FETCH_MARKER = Symbol.for("overcite.runtimeFetch");
 const arxivTextCache = new Map();
 let lastArxivRequestAt = 0;
 
@@ -842,7 +843,7 @@ async function searchArxivMetadataFallback(citationContext, fetchImpl) {
 }
 
 function shouldUseArxivRuntimeGuards(fetchImpl) {
-  return fetchImpl === globalThis.fetch;
+  return fetchImpl === globalThis.fetch || fetchImpl?.[RUNTIME_FETCH_MARKER] === true;
 }
 
 async function waitForArxivTurn() {

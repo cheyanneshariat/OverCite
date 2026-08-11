@@ -1,6 +1,8 @@
 (function pageBridgeBootstrap() {
   const RESPONSE_EVENT = "EZCITE_PAGE_RESPONSE";
   const REQUEST_EVENT = "EZCITE_PAGE_REQUEST";
+  const editorIdentityByView = new WeakMap();
+  let nextEditorIdentity = 1;
   let codeMirrorApi = null;
   window.__OVERCITE_PAGE_BRIDGE_READY__ = true;
 
@@ -12,11 +14,12 @@
     const { requestId, action, payload } = event.detail || {};
     Promise.resolve()
       .then(() => handleAction(action, payload))
-      .then((result) => emitResponse(requestId, { ok: true, result }))
-      .catch((error) => emitResponse(requestId, { ok: false, error: error.message }));
+      .then((result) => emitResponse(requestId, { ok: true, result }, action))
+      .catch((error) => emitResponse(requestId, { ok: false, error: error.message }, action));
   });
 
-  function emitResponse(requestId, response) {
+  function emitResponse(requestId, response, action = "") {
+    void action;
     window.dispatchEvent(
       new CustomEvent(RESPONSE_EVENT, {
         detail: { requestId, ...response }
@@ -24,30 +27,40 @@
     );
   }
 
-  function findActiveEditorView() {
+  function findActiveEditorContext() {
     const EditorView = codeMirrorApi?.EditorView ?? globalThis.CodeMirror?.EditorView;
     const candidates = [
       ...findEditorsControlledByActiveFileTabs(),
-      ...document.querySelectorAll('[role="tabpanel"]:not([hidden]) .cm-editor'),
-      document.activeElement?.closest?.(".cm-editor"),
-      document.querySelector(".cm-editor.cm-focused"),
-      ...document.querySelectorAll(".cm-editor")
-    ].filter(Boolean).filter(isVisibleEditorElement);
+      ...Array.from(document.querySelectorAll('[role="tabpanel"]:not([hidden]) .cm-editor')).map((element) => ({
+        element,
+        fileName: readFileNameForEditorElement(element)
+      })),
+      document.activeElement?.closest?.(".cm-editor")
+        ? { element: document.activeElement.closest(".cm-editor"), fileName: readFileNameForEditorElement(document.activeElement.closest(".cm-editor")) }
+        : null,
+      document.querySelector(".cm-editor.cm-focused")
+        ? { element: document.querySelector(".cm-editor.cm-focused"), fileName: readFileNameForEditorElement(document.querySelector(".cm-editor.cm-focused")) }
+        : null,
+      ...Array.from(document.querySelectorAll(".cm-editor")).map((element) => ({
+        element,
+        fileName: readFileNameForEditorElement(element)
+      }))
+    ].filter(Boolean).filter((candidate) => isVisibleEditorElement(candidate.element));
     const seen = new Set();
 
     for (const candidate of candidates) {
-      if (seen.has(candidate)) {
+      if (seen.has(candidate.element)) {
         continue;
       }
-      seen.add(candidate);
-      const fallbackView = readEditorViewFromDom(candidate);
+      seen.add(candidate.element);
+      const fallbackView = readEditorViewFromDom(candidate.element);
       if (fallbackView) {
-        return fallbackView;
+        return { view: fallbackView, element: candidate.element, fileName: candidate.fileName || "" };
       }
       try {
-        const view = EditorView?.findFromDOM?.(candidate);
+        const view = EditorView?.findFromDOM?.(candidate.element);
         if (view) {
-          return view;
+          return { view, element: candidate.element, fileName: candidate.fileName || "" };
         }
       } catch {
         continue;
@@ -58,6 +71,10 @@
     }
     console.warn("[OverCite page] no active .cm-editor view found");
     return null;
+  }
+
+  function findActiveEditorView() {
+    return findActiveEditorContext()?.view ?? null;
   }
 
   function findEditorsControlledByActiveFileTabs() {
@@ -71,12 +88,30 @@
       if (!panel) {
         continue;
       }
+      const fileName = extractLikelyEditorFileNameFromElement(tab);
       if (panel.matches?.(".cm-editor")) {
-        editors.push(panel);
+        editors.push({ element: panel, fileName });
       }
-      editors.push(...panel.querySelectorAll(".cm-editor"));
+      editors.push(...Array.from(panel.querySelectorAll(".cm-editor")).map((element) => ({ element, fileName })));
     }
     return editors;
+  }
+
+  function readFileNameForEditorElement(editorElement) {
+    if (!(editorElement instanceof Element)) {
+      return "";
+    }
+    for (const tab of document.querySelectorAll('[role="tab"][aria-controls]')) {
+      const controlledId = tab.getAttribute("aria-controls");
+      const panel = controlledId ? document.getElementById(controlledId) : null;
+      if (!panel) {
+        continue;
+      }
+      if (panel === editorElement || panel.contains?.(editorElement)) {
+        return extractLikelyEditorFileNameFromElement(tab);
+      }
+    }
+    return "";
   }
 
   function readEditorViewFromDom(element) {
@@ -203,17 +238,34 @@
   }
 
   function getActiveEditorState() {
-    const view = findActiveEditorView();
-    if (!view) {
+    const context = findActiveEditorContext();
+    if (!context?.view) {
       throw new Error("Could not find the active Overleaf source editor.");
     }
+    const view = context.view;
     const mainSelection = view.state.selection.main;
     return {
       text: view.state.doc.toString(),
       from: mainSelection.from,
       to: mainSelection.to,
-      fileName: readActiveFileName()
+      fileName: context.fileName || "",
+      editorIdentity: getEditorIdentity(view)
     };
+  }
+
+  function getEditorIdentity(view) {
+    if (!editorIdentityByView.has(view)) {
+      editorIdentityByView.set(view, `editor-${nextEditorIdentity}`);
+      nextEditorIdentity += 1;
+    }
+    return editorIdentityByView.get(view);
+  }
+
+  function assertExpectedEditorIdentity(view, expectedEditorIdentity) {
+    const expected = String(expectedEditorIdentity ?? "").trim();
+    if (expected && getEditorIdentity(view) !== expected) {
+      throw new Error("The active editor changed after manual confirmation.");
+    }
   }
 
   function matchesFileName(activeFileName, targetFileName) {
@@ -233,12 +285,14 @@
       .trim();
   }
 
-  function assertExpectedActiveFile(expectedFileName) {
+  function assertExpectedActiveFile(expectedFileName, activeFileName, allowUnknown = false) {
     const target = String(expectedFileName ?? "").trim();
     if (!target) {
       return;
     }
-    const activeFileName = readActiveFileName();
+    if (!activeFileName && allowUnknown) {
+      return;
+    }
     if (!matchesFileName(activeFileName, target)) {
       throw new Error(`Active editor is ${activeFileName || "unknown"} instead of ${target}.`);
     }
@@ -305,13 +359,17 @@
   }
 
   function replaceRange(payload) {
-    const view = findActiveEditorView();
-    if (!view) {
+    const context = findActiveEditorContext();
+    if (!context?.view) {
       throw new Error("Could not find the active Overleaf source editor.");
     }
-    assertExpectedActiveFile(payload?.expectedFileName);
-    assertExpectedDocumentKind(view, payload?.expectedFileName);
+    const view = context.view;
+    assertExpectedEditorIdentity(view, payload?.expectedEditorIdentity);
+    if (!context.fileName) {
+      assertExpectedDocumentKind(view, payload?.expectedFileName);
+    }
     assertExpectedDocument(view, payload?.expectedDocument);
+    assertExpectedActiveFile(payload?.expectedFileName, context.fileName, Boolean(payload?.expectedDocument));
     const { from, to, insert, selection } = payload || {};
     view.dispatch({
       changes: { from, to, insert },
@@ -322,13 +380,17 @@
   }
 
   function replaceDocument(payload) {
-    const view = findActiveEditorView();
-    if (!view) {
+    const context = findActiveEditorContext();
+    if (!context?.view) {
       throw new Error("Could not find the active Overleaf source editor.");
     }
-    assertExpectedActiveFile(payload?.expectedFileName);
-    assertExpectedDocumentKind(view, payload?.expectedFileName);
+    const view = context.view;
+    assertExpectedEditorIdentity(view, payload?.expectedEditorIdentity);
+    if (!context.fileName) {
+      assertExpectedDocumentKind(view, payload?.expectedFileName);
+    }
     assertExpectedDocument(view, payload?.expectedDocument);
+    assertExpectedActiveFile(payload?.expectedFileName, context.fileName, Boolean(payload?.expectedDocument));
     const nextText = String(payload?.text ?? "");
     view.dispatch({
       changes: {
@@ -381,6 +443,8 @@
   if (globalThis.__OVERCITE_PAGE_BRIDGE_TEST__) {
     globalThis.__OVERCITE_PAGE_BRIDGE_TEST_HOOKS__ = {
       findActiveEditorView,
+      findActiveEditorContext,
+      handleAction,
       matchesFileName,
       readActiveFileName
     };

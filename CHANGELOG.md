@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.7
+
+- Bounded contextual ADS/SciX search with progressive high-confidence returns, request/body cancellation, an overall search budget, and truthful timeout messages.
+- Fixed delayed Overleaf file switches by pairing each CodeMirror editor with its controlling filename, requiring verified target identity for automatic switching, and bounding file and source-recovery candidates under shared deadlines.
+- Bound manual source and bibliography confirmation to the confirmed editor identity and user-navigation state, and made all source/bibliography writes idempotent when Overleaf applies a write before its response arrives.
+- New browser installs now start in Simple search for non-empty citation keys. Existing saved browser preferences are preserved, and empty `\cite{}` lookups remain contextual.
+- Added packaged Chrome and Firefox regressions for delayed transitions, missing filenames, wrong blank editors, manual-navigation races, collision-key late acknowledgments, empty-token mode selection, and the prior large-DOM pointer slowdown.
+
 ## 0.3.6
 
 - Fixed severe Overleaf slowdowns by keeping file-navigation tracking dormant outside citation insertion and avoiding broad ancestor text scans for PDF, editor, and grammar-tool clicks.
