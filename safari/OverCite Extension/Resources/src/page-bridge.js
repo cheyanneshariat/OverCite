@@ -29,6 +29,11 @@
 
   function findActiveEditorContext() {
     const EditorView = codeMirrorApi?.EditorView ?? globalThis.CodeMirror?.EditorView;
+    const visibleEditorElements = [...new Set(
+      Array.from(document.querySelectorAll(".cm-editor")).filter(isVisibleEditorElement)
+    )];
+    const soleVisibleEditor = visibleEditorElements.length === 1 ? visibleEditorElements[0] : null;
+    const selectedFileName = soleVisibleEditor ? readActiveFileName() : "";
     const candidates = [
       ...findEditorsControlledByActiveFileTabs(),
       ...Array.from(document.querySelectorAll('[role="tabpanel"]:not([hidden]) .cm-editor')).map((element) => ({
@@ -53,14 +58,27 @@
         continue;
       }
       seen.add(candidate.element);
+      const unambiguousSelectedFileName = candidate.element === soleVisibleEditor ? selectedFileName : "";
       const fallbackView = readEditorViewFromDom(candidate.element);
       if (fallbackView) {
-        return { view: fallbackView, element: candidate.element, fileName: candidate.fileName || "" };
+        const fallbackFileName = candidate.fileName || unambiguousSelectedFileName;
+        return {
+          view: fallbackView,
+          element: candidate.element,
+          fileName: fallbackFileName,
+          fileNameSource: candidate.fileName ? "mapped" : (fallbackFileName ? "active-tab" : "")
+        };
       }
       try {
         const view = EditorView?.findFromDOM?.(candidate.element);
         if (view) {
-          return { view, element: candidate.element, fileName: candidate.fileName || "" };
+          const fallbackFileName = candidate.fileName || unambiguousSelectedFileName;
+          return {
+            view,
+            element: candidate.element,
+            fileName: fallbackFileName,
+            fileNameSource: candidate.fileName ? "mapped" : (fallbackFileName ? "active-tab" : "")
+          };
         }
       } catch {
         continue;
@@ -249,6 +267,7 @@
       from: mainSelection.from,
       to: mainSelection.to,
       fileName: context.fileName || "",
+      fileNameSource: context.fileNameSource || "",
       editorIdentity: getEditorIdentity(view)
     };
   }

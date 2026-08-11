@@ -59,10 +59,15 @@
     (() => {
       const fixtureQuery = new URLSearchParams(location.search);
       const delayedTransition = fixtureQuery.get("transition") === "delayed";
+      const stuckTransition = fixtureQuery.get("transition") === "stuck";
+      const staleBlankTransition = fixtureQuery.get("transition") === "wrongblank";
       const namelessTabs = fixtureQuery.get("nameless") === "1";
+      const uncontrolledTabs = fixtureQuery.get("uncontrolled") === "1";
+      const persistentEditor = fixtureQuery.get("persistent") === "1";
+      const treeOnlyTarget = fixtureQuery.get("treeonly") === "1";
       const wrongBlankEditor = fixtureQuery.get("wrongblank") === "1";
       const manualEditorRace = fixtureQuery.get("manualrace") === "1";
-      const manualBibSwitch = fixtureQuery.get("manualbib") === "1" || wrongBlankEditor || manualEditorRace;
+      const manualBibSwitch = fixtureQuery.get("manualbib") === "1" || wrongBlankEditor || manualEditorRace || stuckTransition || staleBlankTransition;
       const emptyCitation = fixtureQuery.get("empty") === "1";
       const lateWriteAcknowledgments = fixtureQuery.get("lateack") === "1";
       const keyCollision = fixtureQuery.get("collision") === "1";
@@ -104,7 +109,10 @@ This source confusion is also found in previous M51 studies. \citet{Rice2021} fo
   year = {2020}
 }
 `
-          : "",
+          : (persistentEditor && fixtureQuery.get("emptybib") !== "1"
+              ? String.raw`@comment{Existing bibliography file}
+`
+              : ""),
         "old_text.tex": String.raw`\documentclass{article}
 \begin{document}
 This is unrelated archival text with \citet{Wrong1999}.
@@ -135,6 +143,7 @@ This is unrelated archival text with \citet{Wrong1999}.
       };
       const citationTokenStart = documents["main.tex"].indexOf("{", documents["main.tex"].indexOf("\\citet")) + 1;
       const cursor = citationTokenStart + (emptyCitation ? 0 : 4);
+      let persistentActiveFile = "main.tex";
 
       function makeDoc(fileName) {
         return {
@@ -177,7 +186,53 @@ This is unrelated archival text with \citet{Wrong1999}.
         editor.textContent = documents[fileName];
       }
 
+      function makePersistentView() {
+        const editor = editorByFile["main.tex"];
+        const selections = {
+          "main.tex": cursor,
+          "references.bib": 0,
+          "old_text.tex": 0,
+          "notes.txt": 0
+        };
+        const state = {
+          get doc() { return makeDoc(persistentActiveFile); },
+          get selection() {
+            const anchor = selections[persistentActiveFile] || 0;
+            return { main: { from: anchor, to: anchor } };
+          }
+        };
+        const view = {
+          state,
+          dispatch(transaction) {
+            if (transaction.changes) {
+              const from = transaction.changes.from;
+              const to = transaction.changes.to;
+              const insert = String(transaction.changes.insert ?? "");
+              documents[persistentActiveFile] = documents[persistentActiveFile].slice(0, from) + insert + documents[persistentActiveFile].slice(to);
+            }
+            if (transaction.selection) {
+              selections[persistentActiveFile] = Number(transaction.selection.anchor ?? transaction.selection.from ?? 0);
+            }
+            editor.textContent = documents[persistentActiveFile];
+          },
+          focus() {
+            editor.classList.add("cm-focused");
+            editor.focus();
+          }
+        };
+        editor.cmView = { rootView: { view } };
+        editor.textContent = documents[persistentActiveFile];
+      }
+
       function applyVisiblePanel(fileName) {
+        if (persistentEditor) {
+          persistentActiveFile = fileName;
+          for (const panel of Object.values(panelByFile)) {
+            panel.hidden = panel !== panelByFile["main.tex"];
+          }
+          editorByFile["main.tex"].textContent = documents[fileName];
+          return;
+        }
         for (const candidate of Object.keys(panelByFile)) {
           if (candidate !== "old_text.tex") {
             panelByFile[candidate].hidden = candidate !== fileName;
@@ -185,7 +240,10 @@ This is unrelated archival text with \citet{Wrong1999}.
         }
       }
 
-      function activateFile(fileName) {
+      function selectFileTab(fileName) {
+        if (treeOnlyTarget && fileName === "references.bib") {
+          tabByFile["references.bib"].textContent = "references.bib Close";
+        }
         for (const [candidate, tab] of Object.entries(tabByFile)) {
           const active = candidate === fileName;
           if (namelessTabs) {
@@ -194,6 +252,10 @@ This is unrelated archival text with \citet{Wrong1999}.
             tab.setAttribute("aria-selected", String(active));
           }
         }
+      }
+
+      function activateFile(fileName) {
+        selectFileTab(fileName);
         if (delayedTransition && fileName === "references.bib") {
           setTimeout(() => applyVisiblePanel(fileName), 900);
         } else {
@@ -204,6 +266,16 @@ This is unrelated archival text with \citet{Wrong1999}.
       function requestFileActivation(fileName) {
         if (fileName === "references.bib") {
           bibActivationClicks += 1;
+          if (stuckTransition && !allowManualBibSwitch) {
+            selectFileTab(fileName);
+            return;
+          }
+          if (staleBlankTransition && !allowManualBibSwitch) {
+            selectFileTab(fileName);
+            persistentActiveFile = "notes.txt";
+            editorByFile["main.tex"].textContent = documents["notes.txt"];
+            return;
+          }
           if (wrongBlankEditor && !allowManualBibSwitch) {
             activateFile("notes.txt");
             return;
@@ -218,12 +290,24 @@ This is unrelated archival text with \citet{Wrong1999}.
       makeView("main.tex", cursor);
       makeView("references.bib", 0);
       makeView("old_text.tex", 0);
+      makeView("notes.txt", 0);
+      if (persistentEditor) {
+        makePersistentView();
+        applyVisiblePanel("main.tex");
+      }
       if (namelessTabs) {
         for (const tab of Object.values(tabByFile)) {
           tab.removeAttribute("aria-controls");
           tab.removeAttribute("aria-selected");
         }
         document.querySelector(".ol-cm-breadcrumbs").textContent = "";
+      } else if (uncontrolledTabs) {
+        for (const tab of Object.values(tabByFile)) {
+          tab.removeAttribute("aria-controls");
+        }
+      }
+      if (treeOnlyTarget) {
+        tabByFile["references.bib"].textContent = "Closed file";
       }
       for (const [fileName, tab] of Object.entries(tabByFile)) {
         tab.addEventListener("click", () => requestFileActivation(fileName));
@@ -323,9 +407,10 @@ This is unrelated archival text with \citet{Wrong1999}.
             10000,
             "the manual bibliography prompt"
           );
-          if (wrongBlankEditor) {
-            invalidManualRejected = documents["references.bib"] === "" && documents["notes.txt"] === "";
-            if (!invalidManualRejected || activeEditorFile() !== "notes.txt") {
+          if (wrongBlankEditor || staleBlankTransition) {
+            invalidManualRejected = !documents["references.bib"].includes("@article{Rice2021") && documents["notes.txt"] === "";
+            const expectedVisibleFile = wrongBlankEditor ? "notes.txt" : "references.bib";
+            if (!invalidManualRejected || activeEditorFile() !== expectedVisibleFile) {
               throw new Error("An unidentified blank editor was accepted automatically as the bibliography.");
             }
           } else {
@@ -377,7 +462,12 @@ This is unrelated archival text with \citet{Wrong1999}.
           manualEditorRace,
           invalidManualRejected,
           delayedTransition,
+          stuckTransition,
+          staleBlankTransition,
           namelessTabs,
+          uncontrolledTabs,
+          persistentEditor,
+          treeOnlyTarget,
           wrongBlankEditor,
           emptyCitation,
           searchModeActions,

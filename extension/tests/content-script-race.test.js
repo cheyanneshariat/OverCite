@@ -118,6 +118,7 @@ test("content-script scans every selected tab and uses exact filename comparison
   assert.match(openProjectFileBody, /Math\.min\(Date\.now\(\) \+ 5500, requestedDeadlineAt\)/);
   assert.match(openProjectFileBody, /waitForTargetEditorState/);
   assert.match(openProjectFileBody, /deadlineAt - Date\.now\(\)/);
+  assert.match(openProjectFileBody, /isProjectFileActive\([\s\S]*requireEditorTransition \? editorStateBeforeClick : null/);
   assert.doesNotMatch(openProjectFileBody, /if \(matchesFileName\(activeTabName, fileName\)\)/);
 });
 

@@ -22,7 +22,7 @@ const __overciteSafariModules = Object.create(null);
     contextWindowChars: 500,
     shortcutHelpText: "Alt+Shift+E",
     themeMode: "auto",
-    returnToSourceAfterInsert: false,
+    returnToSourceAfterInsert: true,
     citationKeyMode: "authoryear",
     bibliographyInsertMode: "append",
     defaultSearchMode: "simple"
