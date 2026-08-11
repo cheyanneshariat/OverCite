@@ -351,8 +351,21 @@ test("install migration preserves an existing contextual preference", async () =
   assert.equal(harness.store.defaultSearchMode, "contextual");
 });
 
-test("fresh install stores the new simple browser default", async () => {
+test("fresh install stores the new simple-search and return-to-source defaults", async () => {
   const harness = await loadBackgroundHarness();
   await harness.installedListener();
   assert.equal(harness.store.defaultSearchMode, "simple");
+  assert.equal(harness.store.returnToSourceAfterInsert, true);
+});
+
+test("install migration preserves an explicit stay-in-bibliography preference", async () => {
+  const harness = await loadBackgroundHarness({ returnToSourceAfterInsert: false });
+  await harness.installedListener();
+  assert.equal(harness.store.returnToSourceAfterInsert, false);
+});
+
+test("install migration preserves an explicit return-to-source preference", async () => {
+  const harness = await loadBackgroundHarness({ returnToSourceAfterInsert: true });
+  await harness.installedListener();
+  assert.equal(harness.store.returnToSourceAfterInsert, true);
 });

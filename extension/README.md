@@ -64,7 +64,7 @@ The options page also lets you choose how inserted citation keys are written:
 - `Bibcode` for keys like `2025PASP..137i4201S`
 - `Keep Typed Key` to preserve what you entered when possible
 
-Browser users can also enable `Return to source file after insert` to switch back to the original `.tex` file after OverCite finishes updating the target `.bib` file. When this is enabled, the popup dismisses immediately after insertion and the editor return continues in the background. The default keeps the current behavior and leaves the editor on the bibliography file after insertion.
+Browser users can disable `Return to source file after insert` if they prefer to remain on the bibliography after OverCite finishes updating the target `.bib` file. Without a saved or synced preference, the default returns to the original `.tex` file; the popup dismisses immediately after insertion and the editor return continues in the background.
 
 Short examples:
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.8
+
+- Restored automatic file switching for Overleaf's current single persistent CodeMirror editor, whose selected file tabs do not expose `aria-controls`.
+- Kept delayed-transition and wrong-editor protections by requiring the editor document or identity to change after an automatic file switch and rechecking the expected document before every write.
+- New browser installs without a saved or synced preference now return to the original source file after bibliography insertion by default; existing saved preferences remain unchanged.
+
 ## 0.3.7
 
 - Bounded contextual ADS/SciX search with progressive high-confidence returns, request/body cancellation, an overall search budget, and truthful timeout messages.

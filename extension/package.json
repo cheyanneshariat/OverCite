@@ -1,6 +1,6 @@
 {
   "name": "overcite-extension",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "private": true,
   "license": "CC-BY-NC-ND-4.0",
   "type": "module",

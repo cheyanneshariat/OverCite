@@ -232,6 +232,11 @@ try {
       .filter(Boolean)
   );
   const scenarios = [
+    { id: "current-stay", name: "current Overleaf persistent editor stays in bibliography", query: "return=0&persistent=1&uncontrolled=1", persistentEditor: true, uncontrolledTabs: true },
+    { id: "current-return", name: "current Overleaf persistent editor returns to source", query: "return=1&persistent=1&uncontrolled=1", persistentEditor: true, uncontrolledTabs: true },
+    { id: "current-delayed", name: "current Overleaf delayed persistent editor transition", query: "return=0&persistent=1&uncontrolled=1&transition=delayed", persistentEditor: true, uncontrolledTabs: true, delayedTransition: true },
+    { id: "tree-guard", name: "file-tree fallback preserves the editor-transition guard", query: "return=0&persistent=1&uncontrolled=1&treeonly=1&transition=stuck", persistentEditor: true, uncontrolledTabs: true, manualBibSwitch: true, treeOnlyTarget: true, stuckTransition: true },
+    { id: "stale-blank", name: "selected bibliography tab rejects a stale blank persistent document", query: "return=0&persistent=1&uncontrolled=1&treeonly=1&transition=wrongblank", persistentEditor: true, uncontrolledTabs: true, manualBibSwitch: true, treeOnlyTarget: true, staleBlankTransition: true },
     { id: "stay", name: "stay in bibliography", query: "return=0" },
     { id: "return", name: "return to source", query: "return=1" },
     { id: "stress", name: "prior pointer-slowdown stress", query: "return=0&firefoxstress=1", pointerStress: true },
@@ -261,6 +266,22 @@ try {
     assert.ok(result.insertionElapsedMs < insertionLimitMs, `slow Firefox insertion: ${result.insertionElapsedMs} ms`);
     if (scenario.delayedTransition) {
       assert.equal(result.bibActivationClicks, 1);
+    }
+    if (scenario.persistentEditor) {
+      assert.equal(result.persistentEditor, true);
+    }
+    if (scenario.uncontrolledTabs) {
+      assert.equal(result.uncontrolledTabs, true);
+    }
+    if (scenario.treeOnlyTarget) {
+      assert.equal(result.treeOnlyTarget, true);
+    }
+    if (scenario.stuckTransition) {
+      assert.equal(result.stuckTransition, true);
+    }
+    if (scenario.staleBlankTransition) {
+      assert.equal(result.staleBlankTransition, true);
+      assert.equal(result.notesTextUnchanged, true);
     }
     if (scenario.namelessTabs) {
       assert.equal(result.namelessTabs, true);

@@ -11,10 +11,10 @@ test("normalizeSettings accepts valid theme modes and defaults invalid ones to a
   assert.equal(normalizeSettings({ themeMode: "midnight" }).themeMode, "auto");
 });
 
-test("normalizeSettings defaults to staying on the bibliography tab after insert", () => {
-  assert.equal(normalizeSettings({}).returnToSourceAfterInsert, false);
+test("normalizeSettings defaults to returning to the source file after insert", () => {
+  assert.equal(normalizeSettings({}).returnToSourceAfterInsert, true);
   assert.equal(normalizeSettings({ returnToSourceAfterInsert: false }).returnToSourceAfterInsert, false);
-  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "not-a-boolean" }).returnToSourceAfterInsert, false);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "not-a-boolean" }).returnToSourceAfterInsert, true);
 });
 
 test("normalizeSettings can return to the source file after browser bibliography insert", () => {
@@ -30,6 +30,7 @@ test("options page exposes the source-return browser setting", async () => {
 
   assert.match(optionsHtml, /id="return-to-source-after-insert"/);
   assert.match(optionsHtml, /name="returnToSourceAfterInsert"/);
+  assert.match(optionsHtml, /name="returnToSourceAfterInsert" type="checkbox" checked/);
   assert.match(optionsHtml, /Return to source file after insert/);
   assert.match(optionsJs, /returnToSourceAfterInsertInput\.checked = Boolean\(settings\.returnToSourceAfterInsert\)/);
   assert.match(optionsJs, /returnToSourceAfterInsert: returnToSourceAfterInsertInput\.checked/);

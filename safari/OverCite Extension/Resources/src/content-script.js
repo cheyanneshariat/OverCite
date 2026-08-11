@@ -1832,6 +1832,8 @@
       ? Math.min(Date.now() + 5500, requestedDeadlineAt)
       : Date.now() + 5500;
     for (const candidate of candidates) {
+      let editorStateBeforeClick = null;
+      let requireEditorTransition = false;
       try {
         const remainingBeforeClick = deadlineAt - Date.now();
         if (remainingBeforeClick <= 0) {
@@ -1840,6 +1842,15 @@
         if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
           throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
         }
+        editorStateBeforeClick = await getEditorStateWithRetry(
+          1,
+          0,
+          Math.min(700, Math.max(1, remainingBeforeClick))
+        ).catch(() => null);
+        const activeFileBeforeClick = editorStateBeforeClick?.fileName || readActiveFileName();
+        requireEditorTransition = Boolean(
+          editorStateBeforeClick && !matchesFileName(activeFileBeforeClick, fileName)
+        );
         candidate.scrollIntoView?.({ block: "center", inline: "nearest" });
         candidate.click();
         await sleep(Math.min(250, Math.max(0, deadlineAt - Date.now())));
@@ -1850,7 +1861,8 @@
             if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
               throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
             }
-          }
+          },
+          requireTransitionFrom: requireEditorTransition ? editorStateBeforeClick : null
         });
         debugTrace("openProjectFile:ok", {
           fileName,
@@ -1869,7 +1881,12 @@
           const remainingForTree = Math.max(0, deadlineAt - Date.now());
           await sleep(Math.min(450, remainingForTree));
           const remainingForCheck = Math.max(0, deadlineAt - Date.now());
-          if (remainingForCheck > 0 && await isProjectFileActive(fileName, null, remainingForCheck)) {
+          if (remainingForCheck > 0 && await isProjectFileActive(
+            fileName,
+            null,
+            remainingForCheck,
+            requireEditorTransition ? editorStateBeforeClick : null
+          )) {
             debugTrace("openProjectFile:file-tree-early-return", {
               fileName,
               activeAfter: readActiveFileName()
@@ -1931,10 +1948,16 @@
     await waitForProjectFileActive(fileName, 2500, expectedDocument);
   }
 
-  async function isProjectFileActive(fileName, expectedDocument = null, requestTimeoutMs = 1000) {
+  async function isProjectFileActive(
+    fileName,
+    expectedDocument = null,
+    requestTimeoutMs = 1000,
+    requireTransitionFrom = null
+  ) {
     try {
       const state = await getEditorStateWithRetry(1, 0, Math.max(1, Math.min(1000, requestTimeoutMs)));
-      return editorStateMatchesTarget(state, fileName, expectedDocument);
+      return editorStateMatchesTarget(state, fileName, expectedDocument) &&
+        editorStateTransitionedFrom(state, requireTransitionFrom);
     } catch {
       return false;
     }
@@ -2211,6 +2234,13 @@
       if (!matchesFileName(activeFileName, target)) {
         return false;
       }
+      if (state?.fileNameSource === "active-tab" &&
+          /\.bib$/i.test(target) &&
+          !text.trim() &&
+          !expectedDocument &&
+          !options.allowUnknownFileName) {
+        return false;
+      }
       return !expectedDocument || documentMatchesExpectation(text, expectedDocument);
     }
     if (!options.allowUnknownFileName) {
@@ -2283,7 +2313,22 @@
     }), diagnostics);
   }
 
-  async function waitForTargetEditorState({ fileName, timeoutMs, validate = () => true, beforeRead = () => {}, allowUnknownFileName = false }) {
+  function editorStateTransitionedFrom(state, previousState) {
+    if (!previousState) {
+      return true;
+    }
+    return state.editorIdentity !== previousState.editorIdentity ||
+      state.text !== previousState.text;
+  }
+
+  async function waitForTargetEditorState({
+    fileName,
+    timeoutMs,
+    validate = () => true,
+    beforeRead = () => {},
+    allowUnknownFileName = false,
+    requireTransitionFrom = null
+  }) {
     const startedAt = Date.now();
     let lastError = null;
     while (Date.now() - startedAt < timeoutMs) {
@@ -2291,7 +2336,9 @@
       try {
         beforeRead();
         const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs));
-        if (editorStateMatchesTarget(state, fileName, null, { allowUnknownFileName }) && validate(state)) {
+        if (editorStateMatchesTarget(state, fileName, null, { allowUnknownFileName }) &&
+            editorStateTransitionedFrom(state, requireTransitionFrom) &&
+            validate(state)) {
           return state;
         }
       } catch (error) {

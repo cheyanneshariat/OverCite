@@ -132,6 +132,67 @@ test("page bridge prefers the editor controlled by the active file tab over a st
   assert.equal(hooks.findActiveEditorView(), mainView);
 });
 
+test("page bridge pairs the selected file tab with the sole visible editor when aria-controls is absent", async () => {
+  let text = "@article{Strader2019}";
+  const view = {
+    state: {
+      doc: { toString: () => text, get length() { return text.length; } },
+      selection: { main: { from: 0, to: 0 } }
+    },
+    dispatch() {}
+  };
+  const editor = new FakeElement({ attributes: { class: "cm-editor" }, view });
+  const bibTab = new FakeElement({
+    text: "refs.bib Close",
+    attributes: { role: "tab", "aria-selected": "true" }
+  });
+  const hooks = await loadBridgeHarness({
+    selectorMap: new Map([
+      ['[role="tab"][aria-selected="true"]', [bibTab]],
+      ['[role="tabpanel"]:not([hidden]) .cm-editor', [editor]],
+      ['[role="tab"][aria-controls]', []],
+      [".cm-editor.cm-focused", []],
+      [".cm-editor", [editor]]
+    ])
+  });
+
+  const state = hooks.handleAction("getActiveEditorState", {});
+  assert.equal(state.fileName, "refs.bib");
+  assert.equal(state.fileNameSource, "active-tab");
+  assert.equal(state.text, text);
+});
+
+test("page bridge does not attach a selected filename to ambiguous visible editors", async () => {
+  function makeView(text) {
+    return {
+      state: {
+        doc: { toString: () => text, get length() { return text.length; } },
+        selection: { main: { from: 0, to: 0 } }
+      },
+      dispatch() {}
+    };
+  }
+  const firstEditor = new FakeElement({ attributes: { class: "cm-editor" }, view: makeView("first") });
+  const secondEditor = new FakeElement({ attributes: { class: "cm-editor" }, view: makeView("second") });
+  const bibTab = new FakeElement({
+    text: "refs.bib Close",
+    attributes: { role: "tab", "aria-selected": "true" }
+  });
+  const hooks = await loadBridgeHarness({
+    selectorMap: new Map([
+      ['[role="tab"][aria-selected="true"]', [bibTab]],
+      ['[role="tabpanel"]:not([hidden]) .cm-editor', [firstEditor, secondEditor]],
+      ['[role="tab"][aria-controls]', []],
+      [".cm-editor.cm-focused", []],
+      [".cm-editor", [firstEditor, secondEditor]]
+    ])
+  });
+
+  const state = hooks.handleAction("getActiveEditorState", {});
+  assert.equal(state.fileName, "");
+  assert.equal(state.fileNameSource, "");
+});
+
 test("page bridge keeps the filename paired with the visible editor during a delayed tab transition", async () => {
   const mainView = { state: { doc: {}, selection: { main: { from: 0, to: 0 } } }, dispatch() {} };
   const bibView = { state: { doc: {}, selection: { main: { from: 0, to: 0 } } }, dispatch() {} };

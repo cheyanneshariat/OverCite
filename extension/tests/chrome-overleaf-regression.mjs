@@ -338,6 +338,55 @@ try {
 
   const transitionScenarios = [
     {
+      name: "current Overleaf persistent editor stays in bibliography",
+      query: "return=0&persistent=1&uncontrolled=1",
+      verify(result) {
+        assert.equal(result.persistentEditor, true);
+        assert.equal(result.uncontrolledTabs, true);
+      }
+    },
+    {
+      name: "current Overleaf persistent editor returns to source",
+      query: "return=1&persistent=1&uncontrolled=1",
+      verify(result) {
+        assert.equal(result.persistentEditor, true);
+        assert.equal(result.uncontrolledTabs, true);
+      }
+    },
+    {
+      name: "current Overleaf delayed persistent editor transition",
+      query: "return=0&persistent=1&uncontrolled=1&transition=delayed",
+      verify(result) {
+        assert.equal(result.persistentEditor, true);
+        assert.equal(result.uncontrolledTabs, true);
+        assert.equal(result.delayedTransition, true);
+        assert.equal(result.bibActivationClicks, 1);
+      }
+    },
+    {
+      name: "file-tree fallback preserves the editor-transition guard",
+      query: "return=0&persistent=1&uncontrolled=1&treeonly=1&transition=stuck",
+      verify(result) {
+        assert.equal(result.persistentEditor, true);
+        assert.equal(result.uncontrolledTabs, true);
+        assert.equal(result.treeOnlyTarget, true);
+        assert.equal(result.stuckTransition, true);
+        assert.equal(result.invalidManualRejected, true);
+      }
+    },
+    {
+      name: "selected bibliography tab rejects a stale blank persistent document",
+      query: "return=0&persistent=1&uncontrolled=1&treeonly=1&transition=wrongblank",
+      verify(result) {
+        assert.equal(result.persistentEditor, true);
+        assert.equal(result.uncontrolledTabs, true);
+        assert.equal(result.treeOnlyTarget, true);
+        assert.equal(result.staleBlankTransition, true);
+        assert.equal(result.invalidManualRejected, true);
+        assert.equal(result.notesTextUnchanged, true);
+      }
+    },
+    {
       name: "prior idle-pointer slowdown stress",
       query: "return=0&stress=1",
       verify(result, chromeResult) {
@@ -415,7 +464,7 @@ try {
     });
     const scenarioResult = parseFixtureResult(scenarioChromeResult.payload);
     assert.equal(scenarioResult.ok, true, JSON.stringify(scenarioResult, null, 2));
-    assert.equal(scenarioResult.activeFile, "references.bib");
+    assert.equal(scenarioResult.activeFile, scenario.query.includes("return=1") ? "main.tex" : "references.bib");
     assert.equal(scenarioResult.sourceHasRice, true);
     assert.equal(scenarioResult.bibliographyHasRice, true);
     assert.deepEqual(scenarioResult.unexpectedErrors, []);
