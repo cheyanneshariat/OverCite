@@ -89,6 +89,8 @@ test("content-script final source rewrite only runs when the final key changes",
   assert.match(insertBody, /const needsManualSourceUpdate = insertion\.finalKey !== optimisticKey/);
   assert.match(insertBody, /if \(needsManualSourceUpdate && sourceReadyForFinalRewrite\)/);
   assert.match(insertBody, /expectedDocument: expectedOptimisticSourceDocument/);
+  assert.match(insertBody, /source:final-write-late-ack/);
+  assert.match(insertBody, /editorAlreadyHasText\(\{/);
 });
 
 test("content-script targets source and bibliography before applying the return-to-editor preference", async () => {
@@ -113,8 +115,24 @@ test("content-script scans every selected tab and uses exact filename comparison
   assert.doesNotMatch(readActiveFileNameBody, /ol-cm-toolbar-wrapper|cm-panels-top/);
   assert.match(matchesFileNameBody, /endsWith\(`\/\$\{target\}`\)/);
   assert.doesNotMatch(matchesFileNameBody, /\.includes\(/);
-  assert.match(openProjectFileBody, /matchesFileName\(activeTabName, fileName\)/);
-  assert.match(openProjectFileBody, /matchesFileName\(activeFileName, fileName\)/);
+  assert.match(openProjectFileBody, /Math\.min\(Date\.now\(\) \+ 5500, requestedDeadlineAt\)/);
+  assert.match(openProjectFileBody, /waitForTargetEditorState/);
+  assert.match(openProjectFileBody, /deadlineAt - Date\.now\(\)/);
+  assert.doesNotMatch(openProjectFileBody, /if \(matchesFileName\(activeTabName, fileName\)\)/);
+});
+
+test("content-script shares one deadline across source recovery candidates", async () => {
+  const source = await readContentScript();
+  const insertBody = extractFunctionBody(source, "insertCandidateWithState");
+  const tabRecoveryBody = extractFunctionBody(source, "openSourceTabByContent");
+  const projectRecoveryBody = extractFunctionBody(source, "openSourceFileByProjectScan");
+
+  assert.match(insertBody, /const sourceRecoveryDeadlineAt = Date\.now\(\) \+ 7000/);
+  assert.match(insertBody, /deadlineAt: sourceRecoveryDeadlineAt/);
+  assert.match(tabRecoveryBody, /Date\.now\(\) >= deadlineAt/);
+  assert.doesNotMatch(tabRecoveryBody, /3500/);
+  assert.match(projectRecoveryBody, /Date\.now\(\) >= deadlineAt/);
+  assert.match(projectRecoveryBody, /openProjectFile\(fileName, \{ preferTabsOnly: false, deadlineAt \}\)/);
 });
 
 test("content-script reopens source for final-key reconciliation even when final focus stays in bib", async () => {
@@ -237,12 +255,49 @@ test("content-script replaces lookup failures with retryable error UI", async ()
   assert.match(errorActionsBody, /\.\.\.buildSearchModeActions\(citationContext, searchMode\)/);
 });
 
-test("content-script tells users to refresh Overleaf after background worker timeouts", async () => {
+test("content-script uses operation-specific background deadlines and search guidance", async () => {
   const source = await readContentScript();
   const callRuntimeBody = extractFunctionBody(source, "callRuntime");
+  const timeoutBody = extractFunctionBody(source, "runtimeTimeoutForMessage");
+  const messageBody = extractFunctionBody(source, "runtimeTimeoutMessage");
 
-  assert.match(callRuntimeBody, /Timed out waiting for the OverCite background worker/);
-  assert.match(callRuntimeBody, /Refresh the Overleaf page and try again/);
+  assert.match(callRuntimeBody, /runtimeTimeoutForMessage\(message\?\.type\)/);
+  assert.match(callRuntimeBody, /runtimeTimeoutMessage\(message\?\.type\)/);
+  assert.match(timeoutBody, /MESSAGE_TYPES\.SEARCH_ADS/);
+  assert.match(timeoutBody, /40000/);
+  assert.match(timeoutBody, /MESSAGE_TYPES\.EXPORT_BIBTEX/);
+  assert.match(messageBody, /literature search took too long/i);
+  assert.match(messageBody, /use Simple search/i);
+  assert.doesNotMatch(messageBody, /background worker/i);
+});
+
+test("content-script keeps empty-token lookups contextual with a Simple default", async () => {
+  const source = await readContentScript();
+  const startLookupBody = extractFunctionBody(source, "startLookup");
+  const normalizeBody = extractFunctionBody(source, "normalizeSearchMode");
+
+  assert.match(startLookupBody, /resolvedSearchMode !== "contextual" && !citationContext\.token\.trim\(\)/);
+  assert.match(startLookupBody, /resolvedSearchMode = "contextual"/);
+  assert.match(normalizeBody, /return "simple"/);
+});
+
+test("content-script verifies manual file continuation and bounds bibliography confirmation", async () => {
+  const source = await readContentScript();
+  const manualBody = extractFunctionBody(source, "waitForManualFileSwitch");
+  const confirmationBody = extractFunctionBody(source, "getConfirmedBibEditorState");
+  const targetWaitBody = extractFunctionBody(source, "waitForTargetEditorState");
+  const targetMatchBody = extractFunctionBody(source, "editorStateMatchesTarget");
+
+  assert.match(manualBody, /getEditorStateWithRetry\(2, 120, 1200\)/);
+  assert.match(manualBody, /allowUnknownFileName: true/);
+  assert.match(manualBody, /return waitForContinue/);
+  assert.match(manualBody, /does not appear to be/);
+  assert.match(confirmationBody, /waitForTargetEditorState/);
+  assert.doesNotMatch(confirmationBody, /openProjectFile|ensureProjectFileActive/);
+  assert.match(targetWaitBody, /Date\.now\(\) - startedAt < timeoutMs/);
+  assert.match(targetWaitBody, /getEditorStateWithRetry\(1, 0, Math\.min\(900, remainingMs\)\)/);
+  assert.match(targetMatchBody, /if \(!options\.allowUnknownFileName\)/);
+  assert.match(targetMatchBody, /return false/);
 });
 
 test("content-script uses a short non-blocking success notice after insertion", async () => {

@@ -24,6 +24,7 @@
       <div role="tree">
         <div role="treeitem" data-testid="file-tree-item">main.tex</div>
         <div role="treeitem" data-testid="file-tree-item">old_text.tex</div>
+        <div role="treeitem" data-testid="file-tree-item">notes.txt</div>
         <div role="treeitem" data-testid="file-tree-item">references.bib</div>
       </div>
     </aside>
@@ -32,6 +33,7 @@
         <div id="main-tab" role="tab" aria-selected="true" aria-controls="main-panel">main.tex <button>Close</button></div>
         <div id="bib-tab" role="tab" aria-selected="false" aria-controls="bib-panel">references.bib <button>Close</button></div>
         <div id="old-tab" role="tab" aria-selected="false" aria-controls="old-panel">old_text.tex <button>Close</button></div>
+        <div id="notes-tab" role="tab" aria-selected="false" aria-controls="notes-panel">notes.txt <button>Close</button></div>
       </div>
       <div class="ol-cm-breadcrumbs">old_text.tex</div>
       <section id="main-panel" role="tabpanel">
@@ -43,6 +45,9 @@
       <section id="old-panel" role="tabpanel">
         <div id="old-editor" class="cm-editor cm-focused" tabindex="0"></div>
       </section>
+      <section id="notes-panel" role="tabpanel" hidden>
+        <div id="notes-editor" class="cm-editor" tabindex="0"></div>
+      </section>
       <section id="unrelated-interaction-zone" aria-label="Synthetic PDF and grammar tools">
         <button id="unrelated-control" type="button">Search the compiled PDF</button>
         <div id="synthetic-pdf-text"></div>
@@ -52,7 +57,19 @@
   <pre id="test-result"></pre>
   <script>
     (() => {
-      window.__OVERCITE_START_REGRESSION__ = false;
+      const fixtureQuery = new URLSearchParams(location.search);
+      const delayedTransition = fixtureQuery.get("transition") === "delayed";
+      const namelessTabs = fixtureQuery.get("nameless") === "1";
+      const wrongBlankEditor = fixtureQuery.get("wrongblank") === "1";
+      const manualEditorRace = fixtureQuery.get("manualrace") === "1";
+      const manualBibSwitch = fixtureQuery.get("manualbib") === "1" || wrongBlankEditor || manualEditorRace;
+      const emptyCitation = fixtureQuery.get("empty") === "1";
+      const lateWriteAcknowledgments = fixtureQuery.get("lateack") === "1";
+      const keyCollision = fixtureQuery.get("collision") === "1";
+      const firefoxPointerStress = fixtureQuery.get("firefoxstress") === "1";
+      let allowManualBibSwitch = false;
+      let bibActivationClicks = 0;
+      window.__OVERCITE_START_REGRESSION__ = fixtureQuery.get("autorun") === "1";
       window.__OVERCITE_UNRELATED_TEXT_READS__ = 0;
       const textContentDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
       Object.defineProperty(Node.prototype, "textContent", {
@@ -80,29 +97,44 @@
 This source confusion is also found in previous M51 studies. \citet{Rice2021} found at least one HST source within 0.5 arcsec.
 \bibliography{references}
 \end{document}`,
-        "references.bib": "",
+        "references.bib": keyCollision
+          ? String.raw`@article{Rice2021,
+  author = {Different, Alice},
+  title = {An unrelated existing paper},
+  year = {2020}
+}
+`
+          : "",
         "old_text.tex": String.raw`\documentclass{article}
 \begin{document}
 This is unrelated archival text with \citet{Wrong1999}.
-\end{document}`
+\end{document}`,
+        "notes.txt": ""
       };
+      if (emptyCitation) {
+        documents["main.tex"] = documents["main.tex"].replace("Rice2021", "");
+      }
       const initialOldText = documents["old_text.tex"];
       const editorByFile = {
         "main.tex": document.getElementById("main-editor"),
         "references.bib": document.getElementById("bib-editor"),
         "old_text.tex": document.getElementById("old-editor")
+        ,"notes.txt": document.getElementById("notes-editor")
       };
       const tabByFile = {
         "main.tex": document.getElementById("main-tab"),
         "references.bib": document.getElementById("bib-tab"),
         "old_text.tex": document.getElementById("old-tab")
+        ,"notes.txt": document.getElementById("notes-tab")
       };
       const panelByFile = {
         "main.tex": document.getElementById("main-panel"),
         "references.bib": document.getElementById("bib-panel"),
         "old_text.tex": document.getElementById("old-panel")
+        ,"notes.txt": document.getElementById("notes-panel")
       };
-      const cursor = documents["main.tex"].indexOf("Rice2021") + 4;
+      const citationTokenStart = documents["main.tex"].indexOf("{", documents["main.tex"].indexOf("\\citet")) + 1;
+      const cursor = citationTokenStart + (emptyCitation ? 0 : 4);
 
       function makeDoc(fileName) {
         return {
@@ -145,24 +177,59 @@ This is unrelated archival text with \citet{Wrong1999}.
         editor.textContent = documents[fileName];
       }
 
+      function applyVisiblePanel(fileName) {
+        for (const candidate of Object.keys(panelByFile)) {
+          if (candidate !== "old_text.tex") {
+            panelByFile[candidate].hidden = candidate !== fileName;
+          }
+        }
+      }
+
       function activateFile(fileName) {
         for (const [candidate, tab] of Object.entries(tabByFile)) {
           const active = candidate === fileName;
-          tab.setAttribute("aria-selected", String(active));
-          if (candidate !== "old_text.tex") {
-            panelByFile[candidate].hidden = !active;
+          if (namelessTabs) {
+            tab.removeAttribute("aria-selected");
+          } else {
+            tab.setAttribute("aria-selected", String(active));
           }
         }
+        if (delayedTransition && fileName === "references.bib") {
+          setTimeout(() => applyVisiblePanel(fileName), 900);
+        } else {
+          applyVisiblePanel(fileName);
+        }
+      }
+
+      function requestFileActivation(fileName) {
+        if (fileName === "references.bib") {
+          bibActivationClicks += 1;
+          if (wrongBlankEditor && !allowManualBibSwitch) {
+            activateFile("notes.txt");
+            return;
+          }
+          if (manualBibSwitch && !allowManualBibSwitch) {
+            return;
+          }
+        }
+        activateFile(fileName);
       }
 
       makeView("main.tex", cursor);
       makeView("references.bib", 0);
       makeView("old_text.tex", 0);
+      if (namelessTabs) {
+        for (const tab of Object.values(tabByFile)) {
+          tab.removeAttribute("aria-controls");
+          tab.removeAttribute("aria-selected");
+        }
+        document.querySelector(".ol-cm-breadcrumbs").textContent = "";
+      }
       for (const [fileName, tab] of Object.entries(tabByFile)) {
-        tab.addEventListener("click", () => activateFile(fileName));
+        tab.addEventListener("click", () => requestFileActivation(fileName));
       }
       for (const row of document.querySelectorAll("[role='treeitem']")) {
-        row.addEventListener("click", () => activateFile(row.textContent.trim()));
+        row.addEventListener("click", () => requestFileActivation(row.textContent.trim()));
       }
 
       const observedErrors = [];
@@ -180,6 +247,9 @@ This is unrelated archival text with \citet{Wrong1999}.
           const match = tab.textContent.match(/[A-Za-z0-9_.-]+\.(?:tex|bib)/);
           if (match) return match[0];
         }
+        if (!panelByFile["main.tex"].hidden) return "main.tex";
+        if (!panelByFile["references.bib"].hidden) return "references.bib";
+        if (!panelByFile["notes.txt"].hidden) return "notes.txt";
         return "";
       }
 
@@ -187,6 +257,13 @@ This is unrelated archival text with \citet{Wrong1999}.
         const node = document.getElementById("test-result");
         node.dataset.payload = btoa(JSON.stringify(payload));
         node.textContent = JSON.stringify(payload);
+        if (fixtureQuery.get("autorun") === "1") {
+          fetch("/test-result", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }).catch(() => {});
+        }
       }
 
       async function waitFor(predicate, timeoutMs, label) {
@@ -200,14 +277,26 @@ This is unrelated archival text with \citet{Wrong1999}.
       }
 
       async function run() {
-        const query = new URLSearchParams(location.search);
+        const query = fixtureQuery;
         const shouldReturn = query.get("return") === "1";
         const manualNavigation = query.get("manual") === "1";
         const expectedFinalFile = manualNavigation
           ? "old_text.tex"
           : (shouldReturn ? "main.tex" : "references.bib");
+        const expectedFinalKey = keyCollision ? "Rice2021a" : "Rice2021";
         await waitFor(() => window.__OVERCITE_PAGE_BRIDGE_READY__, 5000, "the page bridge");
         await waitFor(() => window.__OVERCITE_START_REGRESSION__, 5000, "the regression start signal");
+        async function runFirefoxPointerStress() {
+          const priorSerial = document.documentElement.dataset.overcitePointerStressSerial || "0";
+          window.dispatchEvent(new CustomEvent("EZCITE_TEST_POINTER_STRESS"));
+          await waitFor(
+            () => document.documentElement.dataset.overcitePointerStressSerial !== priorSerial,
+            3000,
+            "the Firefox pointer stress hook"
+          );
+          return Number(document.documentElement.dataset.overcitePointerStressMs);
+        }
+        const idlePointerStressMs = firefoxPointerStress ? await runFirefoxPointerStress() : 0;
         window.dispatchEvent(new KeyboardEvent("keydown", {
           bubbles: true,
           altKey: true,
@@ -215,30 +304,107 @@ This is unrelated archival text with \citet{Wrong1999}.
           code: "KeyE"
         }));
         const resultButton = await waitFor(() => document.querySelector(".ezcite-result"), 5000, "a search result");
+        const searchModeActions = [...document.querySelectorAll(".ezcite-action")]
+          .map((button) => button.textContent.trim());
+        const expectedSearchModeActions = emptyCitation
+          ? []
+          : ["Contextual search", "Raw query"];
+        if (searchModeActions.join("|") !== expectedSearchModeActions.join("|")) {
+          throw new Error(`Unexpected search-mode actions: ${searchModeActions.join(", ")}`);
+        }
+        const insertionStartedAt = performance.now();
         resultButton.click();
         window.__OVERCITE_INSERTION_STARTED__ = true;
-        await waitFor(() => documents["references.bib"].includes("@article{Rice2021"), 12000, "bibliography insertion");
-        await waitFor(() => !document.getElementById("ezcite-root"), 12000, "the popup to close");
-        await waitFor(() => activeEditorFile() === expectedFinalFile, 12000, "the expected final editor");
+        const insertionPointerStressMs = firefoxPointerStress ? await runFirefoxPointerStress() : 0;
+        let invalidManualRejected = false;
+        if (manualBibSwitch) {
+          const continueButton = await waitFor(
+            () => [...document.querySelectorAll(".ezcite-action")].find((button) => button.textContent.includes("Use current editor")),
+            10000,
+            "the manual bibliography prompt"
+          );
+          if (wrongBlankEditor) {
+            invalidManualRejected = documents["references.bib"] === "" && documents["notes.txt"] === "";
+            if (!invalidManualRejected || activeEditorFile() !== "notes.txt") {
+              throw new Error("An unidentified blank editor was accepted automatically as the bibliography.");
+            }
+          } else {
+            continueButton.click();
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            invalidManualRejected = Boolean(document.getElementById("ezcite-root")?.textContent.includes("could not switch files automatically"));
+            if (!invalidManualRejected || documents["main.tex"].includes("@article{")) {
+              throw new Error("Manual bibliography confirmation accepted the source editor.");
+            }
+          }
+          allowManualBibSwitch = true;
+          activateFile("references.bib");
+          await waitFor(() => activeEditorFile() === "references.bib", 3000, "the manually opened bibliography");
+          continueButton.click();
+          if (manualEditorRace) {
+            await waitFor(
+              () => document.getElementById("ezcite-root")?.textContent.includes("Computing bibliography update"),
+              3000,
+              "the delayed bibliography computation"
+            );
+            activateFile("notes.txt");
+            const reconfirmButton = await waitFor(
+              () => [...document.querySelectorAll(".ezcite-action")]
+                .find((button) => button !== continueButton && button.textContent.includes("Use current editor")),
+              5000,
+              "bibliography reconfirmation after editor navigation"
+            );
+            if (documents["notes.txt"] !== "") {
+              throw new Error("A different nameless editor was overwritten after manual confirmation.");
+            }
+            activateFile("references.bib");
+            reconfirmButton.click();
+          }
+        }
+        await waitFor(() => documents["references.bib"].includes(`@article{${expectedFinalKey}`), 20000, "bibliography insertion");
+        await waitFor(() => !document.getElementById("ezcite-root"), 20000, "the popup to close");
+        await waitFor(() => activeEditorFile() === expectedFinalFile, 20000, "the expected final editor");
+        const unexpectedErrors = observedErrors.filter((message) => !(
+          manualBibSwitch && message.includes("does not appear to be references.bib")
+        ));
         publishResult({
-          ok: documents["main.tex"].includes(String.raw`\citet{Rice2021}`)
-            && documents["references.bib"].includes("@article{Rice2021")
+          ok: documents["main.tex"].includes(`\\citet{${expectedFinalKey}}`)
+            && documents["references.bib"].includes(`@article{${expectedFinalKey}`)
             && documents["old_text.tex"] === initialOldText
-            && observedErrors.length === 0,
+            && unexpectedErrors.length === 0,
           returnToSourceAfterInsert: shouldReturn,
           manualNavigation,
+          manualBibSwitch,
+          manualEditorRace,
+          invalidManualRejected,
+          delayedTransition,
+          namelessTabs,
+          wrongBlankEditor,
+          emptyCitation,
+          searchModeActions,
+          lateWriteAcknowledgments,
+          keyCollision,
+          firefoxPointerStress,
+          idlePointerStressMs,
+          insertionPointerStressMs,
+          delayedRangeCount: Number(document.documentElement.dataset.overciteDelayedRangeCount || 0),
+          bibActivationClicks,
+          insertionElapsedMs: Math.round(performance.now() - insertionStartedAt),
           expectedFinalFile,
           activeFile: activeEditorFile(),
-          sourceHasRice: documents["main.tex"].includes(String.raw`\citet{Rice2021}`),
-          bibliographyHasRice: documents["references.bib"].includes("@article{Rice2021"),
+          sourceHasRice: documents["main.tex"].includes(`\\citet{${expectedFinalKey}}`),
+          bibliographyHasRice: documents["references.bib"].includes(`@article{${expectedFinalKey}`),
           oldTextUnchanged: documents["old_text.tex"] === initialOldText,
-          observedErrors
+          notesTextUnchanged: documents["notes.txt"] === "",
+          observedErrors,
+          unexpectedErrors
         });
       }
 
       run().catch((error) => publishResult({
         ok: false,
         error: error.message,
+        overlayText: document.getElementById("ezcite-root")?.textContent?.trim() || "",
+        toastText: document.getElementById("ezcite-toast")?.textContent?.trim() || "",
         activeFile: activeEditorFile(),
         mainText: documents["main.tex"],
         bibText: documents["references.bib"],

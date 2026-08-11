@@ -39,7 +39,7 @@ function settingsForSender(sender) {
     returnToSourceAfterInsert: pageUrl.searchParams.get("return") === "1",
     citationKeyMode: "authoryear",
     bibliographyInsertMode: "append",
-    defaultSearchMode: "contextual"
+    defaultSearchMode: "simple"
   };
 }
 
@@ -48,15 +48,27 @@ async function handleMessage(message, sender) {
     case "getSettings":
       return settingsForSender(sender);
     case "searchAds":
+      if (message.citationContext.searchMode !== (message.citationContext.token.trim() ? "simple" : "contextual")) {
+        throw new Error("Unexpected search mode: " + message.citationContext.searchMode);
+      }
       return [candidate];
     case "resolveBibTarget":
       return { status: "resolved", target: "references.bib", candidates: ["references.bib"] };
     case "exportBibtex":
-      if (new URL(sender?.tab?.url || sender?.url || "http://127.0.0.1/").searchParams.get("manual") === "1") {
-        await new Promise((resolve) => setTimeout(resolve, 400));
+      {
+        const pageUrl = new URL(sender?.tab?.url || sender?.url || "http://127.0.0.1/");
+        if (pageUrl.searchParams.get("manual") === "1") {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+        if (pageUrl.searchParams.get("stress") === "1") {
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+        }
       }
       return "@article{Rice2021,\\n  author = {Rice, Thomas S. and Smith, Jane Q.},\\n  title = {The Chandra Survey of M51},\\n  year = {2021}\\n}";
     case "applyInsertion":
+      if (new URL(sender?.tab?.url || sender?.url || "http://127.0.0.1/").searchParams.get("manualrace") === "1") {
+        await new Promise((resolve) => setTimeout(resolve, 1400));
+      }
       return applyBibInsertion(message.payload);
     case "saveSettings":
       return message.settings;
@@ -86,6 +98,23 @@ async function prepareExtension(root) {
   delete manifest.browser_specific_settings;
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(extensionDir, "src", "test-background.js"), backgroundStub);
+  const bridgePath = join(extensionDir, "src", "page-bridge.js");
+  const bridgeSource = await readFile(bridgePath, "utf8");
+  await writeFile(bridgePath, bridgeSource.replace(
+    'function emitResponse(requestId, response, action = "") {',
+    `async function emitResponse(requestId, response, action = "") {
+    if (new URLSearchParams(location.search).get("lateack") === "1") {
+      const rangeCount = action === "replaceRange"
+        ? Number(document.documentElement.dataset.overciteDelayedRangeCount || 0) + 1
+        : 0;
+      if (rangeCount) document.documentElement.dataset.overciteDelayedRangeCount = String(rangeCount);
+      const collision = new URLSearchParams(location.search).get("collision") === "1";
+      const delayMs = action === "replaceRange"
+        ? (collision && rangeCount > 1 ? 5200 : 3200)
+        : (action === "replaceDocument" ? 5200 : 0);
+      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }`
+  ));
   return extensionDir;
 }
 
@@ -108,7 +137,9 @@ async function startFixtureServer() {
 }
 
 async function runChrome({ extensionDir, profileDir, pageUrl }) {
-  const manualNavigation = new URL(pageUrl).searchParams.get("manual") === "1";
+  const pageParameters = new URL(pageUrl).searchParams;
+  const manualNavigation = pageParameters.get("manual") === "1";
+  const interactionStress = pageParameters.get("stress") === "1";
   const args = [
     "--headless=new",
     "--disable-gpu",
@@ -158,21 +189,42 @@ async function runChrome({ extensionDir, profileDir, pageUrl }) {
         "fixture page target"
       );
       await page.waitForFunction(() => Boolean(window.__OVERCITE_PAGE_BRIDGE_READY__), null, { timeout: 10000 });
-      await page.locator("#unrelated-control").click();
-      const unrelatedTextReads = await page.evaluate(() => window.__OVERCITE_UNRELATED_TEXT_READS__);
+      const idleStressStartedAt = Date.now();
+      const idleClickCount = interactionStress ? 75 : 1;
+      for (let index = 0; index < idleClickCount; index += 1) {
+        await page.locator("#unrelated-control").click();
+      }
+      const idleStressElapsedMs = Date.now() - idleStressStartedAt;
+      let unrelatedTextReads = await page.evaluate(() => window.__OVERCITE_UNRELATED_TEXT_READS__);
       assert.equal(
         unrelatedTextReads,
         0,
         "idle clicks in a large PDF/grammar subtree must not inspect ancestor text"
       );
       await page.evaluate(() => { window.__OVERCITE_START_REGRESSION__ = true; });
-      if (manualNavigation) {
+      let insertionStressElapsedMs = 0;
+      if (manualNavigation || interactionStress) {
         await page.waitForFunction(
           () => Boolean(window.__OVERCITE_INSERTION_STARTED__),
           null,
           { timeout: 5000 }
         );
+      }
+      if (manualNavigation) {
         await page.locator("#old-tab").click();
+      }
+      if (interactionStress) {
+        const insertionStressStartedAt = Date.now();
+        for (let index = 0; index < 50; index += 1) {
+          await page.locator("#unrelated-control").click();
+        }
+        insertionStressElapsedMs = Date.now() - insertionStressStartedAt;
+        unrelatedTextReads = await page.evaluate(() => window.__OVERCITE_UNRELATED_TEXT_READS__);
+        assert.equal(
+          unrelatedTextReads,
+          0,
+          "insertion-time clicks in a large PDF/grammar subtree must not inspect ancestor text"
+        );
       }
       try {
         await page.waitForFunction(
@@ -197,7 +249,15 @@ async function runChrome({ extensionDir, profileDir, pageUrl }) {
       const workers = browser.contexts()
         .flatMap((context) => context.serviceWorkers())
         .map((worker) => worker.url());
-      return { payload, workers, stderr, unrelatedTextReads };
+      return {
+        payload,
+        workers,
+        stderr,
+        unrelatedTextReads,
+        idleClickCount,
+        idleStressElapsedMs,
+        insertionStressElapsedMs
+      };
     } finally {
       await browser.close();
     }
@@ -275,6 +335,98 @@ try {
   assert.deepEqual(manualResult.observedErrors, []);
   assert.equal(manualChromeResult.unrelatedTextReads, 0);
   console.log("Chrome user navigation during insertion: PASS (old_text.tex retained)");
+
+  const transitionScenarios = [
+    {
+      name: "prior idle-pointer slowdown stress",
+      query: "return=0&stress=1",
+      verify(result, chromeResult) {
+        assert.equal(chromeResult.unrelatedTextReads, 0);
+        assert.equal(chromeResult.idleClickCount, 75);
+        assert.ok(chromeResult.idleStressElapsedMs < 8000, `slow idle click stress: ${chromeResult.idleStressElapsedMs} ms`);
+        assert.ok(chromeResult.insertionStressElapsedMs < 8000, `slow insertion click stress: ${chromeResult.insertionStressElapsedMs} ms`);
+      }
+    },
+    {
+      name: "empty citation uses contextual mode",
+      query: "return=0&empty=1",
+      verify(result) {
+        assert.equal(result.emptyCitation, true);
+      }
+    },
+    {
+      name: "delayed CodeMirror transition",
+      query: "return=0&transition=delayed",
+      verify(result) {
+        assert.equal(result.delayedTransition, true);
+        assert.equal(result.bibActivationClicks, 1, "a delayed editor transition must not trigger repeated file clicks");
+      }
+    },
+    {
+      name: "missing active filename",
+      query: "return=0&nameless=1&manualbib=1",
+      verify(result) {
+        assert.equal(result.namelessTabs, true);
+        assert.equal(result.invalidManualRejected, true);
+      }
+    },
+    {
+      name: "unidentified blank editor requires manual target selection",
+      query: "return=0&nameless=1&wrongblank=1",
+      verify(result) {
+        assert.equal(result.wrongBlankEditor, true);
+        assert.equal(result.invalidManualRejected, true);
+        assert.equal(result.notesTextUnchanged, true);
+      }
+    },
+    {
+      name: "late successful write acknowledgments are idempotent",
+      query: "return=0&lateack=1&collision=1",
+      verify(result) {
+        assert.equal(result.lateWriteAcknowledgments, true);
+        assert.equal(result.keyCollision, true);
+        assert.equal(result.delayedRangeCount, 2);
+      }
+    },
+    {
+      name: "verified manual bibliography continuation",
+      query: "return=0&manualbib=1",
+      verify(result) {
+        assert.equal(result.manualBibSwitch, true);
+        assert.equal(result.invalidManualRejected, true);
+      }
+    },
+    {
+      name: "manual bibliography identity survives navigation race",
+      query: "return=0&nameless=1&manualrace=1",
+      verify(result) {
+        assert.equal(result.manualEditorRace, true);
+        assert.equal(result.notesTextUnchanged, true);
+      }
+    }
+  ];
+  for (const scenario of transitionScenarios) {
+    const scenarioProfileDir = join(temporaryRoot, `profile-${scenario.name.replace(/[^a-z]+/gi, "-").toLowerCase()}`);
+    const scenarioUrl = `http://127.0.0.1:${address.port}/project/current-ui?${scenario.query}`;
+    const scenarioChromeResult = await runChrome({
+      extensionDir,
+      profileDir: scenarioProfileDir,
+      pageUrl: scenarioUrl
+    });
+    const scenarioResult = parseFixtureResult(scenarioChromeResult.payload);
+    assert.equal(scenarioResult.ok, true, JSON.stringify(scenarioResult, null, 2));
+    assert.equal(scenarioResult.activeFile, "references.bib");
+    assert.equal(scenarioResult.sourceHasRice, true);
+    assert.equal(scenarioResult.bibliographyHasRice, true);
+    assert.deepEqual(scenarioResult.unexpectedErrors, []);
+    const insertionLimitMs = scenario.query.includes("lateack=1") ? 18000 : 10000;
+    assert.ok(scenarioResult.insertionElapsedMs < insertionLimitMs, `slow bounded insertion: ${scenarioResult.insertionElapsedMs} ms`);
+    scenario.verify(scenarioResult, scenarioChromeResult);
+    const stressSummary = scenario.query.includes("stress=1")
+      ? `; 75 idle clicks ${scenarioChromeResult.idleStressElapsedMs} ms, 50 insertion clicks ${scenarioChromeResult.insertionStressElapsedMs} ms, DOM text reads 0`
+      : "";
+    console.log(`Chrome ${scenario.name}: PASS (${scenarioResult.insertionElapsedMs} ms${stressSummary})`);
+  }
 } finally {
   await new Promise((resolve) => server.close(resolve));
   await rm(temporaryRoot, { recursive: true, force: true });

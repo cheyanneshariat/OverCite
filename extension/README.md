@@ -49,8 +49,9 @@ Safari support lives in the repository as a separate Xcode wrapper rather than a
 - Press `Alt+Shift+E`, or remap the `OverCite` command in your browser's extension shortcut settings
 - Pick the record you want
 
-For non-empty citation keys, the popup also exposes two small mode toggles:
+New browser installs start in `Simple search` for non-empty citation keys. Existing saved preferences are left unchanged, and empty `\cite{}` lookups stay contextual. Depending on the active mode, the popup exposes the other two options from:
 
+- `Contextual search` adds nearby sentence context
 - `Simple search` reruns the lookup from the typed token only
 - `Raw query` sends the typed token directly to the configured sources. ADS/SciX fielded queries stay on ADS/SciX when ADS/SciX is configured.
 
@@ -77,4 +78,6 @@ Short examples:
 ```bash
 npm run build
 npm test
+npm run test:chrome
+npm run test:firefox
 ```

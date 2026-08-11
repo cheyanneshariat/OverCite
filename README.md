@@ -105,6 +105,8 @@ Try these:
 
 Note that you can set the `Default Search Mode` in settings.
 
+New browser installs, including the Chrome, Firefox, and local Safari builds, start with `Simple search` for non-empty citation keys. Existing saved browser preferences are preserved, and an empty `\cite{}` still uses contextual search. The VS Code and TeXstudio defaults are unchanged.
+
 More rough keys:
 
 - `\citep{Higgs1964}`: Higgs mechanism
@@ -138,7 +140,7 @@ Current settings include:
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
 
-For non-empty citation keys, OverCite also supports `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources. In TeXstudio, these are available as optional imported macros.
+For non-empty citation keys, the browser popup exposes the two search modes not currently active. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, `Contextual` adds nearby sentence context, and `Raw query` sends the typed token directly to the configured sources. In TeXstudio, these are available as optional imported macros.
 
 ## Install
 
@@ -272,7 +274,7 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Release notes: [v0.3.6](docs/releases/v0.3.6.md)
+- Release notes: [v0.3.7](docs/releases/v0.3.7.md)
 - TeXstudio setup: [texstudio/README.md](texstudio/README.md)
 - TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)

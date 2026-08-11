@@ -48,13 +48,22 @@ test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   );
 });
 
-test("Safari wrapper marketing versions match the browser package version", async () => {
+test("Safari wrapper marketing versions match the browser package version", async (context) => {
   const packageText = await readFile(new URL("../package.json", import.meta.url), "utf8");
   const packageJson = JSON.parse(packageText);
-  const projectText = await readFile(
-    new URL("../../safari/OverCite.xcodeproj/project.pbxproj", import.meta.url),
-    "utf8"
-  );
+  let projectText;
+  try {
+    projectText = await readFile(
+      new URL("../../safari/OverCite.xcodeproj/project.pbxproj", import.meta.url),
+      "utf8"
+    );
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      context.skip("Safari wrapper is not included in the Firefox reviewer source archive.");
+      return;
+    }
+    throw error;
+  }
   const versions = [...projectText.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((match) => match[1]);
 
   assert.ok(versions.length > 0, "missing Safari MARKETING_VERSION settings");

@@ -896,7 +896,9 @@
     if (!citationContext) {
       throw new Error("Place the cursor inside a \\cite{...} command before triggering OverCite.");
     }
-    if (resolvedSearchMode === "direct" && !citationContext.token.trim()) {
+    // Simple search intentionally ignores context, so an empty citation token
+    // must retain contextual mode even when Simple is the configured default.
+    if (resolvedSearchMode !== "contextual" && !citationContext.token.trim()) {
       resolvedSearchMode = "contextual";
     }
 
@@ -994,7 +996,7 @@
         return normalized;
       }
     }
-    return "contextual";
+    return "simple";
   }
 
   function buildSearchModeActions(citationContext, searchMode) {
@@ -1004,7 +1006,7 @@
     if (searchMode === "simple") {
       return [
         {
-          label: "Back to contextual",
+          label: "Contextual search",
           kind: "tertiary",
           onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
         },
@@ -1018,7 +1020,7 @@
     if (searchMode === "direct") {
       return [
         {
-          label: "Back to contextual",
+          label: "Contextual search",
           kind: "tertiary",
           onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
         },
@@ -1213,6 +1215,8 @@
       ? replaceTextRange(state.originalEditorState.text, originalRange.from, originalRange.to, optimisticKey)
       : null;
     const expectedOptimisticSourceDocument = buildDocumentExpectation(optimisticSourceText);
+    let manuallyConfirmedSourceEditorState = null;
+    let manuallyConfirmedBibEditorState = null;
     if (originalFileName) {
       diagnostics.step(`Returning to ${originalFileName}...`);
       if (matchesFileName(readActiveFileName(), originalFileName)) {
@@ -1246,23 +1250,11 @@
               target: originalFileName,
               activeNow: readActiveFileName()
             });
-            await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText);
+            manuallyConfirmedSourceEditorState = await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText, {
+              expectedDocument: expectedSourceDocument
+            });
           }
         }
-      }
-    } else if (state.originalEditorState?.text) {
-      diagnostics.step("Recovering source file...");
-      try {
-        await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan(sourceRecoveryPayload), diagnostics);
-        await sleep(150);
-        debugTrace("source:scan-recovered", {
-          activeAfter: readActiveFileName()
-        });
-      } catch (error) {
-        debugTrace("source:scan-recovery-failed", {
-          message: error.message,
-          activeNow: readActiveFileName()
-        });
       }
     }
     diagnostics.step(`Writing cite key in ${originalFileName || "current file"}...`);
@@ -1279,8 +1271,9 @@
         to: originalRange.to,
         insert: optimisticKey,
         expectedFileName: originalFileName,
+        expectedEditorIdentity: manuallyConfirmedSourceEditorState?.editorIdentity || "",
         expectedDocument: expectedSourceDocument
-      }), diagnostics);
+      }, 3000), diagnostics);
       debugTrace("source:write-ok", {
         activeAfter: readActiveFileName(),
         key: optimisticKey
@@ -1290,14 +1283,30 @@
         message: error.message,
         activeNow: readActiveFileName()
       });
-      if (originalFileName) {
-        await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText);
+      const sourceWriteAlreadyApplied = optimisticSourceText != null && await editorAlreadyHasText({
+        fileName: originalFileName,
+        expectedText: optimisticSourceText,
+        allowUnknownFileName: !originalFileName,
+        expectedEditorIdentity: manuallyConfirmedSourceEditorState?.editorIdentity || "",
+        expectedNavigationSerial: manuallyConfirmedSourceEditorState?.manualConfirmationNavigationSerial
+      });
+      if (sourceWriteAlreadyApplied) {
+        debugTrace("source:write-late-ack", {
+          target: originalFileName || "(current)",
+          key: optimisticKey
+        });
+      } else if (originalFileName) {
+        manuallyConfirmedSourceEditorState = await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText, {
+          expectedDocument: expectedSourceDocument
+        });
+        assertManualConfirmationCurrent(manuallyConfirmedSourceEditorState);
         diagnostics.step(`Retrying cite key in ${originalFileName}...`);
         await timed("replaceRange:optimisticKey:retry", () => pageRequest("replaceRange", {
           from: originalRange.from,
           to: originalRange.to,
           insert: optimisticKey,
           expectedFileName: originalFileName,
+          expectedEditorIdentity: manuallyConfirmedSourceEditorState.editorIdentity || "",
           expectedDocument: expectedSourceDocument
         }), diagnostics);
         debugTrace("source:write-retry-ok", {
@@ -1349,21 +1358,57 @@
             target: bibTarget.target,
             activeNow: readActiveFileName()
           });
-          await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText);
+          manuallyConfirmedBibEditorState = await waitForManualFileSwitch(
+            bibTarget.target,
+            candidate.title,
+            state.settings.shortcutHelpText,
+            {
+              validate: (candidateState) => !isLikelyWrongEditorForBib(
+                candidateState,
+                buildSourceTextMatcher(
+                  state.originalEditorState?.text ?? "",
+                  state.citationContext?.tokenStart ?? 0,
+                  state.citationContext?.tokenEnd ?? 0
+                )
+              )
+            }
+          );
         }
       }
     }
 
     diagnostics.step(`Reading ${bibTarget.target}...`);
-    const bibEditorState = switchedToBib
-      ? await getConfirmedBibEditorState({
-        fileName: bibTarget.target,
-        diagnostics,
-        originalText: state.originalEditorState?.text ?? "",
-        tokenStart: state.citationContext?.tokenStart ?? 0,
-        tokenEnd: state.citationContext?.tokenEnd ?? 0
-      })
-      : (state.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics));
+    let bibEditorState;
+    if (switchedToBib) {
+      if (manuallyConfirmedBibEditorState) {
+        bibEditorState = manuallyConfirmedBibEditorState;
+      } else {
+        try {
+          bibEditorState = await getConfirmedBibEditorState({
+            fileName: bibTarget.target,
+            diagnostics,
+            originalText: state.originalEditorState?.text ?? "",
+            tokenStart: state.citationContext?.tokenStart ?? 0,
+            tokenEnd: state.citationContext?.tokenEnd ?? 0
+          });
+        } catch {
+          const sourceMatcher = buildSourceTextMatcher(
+            state.originalEditorState?.text ?? "",
+            state.citationContext?.tokenStart ?? 0,
+            state.citationContext?.tokenEnd ?? 0
+          );
+          bibEditorState = await waitForManualFileSwitch(
+            bibTarget.target,
+            candidate.title,
+            state.settings.shortcutHelpText,
+            { validate: (candidateState) => !isLikelyWrongEditorForBib(candidateState, sourceMatcher) }
+          );
+          manuallyConfirmedBibEditorState = bibEditorState;
+        }
+      }
+    } else {
+      bibEditorState = state.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics);
+    }
     diagnostics.step("Computing bibliography update...");
     const insertion = await timed("applyInsertion", () => callRuntime({
       type: MESSAGE_TYPES.APPLY_INSERTION,
@@ -1381,8 +1426,13 @@
 
     if (insertion.updatedBibText !== bibEditorState.text) {
       diagnostics.step(`Writing ${bibTarget.target}...`);
-      if (switchedToBib) {
-        await ensureProjectFileActive(bibTarget.target, diagnostics, "before-write");
+      if (switchedToBib && !manuallyConfirmedBibEditorState) {
+        await ensureProjectFileActive(
+          bibTarget.target,
+          diagnostics,
+          "before-write",
+          buildDocumentExpectation(bibEditorState.text)
+        );
       }
       debugTrace("bib:write-start", {
         target: bibTarget.target,
@@ -1390,28 +1440,45 @@
         finalKey: insertion.finalKey
       });
       try {
+        assertManualConfirmationCurrent(manuallyConfirmedBibEditorState);
         await timed(`replaceDocument:${bibTarget.target}`, () => pageRequest("replaceDocument", {
           text: insertion.updatedBibText,
           expectedFileName: bibTarget.target,
+          expectedEditorIdentity: manuallyConfirmedBibEditorState?.editorIdentity || "",
           expectedDocument: {
             length: bibEditorState.text.length,
             head: bibEditorState.text.slice(0, 200),
             tail: bibEditorState.text.slice(-200)
           }
-        }, 12000), diagnostics);
+        }, 5000), diagnostics);
       } catch (error) {
-        if (switchedToBib) {
-          await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText);
-          await ensureProjectFileActive(bibTarget.target, diagnostics, "after-manual-write");
+        const bibliographyWriteAlreadyApplied = await editorAlreadyHasText({
+          fileName: bibTarget.target,
+          expectedText: insertion.updatedBibText,
+          allowUnknownFileName: Boolean(manuallyConfirmedBibEditorState),
+          expectedEditorIdentity: manuallyConfirmedBibEditorState?.editorIdentity || "",
+          expectedNavigationSerial: manuallyConfirmedBibEditorState?.manualConfirmationNavigationSerial
+        });
+        if (bibliographyWriteAlreadyApplied) {
+          debugTrace("bib:write-late-ack", {
+            target: bibTarget.target,
+            finalKey: insertion.finalKey
+          });
+        } else if (switchedToBib) {
+          manuallyConfirmedBibEditorState = await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText, {
+            expectedDocument: buildDocumentExpectation(bibEditorState.text)
+          });
+          assertManualConfirmationCurrent(manuallyConfirmedBibEditorState);
           await timed(`replaceDocument:${bibTarget.target}:retry`, () => pageRequest("replaceDocument", {
             text: insertion.updatedBibText,
             expectedFileName: bibTarget.target,
+            expectedEditorIdentity: manuallyConfirmedBibEditorState?.editorIdentity || "",
             expectedDocument: {
               length: bibEditorState.text.length,
               head: bibEditorState.text.slice(0, 200),
               tail: bibEditorState.text.slice(-200)
             }
-          }, 12000), diagnostics);
+          }, 5000), diagnostics);
         } else {
           throw error;
         }
@@ -1473,6 +1540,7 @@
       shouldOpenSourceForFinalKey = false;
     }
 
+    const sourceRecoveryDeadlineAt = Date.now() + 7000;
     if (shouldOpenSourceForFinalKey) {
       const returnTargetLabel = originalFileName || "source file";
       reportInsertionProgress(`Returning to ${returnTargetLabel}...`);
@@ -1480,6 +1548,7 @@
         if (originalFileName) {
           await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, {
             preferTabsOnly: true,
+            deadlineAt: sourceRecoveryDeadlineAt,
             cancelOnUserFileNavigationAfterSerial: needsManualSourceUpdate ? null : userFileNavigationSerialAtSelection
           }), diagnostics);
           sourceReadyForFinalRewrite = true;
@@ -1500,7 +1569,8 @@
               preferredFileName: originalFileName,
               originalText: state.originalEditorState?.text ?? "",
               tokenStart: state.citationContext?.tokenStart ?? 0,
-              tokenEnd: state.citationContext?.tokenEnd ?? 0
+              tokenEnd: state.citationContext?.tokenEnd ?? 0,
+              deadlineAt: sourceRecoveryDeadlineAt
             }), diagnostics);
             sourceReadyForFinalRewrite = true;
           } catch {
@@ -1512,9 +1582,11 @@
                 await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan({
                   excludeFileName: bibTarget.target,
                   projectFiles: projectState.projectFiles,
+                  preferredFileName: originalFileName,
                   originalText: state.originalEditorState?.text ?? "",
                   tokenStart: state.citationContext?.tokenStart ?? 0,
-                  tokenEnd: state.citationContext?.tokenEnd ?? 0
+                  tokenEnd: state.citationContext?.tokenEnd ?? 0,
+                  deadlineAt: sourceRecoveryDeadlineAt
                 }), diagnostics);
                 sourceReadyForFinalRewrite = true;
               } catch {
@@ -1528,7 +1600,7 @@
 
     if (shouldOpenSourceForFinalKey && !sourceReadyForFinalRewrite) {
       try {
-        const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(3, 200), diagnostics);
+        const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(2, 125, 1200), diagnostics);
         const activeSourceName = activeSourceState.fileName || readActiveFileName();
         const looksLikeSourceFile = originalFileName
           ? matchesFileName(activeSourceName, originalFileName)
@@ -1540,15 +1612,18 @@
               preferredFileName: originalFileName,
               originalText: state.originalEditorState?.text ?? "",
               tokenStart: state.citationContext?.tokenStart ?? 0,
-              tokenEnd: state.citationContext?.tokenEnd ?? 0
+              tokenEnd: state.citationContext?.tokenEnd ?? 0,
+              deadlineAt: sourceRecoveryDeadlineAt
             }), diagnostics);
           } catch {
             await timed("openSourceFileByProjectScan:verify", () => openSourceFileByProjectScan({
               excludeFileName: bibTarget.target,
               projectFiles: projectState.projectFiles,
+              preferredFileName: originalFileName,
               originalText: state.originalEditorState?.text ?? "",
               tokenStart: state.citationContext?.tokenStart ?? 0,
-              tokenEnd: state.citationContext?.tokenEnd ?? 0
+              tokenEnd: state.citationContext?.tokenEnd ?? 0,
+              deadlineAt: sourceRecoveryDeadlineAt
             }), diagnostics);
           }
         }
@@ -1584,13 +1659,31 @@
     if (needsManualSourceUpdate && sourceReadyForFinalRewrite) {
       const finalizingLabel = `Finalizing cite key in ${originalFileName || "current file"}...`;
       reportInsertionProgress(finalizingLabel);
-      await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
-        from: optimisticRange.from,
-        to: optimisticRange.to,
-        insert: insertion.finalKey,
-        expectedFileName: originalFileName,
-        expectedDocument: expectedOptimisticSourceDocument
-      }), diagnostics);
+      const finalSourceText = optimisticSourceText != null
+        ? replaceTextRange(optimisticSourceText, optimisticRange.from, optimisticRange.to, insertion.finalKey)
+        : null;
+      try {
+        await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
+          from: optimisticRange.from,
+          to: optimisticRange.to,
+          insert: insertion.finalKey,
+          expectedFileName: originalFileName,
+          expectedDocument: expectedOptimisticSourceDocument
+        }), diagnostics);
+      } catch (error) {
+        const finalSourceWriteAlreadyApplied = finalSourceText != null && await editorAlreadyHasText({
+          fileName: originalFileName,
+          expectedText: finalSourceText,
+          allowUnknownFileName: !originalFileName
+        });
+        if (!finalSourceWriteAlreadyApplied) {
+          throw error;
+        }
+        debugTrace("source:final-write-late-ack", {
+          target: originalFileName || "(current)",
+          key: insertion.finalKey
+        });
+      }
     }
 
     let restoredManualFinalFile = false;
@@ -1734,26 +1827,31 @@
       throw new Error(`Could not find ${fileName} in the current Overleaf project view.`);
     }
     let lastError = null;
+    const requestedDeadlineAt = Number(options.deadlineAt);
+    const deadlineAt = Number.isFinite(requestedDeadlineAt)
+      ? Math.min(Date.now() + 5500, requestedDeadlineAt)
+      : Date.now() + 5500;
     for (const candidate of candidates) {
       try {
+        const remainingBeforeClick = deadlineAt - Date.now();
+        if (remainingBeforeClick <= 0) {
+          break;
+        }
         if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
           throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
         }
         candidate.scrollIntoView?.({ block: "center", inline: "nearest" });
         candidate.click();
-        await sleep(250);
-        await waitFor(async () => {
-          if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
-            throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
+        await sleep(Math.min(250, Math.max(0, deadlineAt - Date.now())));
+        await waitForTargetEditorState({
+          fileName,
+          timeoutMs: Math.min(1800, Math.max(1, deadlineAt - Date.now())),
+          beforeRead() {
+            if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
+              throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
+            }
           }
-          const activeTabName = readActiveFileName();
-          if (matchesFileName(activeTabName, fileName)) {
-            return true;
-          }
-          const state = await getEditorStateWithRetry(3, 250);
-          const activeFileName = state.fileName || activeTabName;
-          return matchesFileName(activeFileName, fileName);
-        }, 3500);
+        });
         debugTrace("openProjectFile:ok", {
           fileName,
           activeAfter: readActiveFileName()
@@ -1768,8 +1866,10 @@
           throw error;
         }
         if (!preferTabsOnly && isLikelyFileTreeCandidate(candidate)) {
-          await sleep(450);
-          if (await isProjectFileActive(fileName)) {
+          const remainingForTree = Math.max(0, deadlineAt - Date.now());
+          await sleep(Math.min(450, remainingForTree));
+          const remainingForCheck = Math.max(0, deadlineAt - Date.now());
+          if (remainingForCheck > 0 && await isProjectFileActive(fileName, null, remainingForCheck)) {
             debugTrace("openProjectFile:file-tree-early-return", {
               fileName,
               activeAfter: readActiveFileName()
@@ -1783,7 +1883,7 @@
           message: error.message,
           activeNow: readActiveFileName()
         });
-        await sleep(200);
+        await sleep(Math.min(200, Math.max(0, deadlineAt - Date.now())));
       }
     }
     if (lastError) {
@@ -1794,6 +1894,7 @@
       });
       throw lastError;
     }
+    throw new Error(`Timed out confirming ${fileName} as the active editor.`);
   }
 
   function matchesFileName(activeFileName, targetFileName) {
@@ -1813,8 +1914,8 @@
       .trim();
   }
 
-  async function ensureProjectFileActive(fileName, diagnostics, reasonLabel) {
-    if (await isProjectFileActive(fileName)) {
+  async function ensureProjectFileActive(fileName, diagnostics, reasonLabel, expectedDocument = null) {
+    if (await isProjectFileActive(fileName, expectedDocument)) {
       return;
     }
     debugTrace("openProjectFile:ensure", {
@@ -1827,24 +1928,20 @@
       () => openProjectFile(fileName, { preferTabsOnly: false }),
       diagnostics
     );
-    await waitForProjectFileActive(fileName, 2500);
+    await waitForProjectFileActive(fileName, 2500, expectedDocument);
   }
 
-  async function isProjectFileActive(fileName) {
-    const activeNow = readActiveFileName();
-    if (matchesFileName(activeNow, fileName)) {
-      return true;
-    }
+  async function isProjectFileActive(fileName, expectedDocument = null, requestTimeoutMs = 1000) {
     try {
-      const state = await getEditorStateWithRetry(1, 0);
-      return matchesFileName(state.fileName || activeNow, fileName);
+      const state = await getEditorStateWithRetry(1, 0, Math.max(1, Math.min(1000, requestTimeoutMs)));
+      return editorStateMatchesTarget(state, fileName, expectedDocument);
     } catch {
       return false;
     }
   }
 
-  async function waitForProjectFileActive(fileName, timeoutMs = 3500) {
-    await waitFor(async () => isProjectFileActive(fileName), timeoutMs);
+  async function waitForProjectFileActive(fileName, timeoutMs = 3500, expectedDocument = null) {
+    await waitFor(async () => isProjectFileActive(fileName, expectedDocument), timeoutMs);
   }
 
   async function openLikelySourceTab({ excludeFileName = "", preferredFileName = "", requireTex = false } = {}) {
@@ -1886,7 +1983,14 @@
     throw lastError ?? new Error("Could not switch back to a likely source editor tab.");
   }
 
-  async function openSourceTabByContent({ excludeFileName = "", preferredFileName = "", originalText = "", tokenStart = 0, tokenEnd = 0 } = {}) {
+  async function openSourceTabByContent({
+    excludeFileName = "",
+    preferredFileName = "",
+    originalText = "",
+    tokenStart = 0,
+    tokenEnd = 0,
+    deadlineAt = Date.now() + 7000
+  } = {}) {
     const targetExclude = String(excludeFileName ?? "").trim();
     const targetPreferred = String(preferredFileName ?? "").trim();
     const candidates = collectOpenEditorTabs()
@@ -1901,33 +2005,46 @@
     const contextMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
     let lastError = null;
     for (const candidate of candidates) {
+      if (Date.now() >= deadlineAt) {
+        break;
+      }
       try {
         candidate.element.scrollIntoView?.({ block: "center", inline: "nearest" });
         candidate.element.click();
-        await sleep(250);
-        await waitFor(async () => {
-          const state = await getEditorStateWithRetry(3, 200);
+        await sleep(Math.min(250, Math.max(0, deadlineAt - Date.now())));
+        while (Date.now() < deadlineAt) {
+          const remainingMs = deadlineAt - Date.now();
+          const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs));
           const activeName = state.fileName || readActiveFileName();
-          if (!activeName || activeName === targetExclude || !/\.tex$/i.test(activeName)) {
-            return false;
+          if (activeName && activeName !== targetExclude && /\.tex$/i.test(activeName) && contextMatcher(state.text)) {
+            return;
           }
-          return contextMatcher(state.text);
-        }, 3500);
-        return;
+          await sleep(Math.min(120, Math.max(0, deadlineAt - Date.now())));
+        }
       } catch (error) {
         lastError = error;
-        await sleep(200);
+        await sleep(Math.min(120, Math.max(0, deadlineAt - Date.now())));
       }
     }
 
     throw lastError ?? new Error("Could not return to the source editor by content match.");
   }
 
-  async function openSourceFileByProjectScan({ excludeFileName = "", projectFiles = [], originalText = "", tokenStart = 0, tokenEnd = 0 } = {}) {
+  async function openSourceFileByProjectScan({
+    excludeFileName = "",
+    preferredFileName = "",
+    projectFiles = [],
+    originalText = "",
+    tokenStart = 0,
+    tokenEnd = 0,
+    deadlineAt = Date.now() + 7000
+  } = {}) {
     const targetExclude = String(excludeFileName ?? "").trim();
+    const targetPreferred = String(preferredFileName ?? "").trim();
     const texFiles = Array.from(new Set((projectFiles ?? [])
       .map((fileName) => String(fileName ?? "").trim())
-      .filter((fileName) => fileName && fileName !== targetExclude && /\.tex$/i.test(fileName))));
+      .filter((fileName) => fileName && fileName !== targetExclude && /\.tex$/i.test(fileName))))
+      .sort((left, right) => Number(matchesFileName(right, targetPreferred)) - Number(matchesFileName(left, targetPreferred)));
     if (!texFiles.length) {
       throw new Error("Could not find any candidate source .tex files in the project.");
     }
@@ -1935,9 +2052,16 @@
     const contextMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
     let lastError = null;
     for (const fileName of texFiles) {
+      if (Date.now() >= deadlineAt) {
+        break;
+      }
       try {
-        await openProjectFile(fileName, { preferTabsOnly: false });
-        const state = await getEditorStateWithRetry(3, 200);
+        await openProjectFile(fileName, { preferTabsOnly: false, deadlineAt });
+        const remainingMs = deadlineAt - Date.now();
+        if (remainingMs <= 0) {
+          break;
+        }
+        const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs));
         const activeName = state.fileName || readActiveFileName();
         if (activeName && activeName !== targetExclude && /\.tex$/i.test(activeName) && contextMatcher(state.text)) {
           return;
@@ -2066,6 +2190,76 @@
     return texMarkers.some((marker) => sample.includes(marker));
   }
 
+  function documentMatchesExpectation(text, expectedDocument) {
+    if (!expectedDocument || typeof expectedDocument !== "object") {
+      return false;
+    }
+    const value = String(text ?? "");
+    const expectedLength = Number(expectedDocument.length);
+    const expectedHead = String(expectedDocument.head ?? "");
+    const expectedTail = String(expectedDocument.tail ?? "");
+    return (!Number.isFinite(expectedLength) || value.length === expectedLength) &&
+      (!expectedHead || value.startsWith(expectedHead)) &&
+      (!expectedTail || value.endsWith(expectedTail));
+  }
+
+  function editorStateMatchesTarget(state, fileName, expectedDocument = null, options = {}) {
+    const target = String(fileName ?? "").trim();
+    const activeFileName = String(state?.fileName ?? "").trim();
+    const text = String(state?.text ?? "");
+    if (activeFileName) {
+      if (!matchesFileName(activeFileName, target)) {
+        return false;
+      }
+      return !expectedDocument || documentMatchesExpectation(text, expectedDocument);
+    }
+    if (!options.allowUnknownFileName) {
+      return false;
+    }
+    if (expectedDocument && !documentMatchesExpectation(text, expectedDocument)) {
+      return false;
+    }
+    if (/\.bib$/i.test(target)) {
+      return !looksLikeTexSourceDocument(text);
+    }
+    if (/\.tex$/i.test(target)) {
+      return looksLikeTexSourceDocument(text) || documentMatchesExpectation(text, expectedDocument);
+    }
+    return Boolean(activeFileName || expectedDocument);
+  }
+
+  async function editorAlreadyHasText({
+    fileName,
+    expectedText,
+    allowUnknownFileName = false,
+    expectedEditorIdentity = "",
+    expectedNavigationSerial = null
+  }) {
+    try {
+      if (expectedNavigationSerial != null && expectedNavigationSerial !== userFileNavigationSerial) {
+        return false;
+      }
+      const state = await getEditorStateWithRetry(2, 100, 1200);
+      const expectedDocument = buildDocumentExpectation(expectedText);
+      return (!expectedEditorIdentity || state.editorIdentity === expectedEditorIdentity) &&
+        state.text === expectedText && editorStateMatchesTarget(
+        state,
+        fileName,
+        expectedDocument,
+        { allowUnknownFileName }
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function assertManualConfirmationCurrent(state) {
+    const confirmedSerial = state?.manualConfirmationNavigationSerial;
+    if (confirmedSerial != null && confirmedSerial !== userFileNavigationSerial) {
+      throw new Error("The active editor changed after manual confirmation.");
+    }
+  }
+
   function isLikelyWrongEditorForBib(state, sourceMatcher) {
     const text = String(state?.text ?? "");
     if (sourceMatcher(text)) {
@@ -2082,20 +2276,30 @@
     tokenEnd = 0
   }) {
     const sourceMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await ensureProjectFileActive(fileName, diagnostics, `before-read-${attempt + 1}`);
-      const state = await timed("getEditorState:bib", () => getEditorStateWithRetry(), diagnostics);
-      if (!isLikelyWrongEditorForBib(state, sourceMatcher)) {
-        return state;
+    return timed("getEditorState:bib", () => waitForTargetEditorState({
+      fileName,
+      timeoutMs: 5000,
+      validate: (state) => !isLikelyWrongEditorForBib(state, sourceMatcher)
+    }), diagnostics);
+  }
+
+  async function waitForTargetEditorState({ fileName, timeoutMs, validate = () => true, beforeRead = () => {}, allowUnknownFileName = false }) {
+    const startedAt = Date.now();
+    let lastError = null;
+    while (Date.now() - startedAt < timeoutMs) {
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      try {
+        beforeRead();
+        const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs));
+        if (editorStateMatchesTarget(state, fileName, null, { allowUnknownFileName }) && validate(state)) {
+          return state;
+        }
+      } catch (error) {
+        lastError = error;
       }
-      await timed(
-        `openProjectFile:${fileName}:reconfirm:${attempt + 1}`,
-        () => openProjectFile(fileName, { preferTabsOnly: false }),
-        diagnostics
-      );
-      await sleep(200);
+      await sleep(Math.min(120, Math.max(0, remainingMs)));
     }
-    throw new Error(`Could not confirm that ${fileName} is the active bibliography editor.`);
+    throw lastError ?? new Error(`Could not confirm that ${fileName} is the active editor.`);
   }
 
   function collectExactMatches(targetText, selectors) {
@@ -2309,15 +2513,36 @@
   }
 
   async function callRuntime(message) {
+    const timeoutMs = runtimeTimeoutForMessage(message?.type);
     const response = await withTimeout(
       extensionApi.runtime.sendMessage(message),
-      15000,
-      "Timed out waiting for the OverCite background worker. Refresh the Overleaf page and try again."
+      timeoutMs,
+      runtimeTimeoutMessage(message?.type)
     );
     if (!response?.ok) {
       throw new Error(response?.error ?? "Unknown OverCite error");
     }
     return response.result;
+  }
+
+  function runtimeTimeoutForMessage(messageType) {
+    if (messageType === MESSAGE_TYPES.SEARCH_ADS) {
+      return 40000;
+    }
+    if (messageType === MESSAGE_TYPES.EXPORT_BIBTEX) {
+      return 16000;
+    }
+    return 10000;
+  }
+
+  function runtimeTimeoutMessage(messageType) {
+    if (messageType === MESSAGE_TYPES.SEARCH_ADS) {
+      return "The literature search took too long. Try again or use Simple search.";
+    }
+    if (messageType === MESSAGE_TYPES.EXPORT_BIBTEX) {
+      return "Timed out exporting BibTeX from the selected source. Try again.";
+    }
+    return "Timed out waiting for the OverCite background process. Refresh the Overleaf page and try again.";
   }
 
   function extractLikelyEditorFileName(text) {
@@ -2394,11 +2619,11 @@
     return detail;
   }
 
-  async function getEditorStateWithRetry(attempts = 5, delayMs = 150) {
+  async function getEditorStateWithRetry(attempts = 4, delayMs = 125, requestTimeoutMs = 1200) {
     let lastError = null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const state = await pageRequest("getActiveEditorState", {}, 4000);
+        const state = await pageRequest("getActiveEditorState", {}, requestTimeoutMs);
         debugTrace("editorState:ok", {
           attempt: attempt + 1,
           fileName: state.fileName || "(none)",
@@ -2505,7 +2730,7 @@
     }
   }
 
-  async function waitForManualFileSwitch(fileName, subtitle, shortcutText) {
+  async function waitForManualFileSwitch(fileName, subtitle, shortcutText, options = {}) {
     debugTrace("manual-switch:prompt", {
       fileName,
       activeNow: readActiveFileName()
@@ -2513,12 +2738,25 @@
     let continueHandler = null;
     const waitForContinue = new Promise((resolve) => {
       continueHandler = async () => {
-        toast(`Continuing with the current editor as ${fileName}.`);
-        debugTrace("manual-switch:continue", {
-          fileName,
-          activeNow: readActiveFileName()
-        });
-        resolve();
+        try {
+          const state = await getEditorStateWithRetry(2, 120, 1200);
+          if (!editorStateMatchesTarget(state, fileName, options.expectedDocument ?? null, { allowUnknownFileName: true }) ||
+              (typeof options.validate === "function" && !options.validate(state))) {
+            toast(`The current editor does not appear to be ${fileName}. Open it in Overleaf, then continue.`, "error", { durationMs: 4200 });
+            return;
+          }
+          toast(`Continuing with the current editor as ${fileName}.`);
+          debugTrace("manual-switch:continue", {
+            fileName,
+            activeNow: state.fileName || readActiveFileName()
+          });
+          resolve({
+            ...state,
+            manualConfirmationNavigationSerial: userFileNavigationSerial
+          });
+        } catch (error) {
+          toast(`Could not read the current editor: ${error.message}`, "error", { durationMs: 4200 });
+        }
       };
     });
 
@@ -2535,7 +2773,7 @@
       ]
     });
     applyOverlayTheme(insertionThemeMode ?? overlayState?.settings?.themeMode ?? "auto");
-    await waitForContinue;
+    return waitForContinue;
   }
 
   function createDiagnostics(subtitle, shortcutText) {
