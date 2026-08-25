@@ -13,11 +13,16 @@ async function run() {
   assert.ok(referencesPath, "Missing OVERCITE_TEST_REFERENCES");
   assert.ok(resultPath, "Missing OVERCITE_TEST_RESULT_PATH");
 
+  const config = vscode.workspace.getConfiguration("overcite");
+  await config.update("adsApiToken", "integration-test-token", vscode.ConfigurationTarget.Workspace);
+  await config.update("citationKeyMode", "informative", vscode.ConfigurationTarget.Workspace);
+
   await runAppendScenario(mainTexPath, referencesPath);
   await runAlphabeticalScenario(mainTexPath, referencesPath);
   await runEmptyTokenScenario(mainTexPath, referencesPath);
   await runSimpleCommandScenario(mainTexPath, referencesPath);
   await runDirectCommandScenario(mainTexPath, referencesPath);
+  await runVirtualWorkspaceScenario();
   await fs.writeFile(resultPath, JSON.stringify({ ok: true }, null, 2));
 }
 
@@ -211,6 +216,67 @@ async function runDirectCommandScenario(mainTexPath, referencesPath) {
   assertCollapsedSelectionAtText(activeEditor, "ElBadry22");
 }
 
+async function runVirtualWorkspaceScenario() {
+  const provider = new MemoryFileSystemProvider();
+  const registration = vscode.workspace.registerFileSystemProvider("overleaf-workshop", provider, {
+    isCaseSensitive: true
+  });
+  const rootUri = vscode.Uri.parse(
+    "overleaf-workshop://www.overleaf.com/Remote_Paper?user=integration-user&project=integration-project"
+  );
+  const mainUri = vscode.Uri.joinPath(rootUri, "main.tex");
+  const referencesUri = vscode.Uri.joinPath(rootUri, "references.bib");
+  provider.seed(
+    mainUri,
+    "\\documentclass{article}\n\\begin{document}\nTriple star systems are very common, as revealed by Gaia \\citep{Shariat25}.\n\\bibliography{references}\n\\end{document}\n"
+  );
+  provider.seed(
+    referencesUri,
+    "@ARTICLE{Existing24_demo,\n  author = {{Someone}, Demo},\n  title = {An Existing Demo Entry},\n  year = {2024}\n}\n"
+  );
+
+  const insertIndex = vscode.workspace.workspaceFolders?.length ?? 0;
+  const added = vscode.workspace.updateWorkspaceFolders(insertIndex, 0, {
+    uri: rootUri,
+    name: "Remote Paper"
+  });
+  assert.ok(added, "Failed to add the virtual integration workspace");
+
+  try {
+    await waitForCondition(
+      () => Boolean(vscode.workspace.getWorkspaceFolder(mainUri)),
+      "virtual workspace folder registration"
+    );
+    const document = await vscode.workspace.openTextDocument(mainUri);
+    const editor = await vscode.window.showTextDocument(document);
+    const tokenIndex = document.getText().indexOf("Shariat25");
+    assert.ok(tokenIndex >= 0, "Did not find Shariat25 in virtual main.tex");
+    const targetPosition = document.positionAt(tokenIndex + 3);
+    editor.selection = new vscode.Selection(targetPosition, targetPosition);
+
+    await withTimeout(
+      vscode.commands.executeCommand("overcite.resolveCitation"),
+      10000,
+      "OverCite hung while resolving a citation in a virtual workspace"
+    );
+
+    assert.match(document.getText(), /\\citep\{Shariat25_10k\}/);
+    const references = await vscode.workspace.openTextDocument(referencesUri);
+    assert.match(references.getText(), /Shariat25_10k/);
+    assert.match(provider.readText(referencesUri), /10,000 Resolved Triples from Gaia/);
+    assert.equal(vscode.window.activeTextEditor?.document.uri.toString(), mainUri.toString());
+    assertCollapsedSelectionAtText(vscode.window.activeTextEditor, "Shariat25_10k");
+  } finally {
+    const folderIndex = vscode.workspace.workspaceFolders?.findIndex(
+      (folder) => folder.uri.toString() === rootUri.toString()
+    ) ?? -1;
+    if (folderIndex >= 0) {
+      vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
+    }
+    registration.dispose();
+  }
+}
+
 async function rewriteDocument(filePath, text) {
   const document = await vscode.workspace.openTextDocument(filePath);
   const fullRange = new vscode.Range(
@@ -237,6 +303,105 @@ function assertCollapsedSelectionAtText(editor, textPrefix) {
     selectionOffset >= expectedEnd,
     `Expected cursor to land after ${textPrefix}, found offset ${selectionOffset} before ${expectedEnd}`
   );
+}
+
+async function waitForCondition(predicate, label, timeoutMs = 5000) {
+  const started = Date.now();
+  while (!predicate()) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error(`Timed out waiting for ${label}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
+
+class MemoryFileSystemProvider {
+  constructor() {
+    this.files = new Map();
+    this.changeEmitter = new vscode.EventEmitter();
+    this.onDidChangeFile = this.changeEmitter.event;
+  }
+
+  seed(uri, text) {
+    this.files.set(uri.path, Buffer.from(text, "utf8"));
+  }
+
+  readText(uri) {
+    return this.files.get(uri.path)?.toString("utf8") ?? "";
+  }
+
+  watch() {
+    return new vscode.Disposable(() => {});
+  }
+
+  stat(uri) {
+    if (this.files.has(uri.path)) {
+      return { type: vscode.FileType.File, ctime: 0, mtime: Date.now(), size: this.files.get(uri.path).length };
+    }
+    if (this.isDirectory(uri.path)) {
+      return { type: vscode.FileType.Directory, ctime: 0, mtime: Date.now(), size: 0 };
+    }
+    throw vscode.FileSystemError.FileNotFound(uri);
+  }
+
+  readDirectory(uri) {
+    const prefix = `${uri.path.replace(/\/$/, "")}/`;
+    const entries = new Map();
+    for (const filePath of this.files.keys()) {
+      if (!filePath.startsWith(prefix)) {
+        continue;
+      }
+      const remainder = filePath.slice(prefix.length);
+      const [name, ...tail] = remainder.split("/");
+      entries.set(name, tail.length ? vscode.FileType.Directory : vscode.FileType.File);
+    }
+    return [...entries.entries()];
+  }
+
+  readFile(uri) {
+    const content = this.files.get(uri.path);
+    if (!content) {
+      throw vscode.FileSystemError.FileNotFound(uri);
+    }
+    return content;
+  }
+
+  writeFile(uri, content) {
+    this.files.set(uri.path, Buffer.from(content));
+    this.changeEmitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
+  }
+
+  createDirectory() {}
+
+  delete(uri) {
+    this.files.delete(uri.path);
+    this.changeEmitter.fire([{ type: vscode.FileChangeType.Deleted, uri }]);
+  }
+
+  rename(oldUri, newUri) {
+    const content = this.readFile(oldUri);
+    this.files.delete(oldUri.path);
+    this.files.set(newUri.path, content);
+    this.changeEmitter.fire([
+      { type: vscode.FileChangeType.Deleted, uri: oldUri },
+      { type: vscode.FileChangeType.Created, uri: newUri }
+    ]);
+  }
+
+  isDirectory(directoryPath) {
+    const prefix = `${directoryPath.replace(/\/$/, "")}/`;
+    return [...this.files.keys()].some((filePath) => filePath.startsWith(prefix));
+  }
 }
 
 async function waitForFileMatch(filePath, pattern, timeoutMs = 10000) {

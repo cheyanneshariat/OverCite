@@ -185,7 +185,7 @@ For most users, installation is just:
 1. Install OverCite from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
    - Or open Extensions in VS Code and search for `OverCite`, then click `Install`
 2. Reload VS Code if needed
-3. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
+3. Open a LaTeX workspace with a `.tex` file and at least one `.bib` file. Local folders and projects opened through Overleaf Workshop are supported.
 4. Open VS Code Settings:
    - Mac shortcut: `Command+,`
    - or open the Command Palette with `Command+Shift+P` and run `Preferences: Open Settings (UI)`

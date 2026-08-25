@@ -36,6 +36,8 @@ More details: https://github.com/cheyanneshariat/OverCite
 
 - Focus stays in the source `.tex` editor after insertion
 - BibTeX updates happen directly through the VS Code workspace API
+- Local folders and virtual projects opened through Overleaf Workshop are supported
+- Virtual-workspace discovery has a bounded timeout and can use an already open `.bib` document if the provider is temporarily unable to list the project
 - The same citation parsing, source routing, raw-query logic, and BibTeX insertion logic used in the Overleaf extension are copied into this package so the two versions stay isolated
 
 ## Settings

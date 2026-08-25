@@ -10,6 +10,7 @@ module.exports.activate = function activate(context) {
       await runResolveCitation();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      getOutputChannel().appendLine(`Error: ${message}`);
       void vscode.window.showErrorMessage(message);
     }
   });
@@ -18,6 +19,7 @@ module.exports.activate = function activate(context) {
       await runResolveCitation("simple");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      getOutputChannel().appendLine(`Error: ${message}`);
       void vscode.window.showErrorMessage(message);
     }
   });
@@ -26,6 +28,7 @@ module.exports.activate = function activate(context) {
       await runResolveCitation("direct");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      getOutputChannel().appendLine(`Error: ${message}`);
       void vscode.window.showErrorMessage(message);
     }
   });
@@ -90,6 +93,7 @@ async function runResolveCitation(searchModeOverride) {
             : "Searching literature..."
       });
 
+      progress.report({ message: "Scanning workspace..." });
       const projectState = await collectProjectState(editor.document, settings);
       let bibResolution = resolveBibTarget(projectState, settings);
       if (bibResolution.status === "not-found") {
@@ -137,7 +141,7 @@ async function runResolveCitation(searchModeOverride) {
 
       progress.report({ message: "Exporting BibTeX and updating files..." });
       const bibtex = await exportBibtex(picked.candidate, settings);
-      const bibDoc = await openWorkspaceFile(projectState.workspaceFolder, bibResolution.target);
+      const bibDoc = await openWorkspaceFile(projectState, bibResolution.target);
       const insertion = applyInsertion({
         bibText: bibDoc.getText(),
         bibtex,
@@ -211,43 +215,37 @@ function normalizeSearchMode() {
 }
 
 async function collectProjectState(document, settings) {
-  const { workspaceKeyFromFolder } = await loadModules();
+  const { discoverBibliographyFiles, uriFileName, workspaceKeyFromUri } = await loadModules();
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
   if (!workspaceFolder) {
     throw new Error("Open the file from a VS Code workspace folder before running OverCite.");
   }
 
-  const bibUris = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(workspaceFolder, "**/*.bib"),
-    "**/{node_modules,.git}/**"
-  );
+  const bibFiles = await discoverBibliographyFiles({
+    workspace: vscode.workspace,
+    workspaceFolder,
+    createRelativePattern: (folder, pattern) => new vscode.RelativePattern(folder, pattern),
+    joinPath: (uri, ...pieces) => vscode.Uri.joinPath(uri, ...pieces)
+  });
+  getOutputChannel().appendLine(`workspace: ${workspaceFolder.uri.scheme} (${bibFiles.length} bibliography file${bibFiles.length === 1 ? "" : "s"})`);
 
   return {
     mainText: document.getText(),
-    activeFileName: basename(document.uri.fsPath),
-    projectFiles: bibUris.map((uri) => basename(uri.fsPath)),
-    projectId: workspaceKeyFromFolder(workspaceFolder.uri.fsPath),
+    activeFileName: uriFileName(document.uri),
+    projectFiles: bibFiles.map((file) => file.name),
+    projectId: workspaceKeyFromUri(workspaceFolder.uri),
+    bibliographyFiles: new Map(bibFiles.map((file) => [file.name, file.uri])),
     workspaceFolder,
     overrides: settings.projectBibFileOverrides
   };
 }
 
-async function openWorkspaceFile(workspaceFolder, fileName) {
-  const matches = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(workspaceFolder, `**/${fileName}`),
-    "**/{node_modules,.git}/**",
-    2
-  );
-  if (!matches.length) {
+async function openWorkspaceFile(projectState, fileName) {
+  const uri = projectState.bibliographyFiles.get(fileName);
+  if (!uri) {
     throw new Error(`Could not open ${fileName} in the current workspace.`);
   }
-  return vscode.workspace.openTextDocument(matches[0]);
-}
-
-function basename(filePath) {
-  const normalized = String(filePath ?? "").replace(/\\/g, "/");
-  const pieces = normalized.split("/");
-  return pieces[pieces.length - 1] ?? normalized;
+  return vscode.workspace.openTextDocument(uri);
 }
 
 function shouldAutoPickForTests() {
@@ -272,9 +270,12 @@ async function loadModules() {
   if (!moduleCachePromise) {
     moduleCachePromise = (async () => {
       const config = await import("./config.js");
+      const workspace = await import("./workspace.js");
       return {
         normalizeVsCodeSettings: config.normalizeVsCodeSettings,
-        workspaceKeyFromFolder: config.workspaceKeyFromFolder
+        discoverBibliographyFiles: workspace.discoverBibliographyFiles,
+        uriFileName: workspace.uriFileName,
+        workspaceKeyFromUri: workspace.workspaceKeyFromUri
       };
     })();
   }
