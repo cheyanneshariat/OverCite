@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- VS Code: fixed indefinite citation-resolution hangs in virtual projects opened through Overleaf Workshop by using its supported filesystem API instead of unsupported workspace glob search.
+- VS Code: added bounded virtual-workspace discovery, an open-`.bib` fallback, URI-safe bibliography handling, and end-to-end virtual-filesystem coverage while retaining the local-folder fast path.
+
 ## 0.3.8
 
 - Restored automatic file switching for Overleaf's current single persistent CodeMirror editor, whose selected file tabs do not expose `aria-controls`.

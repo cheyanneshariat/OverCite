@@ -1,8 +1,8 @@
 {
   "name": "overcite-vscode",
   "displayName": "OverCite",
-  "description": "Search literature sources from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.3.3",
+  "description": "Search literature sources from LaTeX citation commands and insert BibTeX into VS Code workspaces.",
+  "version": "0.3.4",
   "publisher": "CheyanneShariat",
   "icon": "icon.png",
   "homepage": "https://github.com/cheyanneshariat/OverCite",
@@ -16,6 +16,12 @@
   "license": "CC-BY-NC-ND-4.0",
   "engines": {
     "vscode": "^1.90.0"
+  },
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": true,
+      "description": "OverCite supports virtual LaTeX workspaces, including projects opened through Overleaf Workshop."
+    }
   },
   "categories": [
     "Other"
@@ -168,14 +174,14 @@
         "overcite.projectBibFileOverrides": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Optional object keyed by workspace folder path. Values should be `.bib` filenames to force OverCite to use in that workspace."
+          "markdownDescription": "Optional object keyed by workspace folder path (or folder URI for a virtual workspace). Values should be `.bib` filenames to force OverCite to use in that workspace."
         }
       }
     }
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
+    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/workspace.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
     "test:integration": "node tests/integration/run_integration.mjs"
   },
   "devDependencies": {

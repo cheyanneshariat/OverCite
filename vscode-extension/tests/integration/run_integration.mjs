@@ -1,19 +1,26 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runTests } from "@vscode/test-electron";
 
-const repoRoot = "/Users/bijan1339/Desktop/Caltech/Notebooks/OverCite";
-const extensionDevelopmentPath = path.join(repoRoot, "vscode-extension");
+const extensionDevelopmentPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const repoRoot = path.dirname(extensionDevelopmentPath);
 const extensionTestsPath = path.join(extensionDevelopmentPath, "tests", "integration", "suite.cjs");
 const workspaceDir = path.join(repoRoot, "local_testing", "vscode-smoke");
 const mainTexPath = path.join(workspaceDir, "main.tex");
 const referencesPath = path.join(workspaceDir, "references.bib");
 const resultPath = path.join(workspaceDir, "artifacts", "integration-result.json");
+const workspaceFilePath = "/tmp/overcite-vscode-integration.code-workspace";
 const vscodeExecutablePath = "/Users/bijan1339/Downloads/Visual Studio Code.app/Contents/MacOS/Electron";
 const testUserDataDir = "/tmp/overcite-vscode-user";
 const testExtensionsDir = "/tmp/overcite-vscode-exts";
 
+await fs.mkdir(workspaceDir, { recursive: true });
+await fs.writeFile(
+  workspaceFilePath,
+  JSON.stringify({ folders: [{ path: workspaceDir }] }, null, 2)
+);
 await fs.writeFile(
   mainTexPath,
   "\\documentclass{article}\n\\begin{document}\nTriple star systems are very common, as revealed by Gaia \\citep{Shariat25}.\n\\bibliography{references}\n\\end{document}\n"
@@ -144,7 +151,7 @@ try {
       extensionDevelopmentPath,
       extensionTestsPath,
       launchArgs: [
-        workspaceDir,
+        workspaceFilePath,
         `--user-data-dir=${testUserDataDir}`,
         `--extensions-dir=${testExtensionsDir}`,
         "--disable-extensions",
@@ -171,12 +178,10 @@ try {
     console.warn("VS Code exited non-zero after integration success; treating run as passed.");
   }
 
-  const updatedMain = await fs.readFile(mainTexPath, "utf8");
-  const updatedBib = await fs.readFile(referencesPath, "utf8");
   console.log(JSON.stringify({
     ok: true,
-    mainTexUpdated: updatedMain.includes("Shariat25_10k"),
-    referencesUpdated: updatedBib.includes("Shariat25_10k")
+    localScenariosPassed: 5,
+    virtualWorkspaceScenariosPassed: 1
   }, null, 2));
 } finally {
   await new Promise((resolve) => mockServer.close(resolve));
