@@ -66,6 +66,8 @@ The options page also lets you choose how inserted citation keys are written:
 
 Browser users can disable `Return to source file after insert` if they prefer to remain on the bibliography after OverCite finishes updating the target `.bib` file. Without a saved or synced preference, the default returns to the original `.tex` file; the popup dismisses immediately after insertion and the editor return continues in the background.
 
+After the first successful insertion following browser v0.3.10, OverCite shows one dismissible reminder with a button that copies the preferred acknowledgment text. This applies to new and existing users, is recorded only in local extension storage, and does not repeat for this reminder version.
+
 Short examples:
 
 - `Contextual`: `\citep{Perlmutter99}`
@@ -76,7 +78,7 @@ Short examples:
 ## Test
 
 ```bash
-npm run build
+npm run build:chrome-firefox
 npm test
 npm run test:chrome
 npm run test:firefox

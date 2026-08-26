@@ -1,11 +1,12 @@
 {
   "name": "overcite-extension",
-  "version": "0.3.8",
+  "version": "0.3.10",
   "private": true,
   "license": "CC-BY-NC-ND-4.0",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-browser-dists.mjs",
+    "build:chrome-firefox": "node scripts/build-browser-dists.mjs --skip-safari",
     "test": "node --test",
     "test:chrome": "node tests/chrome-overleaf-regression.mjs",
     "test:firefox": "node tests/firefox-overleaf-regression.mjs"

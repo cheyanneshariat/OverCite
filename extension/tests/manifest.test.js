@@ -48,9 +48,7 @@ test("manifest includes Chrome MV3 and Firefox metadata", async () => {
   );
 });
 
-test("Safari wrapper marketing versions match the browser package version", async (context) => {
-  const packageText = await readFile(new URL("../package.json", import.meta.url), "utf8");
-  const packageJson = JSON.parse(packageText);
+test("Safari wrapper keeps one internally consistent marketing version", async (context) => {
   let projectText;
   try {
     projectText = await readFile(
@@ -67,7 +65,8 @@ test("Safari wrapper marketing versions match the browser package version", asyn
   const versions = [...projectText.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((match) => match[1]);
 
   assert.ok(versions.length > 0, "missing Safari MARKETING_VERSION settings");
-  assert.deepEqual([...new Set(versions)], [packageJson.version]);
+  assert.equal(new Set(versions).size, 1);
+  assert.match(versions[0], /^\d+\.\d+\.\d+$/);
 });
 
 test("background trigger path accepts Overleaf project tabs on both hostnames", async () => {

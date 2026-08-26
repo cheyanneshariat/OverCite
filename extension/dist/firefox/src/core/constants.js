@@ -4,7 +4,8 @@ export const MESSAGE_TYPES = Object.freeze({
   SEARCH_ADS: "searchAds",
   EXPORT_BIBTEX: "exportBibtex",
   RESOLVE_BIB_TARGET: "resolveBibTarget",
-  APPLY_INSERTION: "applyInsertion"
+  APPLY_INSERTION: "applyInsertion",
+  CLAIM_ACKNOWLEDGMENT_REMINDER: "claimAcknowledgmentReminder"
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({

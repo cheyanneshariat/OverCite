@@ -49,6 +49,8 @@ This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citati
 
 > You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).
 
+Chrome, Firefox, and VS Code show this request once after the first successful insertion following the relevant update. The shown receipt stays only in local extension state; OverCite does not report usage or manuscript activity.
+
 ## Get Started
 
 Install OverCite from the place where you write:
@@ -274,7 +276,7 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Release notes: [v0.3.8](docs/releases/v0.3.8.md)
+- Release notes: [browser v0.3.10 / VS Code v0.3.5](docs/releases/v0.3.10.md)
 - TeXstudio setup: [texstudio/README.md](texstudio/README.md)
 - TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)

@@ -20,6 +20,7 @@ const iconEntries = [
   "overcite-logo-square.png"
 ];
 const moduleImportPattern = /^\s*import\s+\{([^}]+)\}\s+from\s+"([^"]+)";\s*$/gm;
+const skipSafari = process.argv.includes("--skip-safari");
 
 async function main() {
   const baseManifest = JSON.parse(await readFile(path.join(extensionRoot, "manifest.json"), "utf8"));
@@ -44,7 +45,9 @@ async function main() {
 
   await buildBrowserDist("chrome", chromeManifest);
   await buildBrowserDist("firefox", firefoxManifest);
-  await buildSafariResources(baseManifest);
+  if (!skipSafari) {
+    await buildSafariResources(baseManifest);
+  }
 }
 
 async function buildBrowserDist(browserName, manifest) {
@@ -112,6 +115,7 @@ async function buildSafariResources(baseManifest) {
 async function bundleSafariBackground() {
   const modulePaths = [
     "src/core/constants.js",
+    "src/core/acknowledgment.js",
     "src/core/project.js",
     "src/core/settings.js",
     "src/core/bibtex.js",
