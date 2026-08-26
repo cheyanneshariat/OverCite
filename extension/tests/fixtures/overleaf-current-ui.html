@@ -448,6 +448,39 @@ This is unrelated archival text with \citet{Wrong1999}.
         await waitFor(() => documents["references.bib"].includes(`@article{${expectedFinalKey}`), 20000, "bibliography insertion");
         await waitFor(() => !document.getElementById("ezcite-root"), 20000, "the popup to close");
         await waitFor(() => activeEditorFile() === expectedFinalFile, 20000, "the expected final editor");
+        const acknowledgmentExpectation = query.get("ackexpect");
+        let acknowledgmentReminderVisible = false;
+        let acknowledgmentActionLabel = "";
+        let acknowledgmentDismissed = false;
+        if (acknowledgmentExpectation === "show") {
+          const acknowledgmentAction = await waitFor(
+            () => [...document.querySelectorAll(".ezcite-toast-action")]
+              .find((button) => button.textContent.trim() === "Copy acknowledgment"),
+            3000,
+            "the one-time acknowledgment reminder"
+          );
+          acknowledgmentReminderVisible = true;
+          acknowledgmentActionLabel = acknowledgmentAction.textContent.trim();
+          if (query.get("ackdismiss") === "1") {
+            const dismiss = document.querySelector(".ezcite-toast-dismiss");
+            if (!dismiss || dismiss.getAttribute("aria-label") !== "Dismiss") {
+              throw new Error("The acknowledgment reminder did not expose its dismiss control.");
+            }
+            dismiss.click();
+            await waitFor(
+              () => !document.querySelector(".ezcite-toast-dismiss"),
+              1000,
+              "the acknowledgment reminder to dismiss"
+            );
+            acknowledgmentDismissed = true;
+          }
+        } else if (acknowledgmentExpectation === "hide") {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          acknowledgmentReminderVisible = Boolean(document.querySelector(".ezcite-toast-action"));
+          if (acknowledgmentReminderVisible) {
+            throw new Error("The acknowledgment reminder repeated after it was already recorded.");
+          }
+        }
         const unexpectedErrors = observedErrors.filter((message) => !(
           manualBibSwitch && message.includes("does not appear to be references.bib")
         ));
@@ -479,6 +512,9 @@ This is unrelated archival text with \citet{Wrong1999}.
           delayedRangeCount: Number(document.documentElement.dataset.overciteDelayedRangeCount || 0),
           bibActivationClicks,
           insertionElapsedMs: Math.round(performance.now() - insertionStartedAt),
+          acknowledgmentReminderVisible,
+          acknowledgmentActionLabel,
+          acknowledgmentDismissed,
           expectedFinalFile,
           activeFile: activeEditorFile(),
           sourceHasRice: documents["main.tex"].includes(`\\citet{${expectedFinalKey}}`),

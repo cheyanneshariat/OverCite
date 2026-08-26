@@ -10,6 +10,8 @@ If OverCite was helpful in preparing your manuscript, you can acknowledge it wit
   This work made use of <a href="https://github.com/cheyanneshariat/OverCite">OverCite</a> \citep{Shariat2026}, an in-editor citation tool for LaTeX.
 </blockquote>
 
+VS Code v0.3.5 shows this request once after the first successful insertion following the update. The reminder is dismissible, can copy the text above, and records only a versioned receipt in VS Code's local extension state so it does not repeat.
+
 ## Getting Started
 
 1. Install by searching for `OverCite` in VS Code Extensions.

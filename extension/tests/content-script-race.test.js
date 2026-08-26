@@ -229,6 +229,23 @@ test("content-script closes the popup before return-to-source background work", 
   assert.match(insertBody, /if \(!shouldReturnToSource\) \{\s*toast\(/s);
 });
 
+test("content-script requests the acknowledgment reminder only after a completed insertion", async () => {
+  const source = await readContentScript();
+  const insertBody = extractFunctionBody(source, "insertCandidateWithState");
+  const reminderBody = extractFunctionBody(source, "maybeShowAcknowledgmentReminder");
+  const finalFinishIndex = insertBody.lastIndexOf("diagnostics.finish");
+  const reminderIndex = insertBody.lastIndexOf("void maybeShowAcknowledgmentReminder()");
+
+  assert.ok(finalFinishIndex >= 0, "missing completed-insertion marker");
+  assert.ok(reminderIndex > finalFinishIndex, "reminder must follow completed insertion");
+  assert.match(reminderBody, /CLAIM_ACKNOWLEDGMENT_REMINDER/);
+  assert.match(reminderBody, /if \(!reminder\?\.show\)/);
+  assert.match(reminderBody, /Copy acknowledgment/);
+  assert.match(reminderBody, /dismissible: true/);
+  assert.match(reminderBody, /durationMs: 12000/);
+  assert.match(source, /function copyTextToClipboard\(text\)/);
+});
+
 test("content-script removes overlay DOM on close", async () => {
   const source = await readContentScript();
 

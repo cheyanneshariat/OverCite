@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import { createCompletionNotifier } from "./acknowledgment.js";
 import { normalizeVsCodeSettings } from "./config.js";
 import { buildAdsQueries } from "./core/ads.js";
 import { findCitationAtCursor } from "./core/citation.js";
@@ -7,9 +8,15 @@ import { applyInsertion, buildQuickPickItems, exportBibtex, resolveBibTarget, se
 import { discoverBibliographyFiles, uriFileName, workspaceKeyFromUri } from "./workspace.js";
 
 let outputChannel;
+let notifyCompletion;
 
 export function activate(context) {
   outputChannel = vscode.window.createOutputChannel("OverCite");
+  notifyCompletion = createCompletionNotifier({
+    globalState: context.globalState,
+    showInformationMessage: (...args) => vscode.window.showInformationMessage(...args),
+    writeClipboard: (text) => vscode.env.clipboard.writeText(text)
+  });
   const disposable = vscode.commands.registerCommand("overcite.resolveCitation", async () => {
     try {
       await runResolveCitation();
@@ -183,7 +190,7 @@ async function runResolveCitation(searchModeOverride) {
       updatedEditor.revealRange(new vscode.Range(finalPosition, finalPosition));
 
       const action = insertion.match ? "Reused" : "Inserted";
-      void vscode.window.showInformationMessage(`${action} ${insertion.finalKey} in ${bibResolution.target}`);
+      void notifyCompletion(`${action} ${insertion.finalKey} in ${bibResolution.target}`);
     }
   );
 }

@@ -2,9 +2,17 @@ const vscode = require("vscode");
 
 let moduleCachePromise;
 let outputChannel;
+let notifyCompletionPromise;
 
 module.exports.activate = function activate(context) {
   outputChannel = vscode.window.createOutputChannel("OverCite");
+  notifyCompletionPromise = import("./acknowledgment.js").then(({ createCompletionNotifier }) => (
+    createCompletionNotifier({
+      globalState: context.globalState,
+      showInformationMessage: (...args) => vscode.window.showInformationMessage(...args),
+      writeClipboard: (text) => vscode.env.clipboard.writeText(text)
+    })
+  ));
   const disposable = vscode.commands.registerCommand("overcite.resolveCitation", async () => {
     try {
       await runResolveCitation();
@@ -180,7 +188,9 @@ async function runResolveCitation(searchModeOverride) {
       updatedEditor.revealRange(new vscode.Range(finalPosition, finalPosition));
 
       const action = insertion.match ? "Reused" : "Inserted";
-      void vscode.window.showInformationMessage(`${action} ${insertion.finalKey} in ${bibResolution.target}`);
+      void notifyCompletionPromise.then((notify) => (
+        notify(`${action} ${insertion.finalKey} in ${bibResolution.target}`)
+      ));
     }
   );
 }

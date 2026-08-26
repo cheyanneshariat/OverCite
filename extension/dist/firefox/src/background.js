@@ -1,4 +1,9 @@
 import { mapAdsDocToCandidate, buildAdsQueries, rerankAdsCandidates } from "./core/ads.js";
+import {
+  ACKNOWLEDGMENT_REMINDER_PROMPT,
+  ACKNOWLEDGMENT_TEXT,
+  createAcknowledgmentReminderClaim
+} from "./core/acknowledgment.js";
 import { applyBibInsertion, generatePreferredKey } from "./core/bibtex.js";
 import { DEFAULT_SETTINGS, MESSAGE_TYPES } from "./core/constants.js";
 import { resolveBibTargetFromProjectState } from "./core/project.js";
@@ -12,6 +17,7 @@ const ADS_SEARCH_BUDGET_MS = 12000;
 const ADS_EXPORT_TIMEOUT_MS = 12000;
 const LITERATURE_SEARCH_BUDGET_MS = 30000;
 const RUNTIME_FETCH_MARKER = Symbol.for("overcite.runtimeFetch");
+const claimAcknowledgmentReminder = createAcknowledgmentReminderClaim(extensionApi.storage?.local);
 
 extensionApi.runtime.onInstalled.addListener(async () => {
   const settings = await getSettings();
@@ -62,6 +68,12 @@ async function handleMessage(message) {
     }
     case MESSAGE_TYPES.APPLY_INSERTION:
       return applyBibInsertion(message.payload);
+    case MESSAGE_TYPES.CLAIM_ACKNOWLEDGMENT_REMINDER:
+      return {
+        show: await claimAcknowledgmentReminder(),
+        prompt: ACKNOWLEDGMENT_REMINDER_PROMPT,
+        acknowledgmentText: ACKNOWLEDGMENT_TEXT
+      };
     default:
       throw new Error(`Unknown OverCite message type: ${message?.type ?? "undefined"}`);
   }

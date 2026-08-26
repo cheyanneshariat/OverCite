@@ -12,8 +12,8 @@ Build steps
    cd extension
 2. Install dependencies:
    npm ci
-3. Run the browser build:
-   npm run build
+3. Run the Chrome and Firefox build:
+   npm run build:chrome-firefox
 
 Build output
 - The Firefox package is generated in:

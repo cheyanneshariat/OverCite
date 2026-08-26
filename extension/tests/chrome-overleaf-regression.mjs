@@ -44,6 +44,7 @@ function settingsForSender(sender) {
 }
 
 async function handleMessage(message, sender) {
+  const pageUrl = new URL(sender?.tab?.url || sender?.url || "http://127.0.0.1/");
   switch (message?.type) {
     case "getSettings":
       return settingsForSender(sender);
@@ -72,6 +73,28 @@ async function handleMessage(message, sender) {
       return applyBibInsertion(message.payload);
     case "saveSettings":
       return message.settings;
+    case "claimAcknowledgmentReminder": {
+      if (pageUrl.searchParams.get("ackfail") === "1") {
+        throw new Error("Synthetic acknowledgment storage failure");
+      }
+      const key = "acknowledgmentReminderVersion";
+      if (pageUrl.searchParams.get("ackshown") === "1") {
+        await chrome.storage.local.set({ [key]: 1 });
+      }
+      if (pageUrl.searchParams.get("acklegacy") === "1") {
+        await chrome.storage.local.set({ existingUserSetting: true });
+      }
+      const stored = await chrome.storage.local.get(key);
+      const show = Number(stored[key] || 0) < 1;
+      if (show) {
+        await chrome.storage.local.set({ [key]: 1 });
+      }
+      return {
+        show,
+        prompt: "Citation inserted. If OverCite helped with this manuscript, please consider acknowledging it.",
+        acknowledgmentText: "This work made use of \\\\texttt{OverCite} \\\\citep{Shariat2026}, an in-editor citation tool for \\\\LaTeX."
+      };
+    }
     default:
       throw new Error(\`Unexpected test message: \${message?.type}\`);
   }
@@ -181,7 +204,11 @@ async function runChrome({ extensionDir, profileDir, pageUrl }) {
     }, 10000, "Chrome DevTools port");
     const port = Number(portText.split(/\r?\n/)[0]);
     assert.ok(Number.isFinite(port), `Invalid Chrome DevTools port: ${portText}`);
-    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    const browser = await waitForValue(
+      () => chromium.connectOverCDP(`http://127.0.0.1:${port}`),
+      10000,
+      "Chrome DevTools connection"
+    );
     try {
       const page = await waitForValue(
         () => browser.contexts().flatMap((context) => context.pages()).find((candidate) => candidate.url() === pageUrl),
@@ -246,6 +273,30 @@ async function runChrome({ extensionDir, profileDir, pageUrl }) {
         throw new Error(`${error.message}\nPage state: ${JSON.stringify(pageState)}\nService workers: ${JSON.stringify(workers)}\nChrome stderr:\n${stderr}`);
       }
       const payload = await page.locator("#test-result").getAttribute("data-payload");
+      const ackExpectation = pageParameters.get("ackexpect");
+      let acknowledgmentCopyResult = null;
+      let acknowledgmentDismissVisible = false;
+      let acknowledgmentDismissed = false;
+      if (ackExpectation === "show") {
+        const action = page.locator(".ezcite-toast-action", { hasText: "Copy acknowledgment" });
+        const dismiss = page.getByRole("button", { name: "Dismiss" });
+        await action.waitFor({ state: "visible", timeout: 3000 });
+        await dismiss.waitFor({ state: "visible", timeout: 3000 });
+        acknowledgmentDismissVisible = true;
+        await browser.contexts()[0].grantPermissions(["clipboard-read", "clipboard-write"], {
+          origin: new URL(pageUrl).origin
+        });
+        await action.click();
+        await page.waitForFunction(
+          () => document.querySelector(".ezcite-toast-action")?.textContent === "Copied",
+          null,
+          { timeout: 3000 }
+        );
+        acknowledgmentCopyResult = await page.evaluate(() => navigator.clipboard.readText());
+        await dismiss.click();
+        await dismiss.waitFor({ state: "hidden", timeout: 3000 });
+        acknowledgmentDismissed = true;
+      }
       const workers = browser.contexts()
         .flatMap((context) => context.serviceWorkers())
         .map((worker) => worker.url());
@@ -256,7 +307,10 @@ async function runChrome({ extensionDir, profileDir, pageUrl }) {
         unrelatedTextReads,
         idleClickCount,
         idleStressElapsedMs,
-        insertionStressElapsedMs
+        insertionStressElapsedMs,
+        acknowledgmentCopyResult,
+        acknowledgmentDismissVisible,
+        acknowledgmentDismissed
       };
     } finally {
       await browser.close();
@@ -476,6 +530,42 @@ try {
       : "";
     console.log(`Chrome ${scenario.name}: PASS (${scenarioResult.insertionElapsedMs} ms${stressSummary})`);
   }
+
+  const acknowledgmentProfileDir = join(temporaryRoot, "profile-one-time-acknowledgment");
+  const acknowledgmentFirst = await runChrome({
+    extensionDir,
+    profileDir: acknowledgmentProfileDir,
+    pageUrl: `http://127.0.0.1:${address.port}/project/current-ui?return=1&acklegacy=1&ackexpect=show`
+  });
+  const acknowledgmentFirstResult = parseFixtureResult(acknowledgmentFirst.payload);
+  assert.equal(acknowledgmentFirstResult.ok, true);
+  assert.equal(acknowledgmentFirstResult.acknowledgmentReminderVisible, true);
+  assert.equal(acknowledgmentFirstResult.acknowledgmentActionLabel, "Copy acknowledgment");
+  assert.equal(acknowledgmentFirst.acknowledgmentDismissVisible, true);
+  assert.equal(acknowledgmentFirst.acknowledgmentDismissed, true);
+  assert.equal(
+    acknowledgmentFirst.acknowledgmentCopyResult,
+    "This work made use of \\texttt{OverCite} \\citep{Shariat2026}, an in-editor citation tool for \\LaTeX."
+  );
+
+  const acknowledgmentSecond = await runChrome({
+    extensionDir,
+    profileDir: join(temporaryRoot, "profile-acknowledgment-already-shown"),
+    pageUrl: `http://127.0.0.1:${address.port}/project/current-ui?return=1&ackshown=1&ackexpect=hide`
+  });
+  const acknowledgmentSecondResult = parseFixtureResult(acknowledgmentSecond.payload);
+  assert.equal(acknowledgmentSecondResult.ok, true);
+  assert.equal(acknowledgmentSecondResult.acknowledgmentReminderVisible, false);
+
+  const acknowledgmentFailure = await runChrome({
+    extensionDir,
+    profileDir: join(temporaryRoot, "profile-acknowledgment-storage-failure"),
+    pageUrl: `http://127.0.0.1:${address.port}/project/current-ui?return=1&ackfail=1&ackexpect=hide`
+  });
+  const acknowledgmentFailureResult = parseFixtureResult(acknowledgmentFailure.payload);
+  assert.equal(acknowledgmentFailureResult.ok, true);
+  assert.equal(acknowledgmentFailureResult.acknowledgmentReminderVisible, false);
+  console.log("Chrome one-time acknowledgment reminder: PASS (upgrade, copy, suppression, storage failure)");
 } finally {
   await new Promise((resolve) => server.close(resolve));
   await rm(temporaryRoot, { recursive: true, force: true });

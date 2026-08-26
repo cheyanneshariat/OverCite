@@ -5,7 +5,8 @@
     SEARCH_ADS: "searchAds",
     EXPORT_BIBTEX: "exportBibtex",
     RESOLVE_BIB_TARGET: "resolveBibTarget",
-    APPLY_INSERTION: "applyInsertion"
+    APPLY_INSERTION: "applyInsertion",
+    CLAIM_ACKNOWLEDGMENT_REMINDER: "claimAcknowledgmentReminder"
   });
   const THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
   const DEFAULT_TOAST_DURATION_MS = 2600;
@@ -742,6 +743,48 @@
 
       #ezcite-toast.visible {
         opacity: 1;
+      }
+
+      #ezcite-toast.interactive {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-align: left;
+        pointer-events: auto;
+      }
+
+      .ezcite-toast-message {
+        flex: 1;
+      }
+
+      .ezcite-toast-action,
+      .ezcite-toast-dismiss {
+        border: 1px solid rgba(255, 255, 255, 0.34);
+        background: rgba(255, 255, 255, 0.12);
+        color: white;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .ezcite-toast-action {
+        padding: 6px 10px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+
+      .ezcite-toast-dismiss {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border-color: transparent;
+        border-radius: 50%;
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      .ezcite-toast-action:hover,
+      .ezcite-toast-dismiss:hover {
+        background: rgba(255, 255, 255, 0.22);
       }
 
       @media (max-width: 640px) {
@@ -1730,6 +1773,7 @@
         { durationMs: SUCCESS_TOAST_DURATION_MS }
       );
     }
+    void maybeShowAcknowledgmentReminder();
   }
 
   async function buildProjectState() {
@@ -2725,8 +2769,33 @@
       toastNode.id = "ezcite-toast";
       document.body.appendChild(toastNode);
     }
-    toastNode.textContent = message;
-    toastNode.className = "visible";
+    toastNode.textContent = "";
+    toastNode.className = `visible${options?.action || options?.dismissible ? " interactive" : ""}`;
+    const messageNode = document.createElement("span");
+    messageNode.className = "ezcite-toast-message";
+    messageNode.textContent = message;
+    toastNode.appendChild(messageNode);
+    if (options?.action) {
+      const actionButton = document.createElement("button");
+      actionButton.type = "button";
+      actionButton.className = "ezcite-toast-action";
+      actionButton.textContent = options.action.label;
+      actionButton.addEventListener("click", () => {
+        Promise.resolve(options.action.onClick?.(actionButton)).catch((error) => {
+          console.error("[OverCite content] toast action failed", error);
+        });
+      });
+      toastNode.appendChild(actionButton);
+    }
+    if (options?.dismissible) {
+      const dismissButton = document.createElement("button");
+      dismissButton.type = "button";
+      dismissButton.className = "ezcite-toast-dismiss";
+      dismissButton.setAttribute("aria-label", "Dismiss");
+      dismissButton.textContent = "×";
+      dismissButton.addEventListener("click", () => dismissToast(toastNode));
+      toastNode.appendChild(dismissButton);
+    }
     if (kind === "error") {
       toastNode.style.background = "rgba(146, 40, 22, 0.95)";
     } else if (kind === "notice") {
@@ -2748,6 +2817,65 @@
       }, 250);
     }, durationMs);
     toastNode._timeoutId = timeoutId;
+  }
+
+  function dismissToast(toastNode = document.querySelector("#ezcite-toast")) {
+    if (!toastNode) {
+      return;
+    }
+    window.clearTimeout(toastNode._timeoutId);
+    window.clearTimeout(toastNode._removeTimeoutId);
+    toastNode.classList.remove("visible");
+    toastNode._removeTimeoutId = window.setTimeout(() => toastNode.remove(), 250);
+  }
+
+  async function maybeShowAcknowledgmentReminder() {
+    try {
+      const reminder = await callRuntime({
+        type: MESSAGE_TYPES.CLAIM_ACKNOWLEDGMENT_REMINDER
+      });
+      if (!reminder?.show) {
+        return false;
+      }
+      toast(reminder.prompt, "notice", {
+        durationMs: 12000,
+        dismissible: true,
+        action: {
+          label: "Copy acknowledgment",
+          async onClick(button) {
+            const copied = await copyTextToClipboard(reminder.acknowledgmentText);
+            button.textContent = copied ? "Copied" : "Copy failed";
+            if (copied) {
+              window.setTimeout(() => dismissToast(), 900);
+            }
+          }
+        }
+      });
+      return true;
+    } catch (error) {
+      console.warn("[OverCite content] acknowledgment reminder unavailable", error);
+      return false;
+    }
+  }
+
+  async function copyTextToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(String(text ?? ""));
+      return true;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = String(text ?? "");
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        return document.execCommand("copy");
+      } finally {
+        textarea.remove();
+      }
+    }
   }
 
   async function waitFor(check, timeoutMs) {

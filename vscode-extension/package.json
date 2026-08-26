@@ -2,7 +2,7 @@
   "name": "overcite-vscode",
   "displayName": "OverCite",
   "description": "Search literature sources from LaTeX citation commands and insert BibTeX into VS Code workspaces.",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "publisher": "CheyanneShariat",
   "icon": "icon.png",
   "homepage": "https://github.com/cheyanneshariat/OverCite",
@@ -181,7 +181,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/workspace.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
+    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/workspace.js && node --check src/acknowledgment.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
     "test:integration": "node tests/integration/run_integration.mjs"
   },
   "devDependencies": {

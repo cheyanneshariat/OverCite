@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.10 (Chrome and Firefox) / 0.3.5 (VS Code)
+
+- Show a dismissible acknowledgment reminder once, after the first successful citation insertion following this update, for both new and existing users.
+- Add a one-click action that copies the preferred `Shariat2026` acknowledgment text.
+- Store only a versioned local shown-receipt, with no usage telemetry; storage or clipboard failures never affect citation insertion.
+- Keep Safari and TeXstudio unchanged in this release.
+- VS Code also includes the virtual-workspace fix below.
+
 - VS Code: fixed indefinite citation-resolution hangs in virtual projects opened through Overleaf Workshop by using its supported filesystem API instead of unsupported workspace glob search.
 - VS Code: added bounded virtual-workspace discovery, an open-`.bib` fallback, URI-safe bibliography handling, and end-to-end virtual-filesystem coverage while retaining the local-folder fast path.
 

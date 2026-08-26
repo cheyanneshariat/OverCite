@@ -44,6 +44,7 @@ function settingsForSender(sender) {
 }
 
 async function handleMessage(message, sender) {
+  const pageUrl = new URL(sender?.tab?.url || sender?.url || "http://127.0.0.1/");
   switch (message?.type) {
     case "getSettings":
       return settingsForSender(sender);
@@ -66,6 +67,28 @@ async function handleMessage(message, sender) {
       return applyBibInsertion(message.payload);
     case "saveSettings":
       return message.settings;
+    case "claimAcknowledgmentReminder": {
+      if (pageUrl.searchParams.get("ackfail") === "1") {
+        throw new Error("Synthetic acknowledgment storage failure");
+      }
+      const key = "acknowledgmentReminderVersion";
+      if (pageUrl.searchParams.get("ackshown") === "1") {
+        await extensionApi.storage.local.set({ [key]: 1 });
+      }
+      if (pageUrl.searchParams.get("acklegacy") === "1") {
+        await extensionApi.storage.local.set({ existingUserSetting: true });
+      }
+      const stored = await extensionApi.storage.local.get(key);
+      const show = Number(stored[key] || 0) < 1;
+      if (show) {
+        await extensionApi.storage.local.set({ [key]: 1 });
+      }
+      return {
+        show,
+        prompt: "Citation inserted. If OverCite helped with this manuscript, please consider acknowledging it.",
+        acknowledgmentText: "This work made use of \\\\texttt{OverCite} \\\\citep{Shariat2026}, an in-editor citation tool for \\\\LaTeX."
+      };
+    }
     default:
       throw new Error(\`Unexpected test message: \${message?.type}\`);
   }
@@ -245,8 +268,11 @@ try {
     { id: "nameless", name: "missing active filename requires confirmation", query: "return=0&nameless=1&manualbib=1", namelessTabs: true, manualBibSwitch: true },
     { id: "wrongblank", name: "unidentified blank editor requires manual target selection", query: "return=0&nameless=1&wrongblank=1", namelessTabs: true, manualBibSwitch: true, wrongBlankEditor: true },
     { id: "lateack", name: "late successful write acknowledgments are idempotent", query: "return=0&lateack=1&collision=1", lateWriteAcknowledgments: true, keyCollision: true },
-    { id: "manual", name: "verified manual bibliography continuation", query: "return=0&manualbib=1", manualBibSwitch: true }
-    ,{ id: "manualrace", name: "manual bibliography identity survives navigation race", query: "return=0&nameless=1&manualrace=1", manualBibSwitch: true, manualEditorRace: true }
+    { id: "manual", name: "verified manual bibliography continuation", query: "return=0&manualbib=1", manualBibSwitch: true },
+    { id: "manualrace", name: "manual bibliography identity survives navigation race", query: "return=0&nameless=1&manualrace=1", manualBibSwitch: true, manualEditorRace: true },
+    { id: "ack-first", name: "first post-update acknowledgment reminder", query: "return=1&acklegacy=1&ackexpect=show&ackdismiss=1", acknowledgmentVisible: true, acknowledgmentDismissed: true },
+    { id: "ack-shown", name: "previously shown acknowledgment remains suppressed", query: "return=1&ackshown=1&ackexpect=hide", acknowledgmentVisible: false },
+    { id: "ack-failure", name: "acknowledgment storage failure does not affect insertion", query: "return=1&ackfail=1&ackexpect=hide", acknowledgmentVisible: false }
   ].filter((scenario) => !requestedScenarioIds.size || requestedScenarioIds.has(scenario.id));
   assert.ok(scenarios.length > 0, "No matching Firefox regression scenarios were selected.");
   for (const scenario of scenarios) {
@@ -309,6 +335,12 @@ try {
     if (scenario.pointerStress) {
       assert.ok(result.idlePointerStressMs < 250, `slow Firefox idle pointer stress: ${result.idlePointerStressMs} ms`);
       assert.ok(result.insertionPointerStressMs < 250, `slow Firefox insertion pointer stress: ${result.insertionPointerStressMs} ms`);
+    }
+    if (typeof scenario.acknowledgmentVisible === "boolean") {
+      assert.equal(result.acknowledgmentReminderVisible, scenario.acknowledgmentVisible);
+    }
+    if (scenario.acknowledgmentDismissed) {
+      assert.equal(result.acknowledgmentDismissed, true);
     }
     const stressSummary = scenario.pointerStress
       ? `; 2,000 idle calls ${result.idlePointerStressMs.toFixed(2)} ms, 2,000 insertion calls ${result.insertionPointerStressMs.toFixed(2)} ms`
