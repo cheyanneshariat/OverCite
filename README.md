@@ -21,7 +21,7 @@
   <p>
     <img alt="Chrome users" src="https://img.shields.io/chrome-web-store/users/hmjojciemhnfkjnilakhehkgkhkplbdo?label=Chrome%20users&amp;color=34A853&amp;style=for-the-badge">
     <img alt="Firefox users" src="https://img.shields.io/amo/users/overcite?label=Firefox%20users&amp;color=FF7139&amp;style=for-the-badge">
-    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-125-007ACC?style=for-the-badge">
+    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-126-007ACC?style=for-the-badge">
   </p>
 
   <h3>
