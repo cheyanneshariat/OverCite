@@ -41,7 +41,7 @@
 
 ### Using OverCite in a paper?
 
-If OverCite helped with your manuscript, please acknowledge it with:
+If OverCite helped with your manuscript, consider acknowledging it with:
 
 ```tex
 This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citation tool for \LaTeX.
