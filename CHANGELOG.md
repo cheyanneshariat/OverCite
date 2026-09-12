@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### Browser 0.4.8 / VS Code 0.4.6 maintenance candidate
+## 0.4.8 (Chrome and Firefox) / 0.4.6 (VS Code) — 2026-09-12
 
 - Default unconfigured non-empty lookups to Simple Search; preserve explicit preferences. Empty citations remain contextual.
 - Label Context Beta experimental; common author-year names and ambiguous prose can return incorrect or missing papers.

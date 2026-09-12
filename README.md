@@ -280,8 +280,7 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Context Beta notes: [v0.4.3 performance update](docs/releases/v0.4.3-beta.md), [v0.4.2 browser responsiveness](docs/releases/v0.4.2-beta.md), [v0.4.1 hardening update](docs/releases/v0.4.1-beta.md), and [v0.4.0 initial beta](docs/releases/v0.4.0-beta.md)
-- Previous release notes: [browser v0.3.12 / VS Code v0.3.7](docs/releases/v0.3.12.md)
+- Release notes: [browser v0.4.8 / VS Code v0.4.6](docs/releases/v0.4.8.md)
 - TeXstudio setup: [texstudio/README.md](texstudio/README.md)
 - TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)
