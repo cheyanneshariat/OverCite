@@ -1,12 +1,101 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { findCitationAtCursor as findCoreCitation } from "../src/core/citation.js";
 
 const contentScriptUrl = new URL("../src/content-script.js", import.meta.url);
+
+test("popup footer keeps its insertion instruction concise", async () => {
+  const source = await readContentScript();
+  assert.ok(source.includes('footerText = "Select a paper to insert its citation."'));
+  assert.ok(!source.includes("Pick a paper to rewrite the cite key and update your bibliography."));
+});
 
 async function readContentScript() {
   return readFile(contentScriptUrl, "utf8");
 }
+
+test("packaged content parser uses the same automatic context as shared core", async () => {
+  const source = await readContentScript();
+  const parser = source.slice(source.indexOf("  function findBraceClose("), source.indexOf("  const REQUEST_EVENT"));
+  const findBrowserCitation = new Function(`${parser}\nreturn findCitationAtCursor;`)();
+  const sentence = String.raw`Subtle differences between device size and configurations can influence how people approach tasks and interact with virtual models \citep{Wells2022}`;
+  const cases = [
+    sentence,
+    String.raw`\newcommand{\stellar}{Astronomy macros}
+${sentence}
+\title{Triple star systems}
+\author{Astronomer}
+\affiliation{Department of Astronomy}
+\begin{document}
+Unrelated neutron stars.`,
+    String.raw`\section{Computer Science}
+${sentence}% Ground truth hidden in a comment: astronomy galaxies
+
+\section{Astronomy}
+Unrelated stars.`,
+    String.raw`Methods use 0.5 arcsec, e.g. nearby sources. This sentence cites \citep [e.g.] [Sec. 2] {Wells2022} and continues after the citation.`,
+    String.raw`An empty citation about mobile interfaces \citep{} needs context.`
+  ];
+  for (const text of cases) {
+    const token = text.includes("Wells2022") ? "Wells2022" : "}";
+    const cursor = token === "}" ? text.indexOf("\\citep{") + 7 : text.indexOf(token) + 2;
+    const browser = findBrowserCitation(text, cursor, 1200);
+    const core = findCoreCitation(text, cursor, 200);
+    assert.ok(browser && core);
+    for (const key of ["token", "tokenStart", "tokenEnd", "contextText", "sentenceText", "citationPrefixText", "citationSuffixText"]) {
+      assert.deepEqual(browser[key], core[key], key);
+    }
+  }
+  const standalone = findBrowserCitation(sentence, sentence.indexOf("Wells2022") + 2);
+  const template = findBrowserCitation(cases[1], cases[1].indexOf("Wells2022") + 2);
+  assert.equal(template.contextText, standalone.contextText);
+  assert.doesNotMatch(template.contextText, /Astronomy|Triple|neutron/);
+});
+
+test("contextual previews stay off-screen and ranked results publish only once", async () => {
+  const source = await readContentScript();
+  const state = { requestId: "current", lookupGeneration: 7, citationContext: { command: "citep", token: "Wells2022" }, settings: {}, searchMode: "contextual" };
+  let renders = 0;
+  const args = ["message", "overlayState", "insertionInProgress", "activeSearchRequestId", "isCurrentLookup", "renderOverlay", "buildSearchModeActions"];
+  const progress = new Function(...args, extractFunctionBody(source, "receiveSearchProgress"));
+  const ready = new Function(...args, extractFunctionBody(source, "receiveSearchReady"));
+  const invoke = (fn, message) => fn(message, state, false, "current", (generation) => generation === 7, () => { renders++; }, () => []);
+  invoke(progress, { requestId: "current", revision: 1, results: [{ title: "Weak preview" }] });
+  assert.equal(renders, 0);
+  assert.equal(state.previewResults[0].title, "Weak preview");
+  invoke(ready, { requestId: "old", results: [{ title: "Stale" }] });
+  assert.equal(renders, 0);
+  invoke(ready, { requestId: "current", results: [{ title: "Correct paper" }] });
+  invoke(ready, { requestId: "current", results: [{ title: "Late reorder" }] });
+  assert.equal(renders, 1);
+  assert.equal(state.results[0].title, "Correct paper");
+  assert.doesNotMatch(source, /Show refined results|ezcite-footer-refinement/);
+});
+
+test("popup settings and abstract controls are independent of paper selection", async () => {
+  const source = await readContentScript();
+  const render = extractFunctionBody(source, "renderOverlay");
+  assert.match(source, /aria-label="Open OverCite settings"/);
+  assert.match(source, /ezcite-settings"\)\.addEventListener\("click", openOverCiteOptions\)/);
+  assert.match(render, /createTextElement\("details", "ezcite-abstract-details"/);
+  assert.match(render, /card\.appendChild\(abstractWrap\)/);
+  assert.doesNotMatch(render, /button\.appendChild\(abstractWrap\)/);
+  assert.doesNotMatch(render, /innerHTML/);
+});
+
+test("settings and source edits invalidate stale results without reading editor DOM text", async () => {
+  const source = await readContentScript();
+  const hooks = extractFunctionBody(source, "installRuntimeHooks");
+  const invalidate = extractFunctionBody(source, "invalidateDisplayedSearch");
+  assert.match(hooks, /storage\?\.onChanged/);
+  assert.match(hooks, /ezcite:settingsChanged/);
+  assert.match(invalidate, /cancelActiveSearch\(\)/);
+  assert.match(invalidate, /activeLookupGeneration \+= 1/);
+  assert.match(invalidate, /overlayState = null/);
+  assert.doesNotMatch(invalidate, /textContent|innerText|getEditorState/);
+  assert.match(extractFunctionBody(source, "selectCandidate"), /isCurrentLookup\(state.lookupGeneration\)/);
+});
 
 function extractFunctionBody(source, functionName) {
   const asyncMarker = `  async function ${functionName}`;
@@ -89,6 +178,51 @@ test("content-script final source rewrite only runs when the final key changes",
   assert.match(insertBody, /const needsManualSourceUpdate = insertion\.finalKey !== optimisticKey/);
   assert.match(insertBody, /if \(needsManualSourceUpdate && sourceReadyForFinalRewrite\)/);
   assert.match(insertBody, /expectedDocument: expectedOptimisticSourceDocument/);
+  assert.match(insertBody, /source:final-write-late-ack/);
+  assert.match(insertBody, /editorAlreadyHasText\(\{/);
+});
+
+test("content-script targets source and bibliography before applying the return-to-editor preference", async () => {
+  const source = await readContentScript();
+  const insertBody = extractFunctionBody(source, "insertCandidateWithState");
+  const optimisticWriteIndex = insertBody.indexOf('pageRequest("replaceRange"');
+  const bibliographyWriteIndex = insertBody.indexOf('pageRequest("replaceDocument"');
+  const returnPreferenceIndex = insertBody.indexOf("const shouldReturnToSource");
+
+  assert.ok(optimisticWriteIndex >= 0, "missing source cite-key write");
+  assert.ok(bibliographyWriteIndex > optimisticWriteIndex, "bibliography write should follow source write");
+  assert.ok(returnPreferenceIndex > bibliographyWriteIndex, "return preference must only control final focus");
+});
+
+test("content-script scans every selected tab and uses exact filename comparisons", async () => {
+  const source = await readContentScript();
+  const readActiveFileNameBody = extractFunctionBody(source, "readActiveFileName");
+  const matchesFileNameBody = extractFunctionBody(source, "matchesFileName");
+  const openProjectFileBody = extractFunctionBody(source, "openProjectFile");
+
+  assert.match(readActiveFileNameBody, /document\.querySelectorAll\(selector\)/);
+  assert.doesNotMatch(readActiveFileNameBody, /ol-cm-toolbar-wrapper|cm-panels-top/);
+  assert.match(matchesFileNameBody, /endsWith\(`\/\$\{target\}`\)/);
+  assert.doesNotMatch(matchesFileNameBody, /\.includes\(/);
+  assert.match(openProjectFileBody, /Math\.min\(Date\.now\(\) \+ 5500, requestedDeadlineAt\)/);
+  assert.match(openProjectFileBody, /waitForTargetEditorState/);
+  assert.match(openProjectFileBody, /deadlineAt - Date\.now\(\)/);
+  assert.match(openProjectFileBody, /isProjectFileActive\([\s\S]*requireEditorTransition \? editorStateBeforeClick : null/);
+  assert.doesNotMatch(openProjectFileBody, /if \(matchesFileName\(activeTabName, fileName\)\)/);
+});
+
+test("content-script shares one deadline across source recovery candidates", async () => {
+  const source = await readContentScript();
+  const insertBody = extractFunctionBody(source, "insertCandidateWithState");
+  const tabRecoveryBody = extractFunctionBody(source, "openSourceTabByContent");
+  const projectRecoveryBody = extractFunctionBody(source, "openSourceFileByProjectScan");
+
+  assert.match(insertBody, /const sourceRecoveryDeadlineAt = Date\.now\(\) \+ 7000/);
+  assert.match(insertBody, /deadlineAt: sourceRecoveryDeadlineAt/);
+  assert.match(tabRecoveryBody, /Date\.now\(\) >= deadlineAt/);
+  assert.doesNotMatch(tabRecoveryBody, /3500/);
+  assert.match(projectRecoveryBody, /Date\.now\(\) >= deadlineAt/);
+  assert.match(projectRecoveryBody, /openProjectFile\(fileName, \{ preferTabsOnly: false, deadlineAt \}\)/);
 });
 
 test("content-script reopens source for final-key reconciliation even when final focus stays in bib", async () => {
@@ -107,6 +241,8 @@ test("content-script reopens source for final-key reconciliation even when final
 
 test("content-script honors user file navigation during optional return-to-source", async () => {
   const source = await readContentScript();
+  const recordNavigationBody = extractFunctionBody(source, "recordUserFileNavigation");
+  const extractNavigationBody = extractFunctionBody(source, "extractFileNameFromUserTarget");
   const insertBody = extractFunctionBody(source, "insertCandidateWithState");
   const openProjectFileBody = extractFunctionBody(source, "openProjectFile");
 
@@ -114,7 +250,17 @@ test("content-script honors user file navigation during optional return-to-sourc
   assert.match(source, /let lastUserFileNavigation = null/);
   assert.match(source, /function installUserFileNavigationTracking\(\)/);
   assert.match(source, /event\.isTrusted/);
+  assert.match(recordNavigationBody, /!insertionInProgress/);
   assert.match(source, /target\.closest\("#ezcite-root"\)/);
+  assert.ok(
+    recordNavigationBody.indexOf("!insertionInProgress") < recordNavigationBody.indexOf("event.target"),
+    "idle pointer events must return before inspecting their DOM target"
+  );
+  assert.match(extractNavigationBody, /target\.closest\(/);
+  assert.match(extractNavigationBody, /\[role='treeitem'\]/);
+  assert.match(extractNavigationBody, /\[role='tab'\]/);
+  assert.doesNotMatch(extractNavigationBody, /parentElement|while \(/);
+  assert.doesNotMatch(source, /function isLikelyUserFileNavigationElement\(/);
   assert.match(source, /function getUserFileNavigationAfter\(serial\)/);
   assert.match(source, /if \(serial == null\) \{\s*return null;\s*\}/s);
   assert.match(source, /function hasUserFileNavigationAwayAfter\(serial, targetFileName\)/);
@@ -172,13 +318,37 @@ test("content-script closes the popup before return-to-source background work", 
   assert.match(insertBody, /if \(!shouldReturnToSource\) \{\s*toast\(/s);
 });
 
+test("content-script requests the acknowledgment reminder only after a completed insertion", async () => {
+  const source = await readContentScript();
+  const insertBody = extractFunctionBody(source, "insertCandidateWithState");
+  const reminderBody = extractFunctionBody(source, "maybeShowAcknowledgmentReminder");
+  const finalFinishIndex = insertBody.lastIndexOf("diagnostics.finish");
+  const reminderIndex = insertBody.lastIndexOf("void maybeShowAcknowledgmentReminder()");
+
+  assert.ok(finalFinishIndex >= 0, "missing completed-insertion marker");
+  assert.ok(reminderIndex > finalFinishIndex, "reminder must follow completed insertion");
+  assert.match(reminderBody, /CLAIM_ACKNOWLEDGMENT_REMINDER/);
+  assert.match(reminderBody, /if \(!reminder\?\.show\)/);
+  assert.match(reminderBody, /Copy acknowledgment/);
+  assert.match(reminderBody, /Remind me later/);
+  assert.match(reminderBody, /Never remind me/);
+  assert.match(reminderBody, /DISABLE_ACKNOWLEDGMENT_REMINDER/);
+  assert.match(reminderBody, /layout: "card"/);
+  assert.doesNotMatch(reminderBody, /dismissible: true/);
+  assert.match(reminderBody, /durationMs: 20000/);
+  assert.match(source, /function copyTextToClipboard\(text\)/);
+  assert.match(source, /#ezcite-toast\.card \{[\s\S]*?right: 20px;[\s\S]*?width: min\(400px/);
+  assert.match(source, /\.ezcite-toast-actions \{/);
+});
+
 test("content-script removes overlay DOM on close", async () => {
   const source = await readContentScript();
 
   assert.match(
     source,
-    /function closeOverlay\(\) \{\s*activeLookupGeneration \+= 1;\s*if \(overlay\) \{\s*overlay\.remove\(\);\s*overlay = null;\s*\}\s*overlayState = null;\s*\}/s
+    /function closeOverlay\(\) \{[\s\S]*overlay\.remove\(\);\s*overlay = null;[\s\S]*overlayState = null;\s*\}/
   );
+  assert.match(source, /pendingSubjectAreaPrompt\.resolve\(null\)/);
 });
 
 test("content-script replaces lookup failures with retryable error UI", async () => {
@@ -190,7 +360,7 @@ test("content-script replaces lookup failures with retryable error UI", async ()
   assert.match(startLookupBody, /try \{\s*results = await callRuntime\(\{/s);
   assert.match(startLookupBody, /type: MESSAGE_TYPES\.SEARCH_ADS/);
   assert.match(startLookupBody, /catch \(error\) \{/);
-  assert.match(startLookupBody, /renderOverlay\(\{\s*subtitle: `\$\{citationContext\.command\}\{\$\{citationContext\.token \|\| "\.\.\."\}\}`,[\s\S]*error: true,[\s\S]*actions: buildLookupErrorActions\(citationContext, resolvedSearchMode\)[\s\S]*\}\);/);
+  assert.match(startLookupBody, /renderOverlay\(\{\s*subtitle: `\$\{citationContext\.command\}\{\$\{citationContext\.token \|\| "\.\.\."\}\}`,[\s\S]*error: true,[\s\S]*actions: buildLookupErrorActions\(citationContext, resolvedSearchMode, error\)[\s\S]*\}\);/);
   assert.match(startLookupBody, /toast\(error\.message \|\| "OverCite could not complete this lookup\.", "error", \{ durationMs: 5200 \}\)/);
   assert.match(startLookupBody, /return;/);
   assert.match(errorActionsBody, /label: "Try again"/);
@@ -199,12 +369,50 @@ test("content-script replaces lookup failures with retryable error UI", async ()
   assert.match(errorActionsBody, /\.\.\.buildSearchModeActions\(citationContext, searchMode\)/);
 });
 
-test("content-script tells users to refresh Overleaf after background worker timeouts", async () => {
+test("content-script uses operation-specific background deadlines and search guidance", async () => {
   const source = await readContentScript();
   const callRuntimeBody = extractFunctionBody(source, "callRuntime");
+  const timeoutBody = extractFunctionBody(source, "runtimeTimeoutForMessage");
+  const messageBody = extractFunctionBody(source, "runtimeTimeoutMessage");
 
-  assert.match(callRuntimeBody, /Timed out waiting for the OverCite background worker/);
-  assert.match(callRuntimeBody, /Refresh the Overleaf page and try again/);
+  assert.match(callRuntimeBody, /runtimeTimeoutForMessage\(message\?\.type\)/);
+  assert.match(callRuntimeBody, /runtimeTimeoutMessage\(message\?\.type\)/);
+  assert.match(timeoutBody, /MESSAGE_TYPES\.SEARCH_ADS/);
+  assert.match(timeoutBody, /40000/);
+  assert.match(timeoutBody, /MESSAGE_TYPES\.EXPORT_BIBTEX/);
+  assert.match(messageBody, /literature search took too long/i);
+  assert.match(messageBody, /use Simple search/i);
+  assert.doesNotMatch(messageBody, /background worker/i);
+});
+
+test("content-script keeps empty-token lookups contextual with a Simple default", async () => {
+  const source = await readContentScript();
+  const startLookupBody = extractFunctionBody(source, "startLookup");
+  const normalizeBody = extractFunctionBody(source, "normalizeSearchMode");
+
+  assert.match(startLookupBody, /resolvedSearchMode !== "contextual" && !citationContext\.token\.trim\(\)/);
+  assert.match(startLookupBody, /resolvedSearchMode = "contextual"/);
+  assert.match(normalizeBody, /return "simple"/);
+});
+
+test("content-script verifies manual file continuation and bounds bibliography confirmation", async () => {
+  const source = await readContentScript();
+  const manualBody = extractFunctionBody(source, "waitForManualFileSwitch");
+  const confirmationBody = extractFunctionBody(source, "getConfirmedBibEditorState");
+  const targetWaitBody = extractFunctionBody(source, "waitForTargetEditorState");
+  const targetMatchBody = extractFunctionBody(source, "editorStateMatchesTarget");
+
+  assert.match(manualBody, /getEditorStateWithRetry\(2, 120, 1200\)/);
+  assert.match(manualBody, /allowUnknownFileName: true/);
+  assert.match(manualBody, /return waitForContinue/);
+  assert.match(manualBody, /does not appear to be/);
+  assert.match(confirmationBody, /waitForTargetEditorState/);
+  assert.doesNotMatch(confirmationBody, /openProjectFile|ensureProjectFileActive/);
+  assert.match(targetWaitBody, /Date\.now\(\) - startedAt < timeoutMs/);
+  assert.match(targetWaitBody, /getEditorStateWithRetry\(1, 0, Math\.min\(900, remainingMs\), previousRead\)/);
+  assert.match(targetWaitBody, /previousRead = state/);
+  assert.match(targetMatchBody, /if \(!options\.allowUnknownFileName\)/);
+  assert.match(targetMatchBody, /return false/);
 });
 
 test("content-script uses a short non-blocking success notice after insertion", async () => {

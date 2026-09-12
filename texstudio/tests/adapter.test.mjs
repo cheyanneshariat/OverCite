@@ -143,6 +143,17 @@ test("explicit raw query mode rejects empty citation tokens", async () => {
   );
 });
 
+test("simple default keeps empty citations contextual", async () => {
+  const activeText = "\\bibliography{refs}\nContext-only target \\citep{}.";
+  const projectDir = await makeProject({ "main.tex": activeText, "refs.bib": "" });
+  const response = await resolveTexstudioRequest({
+    activeFilePath: path.join(projectDir, "main.tex"), activeText, projectDir,
+    cursorIndex: activeText.indexOf("\\citep{}") + "\\citep{".length,
+    settings: { sourceProfile: "general", primarySource: "crossref", fallbackSources: [], defaultSearchMode: "simple" }
+  }, { fetchImpl: async () => crossrefSearchResponse() });
+  assert.equal(response.searchMode, "contextual");
+});
+
 test("resolveTexstudioRequest supports non-ADS direct DOI lookup", async () => {
   const doi = "10.1038/s41586-021-03819-2";
   const projectDir = await makeProject({

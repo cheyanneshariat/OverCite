@@ -358,6 +358,88 @@ test("applyBibInsertion can insert new entries alphabetically by key", () => {
   });
 });
 
+test("applyBibInsertion defaults to alphabetical insertion when no mode is supplied", () => {
+  const result = applyBibInsertion({
+    bibText: `@ARTICLE{Aaa20_demo,\n  title = {Alpha Demo}\n}\n\n@ARTICLE{Zzz30_demo,\n  title = {Zulu Demo}\n}\n`,
+    bibtex: `@ARTICLE{2021ApJ...922...47R,\n  title = {The Chandra Survey of M51}\n}`,
+    candidate: {
+      title: "The Chandra Survey of M51",
+      authors: ["Rice, Thomas S."],
+      year: 2021,
+      keyMode: "authoryear"
+    }
+  });
+
+  assert.ok(result.updatedBibText.indexOf("Aaa20_demo") < result.updatedBibText.indexOf("Rice2021"));
+  assert.ok(result.updatedBibText.indexOf("Rice2021") < result.updatedBibText.indexOf("Zzz30_demo"));
+});
+
+test("alphabetical insertion ignores percent-commented fake entries without uncommenting them", () => {
+  const comment = "% historical @article{Commented, title={not a real entry}}";
+  const bibText = `${comment}\n@article{Zzz30_demo,\n  title = {Zulu Demo}\n}\n`;
+  const updated = insertBibtexEntryAlphabetically(
+    bibText,
+    "@article{Aaa20_demo,\n  title = {Alpha Demo}\n}",
+    "Aaa20_demo"
+  );
+
+  assert.equal(parseBibEntries(bibText).length, 1);
+  assert.equal(updated.slice(0, comment.length), comment);
+  assert.equal(updated.match(/@article\{Commented/g)?.length, 1);
+  assert.ok(updated.indexOf("Aaa20_demo") < updated.indexOf("Zzz30_demo"));
+});
+
+test("alphabetical insertion preserves and ignores BibTeX control entries", () => {
+  const controls = `@string{journal = "Demo Journal"}\n@preamble{"Generated " # journal}\n@comment{Keep @article{Nested, value={x, y}} here}\n`;
+  const bibText = `${controls}@article{Zzz30_demo,\n  title = journal\n}\n`;
+  const updated = insertBibtexEntryAlphabetically(
+    bibText,
+    "@article{Middle2025,\n  title = {Middle Demo}\n}",
+    "Middle2025"
+  );
+
+  assert.deepEqual(parseBibEntries(bibText).map((entry) => entry.key), ["Zzz30_demo"]);
+  assert.ok(updated.startsWith(controls.trimEnd()));
+  assert.ok(updated.indexOf("Middle2025") < updated.indexOf("Zzz30_demo"));
+});
+
+test("alphabetical insertion supports parenthesized entries with nested values and quoted commas", () => {
+  const bibText = `@article(Zzz30_demo,\n  title = {Zulu {Nested} Demo},\n  note = "one, two"\n)\n`;
+  const updated = insertBibtexEntryAlphabetically(
+    bibText,
+    "@article{Middle2025,\n  title = {Middle Demo}\n}",
+    "Middle2025"
+  );
+
+  assert.deepEqual(parseBibEntries(bibText).map((entry) => entry.key), ["Zzz30_demo"]);
+  assert.ok(updated.indexOf("Middle2025") < updated.indexOf("Zzz30_demo"));
+});
+
+test("alphabetical insertion falls back to append without dropping malformed input", () => {
+  const bibText = "@article{Broken,\n  title = {Unclosed outer entry}\n";
+  const updated = insertBibtexEntryAlphabetically(
+    bibText,
+    "@article{Safe2025,\n  title = {Safe Demo}\n}",
+    "Safe2025"
+  );
+
+  assert.ok(updated.startsWith(bibText.trimEnd()));
+  assert.ok(updated.indexOf("Safe2025") > bibText.length);
+});
+
+test("alphabetical insertion preserves CRLF line endings", () => {
+  const bibText = "@article{Aaa20_demo,\r\n  title = {Alpha Demo}\r\n}\r\n\r\n@article{Zzz30_demo,\r\n  title = {Zulu Demo}\r\n}\r\n";
+  const updated = insertBibtexEntryAlphabetically(
+    bibText,
+    "@article{Middle2025,\n  title = {Middle Demo}\n}",
+    "Middle2025"
+  );
+
+  assert.doesNotMatch(updated, /(^|[^\r])\n/);
+  assert.ok(updated.indexOf("Aaa20_demo") < updated.indexOf("Middle2025"));
+  assert.ok(updated.indexOf("Middle2025") < updated.indexOf("Zzz30_demo"));
+});
+
 test("applyBibInsertion append mode anchors the cursor at the end of the inserted entry", () => {
   const bibText = `
 @ARTICLE{Existing24_demo,

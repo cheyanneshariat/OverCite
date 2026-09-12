@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { findCitationAtCursor, parseCitationKeyHint } from "../src/core/citation.js";
+import {
+  extractContextualContext,
+  findCitationAtCursor,
+  isOpaqueCitationKey,
+  normalizeContextualCitationContext,
+  parseCitationKeyHint
+} from "../src/core/citation.js";
 
 test("findCitationAtCursor resolves the active token inside a multi-citation command", () => {
   const source = "Here is text \\citep{Goldberg24, Shariat25, Joyce20} and more.";
@@ -11,6 +17,16 @@ test("findCitationAtCursor resolves the active token inside a multi-citation com
   assert.equal(result.command, "\\citep");
   assert.equal(result.token, "Shariat25");
   assert.deepEqual(result.tokens, ["Goldberg24", "Shariat25", "Joyce20"]);
+});
+
+test("findCitationAtCursor supports common BibLaTeX citation commands", () => {
+  for (const command of ["parencite", "textcite", "autocite", "footcite", "smartcite"]) {
+    const source = `Contextual claim \\${command}[see][p. 2]{Shariat2025}.`;
+    const result = findCitationAtCursor(source, source.indexOf("Shariat2025") + 3, 500);
+    assert.ok(result, command);
+    assert.equal(result.command, `\\${command}[see][p. 2]`);
+    assert.equal(result.token, "Shariat2025");
+  }
 });
 
 test("findCitationAtCursor preserves literal ADS query tokens with spaces and quotes", () => {
@@ -44,6 +60,20 @@ test("parseCitationKeyHint understands 2-digit and 4-digit year keys", () => {
   assert.equal(longYear.year, 2025);
 });
 
+test("Context Beta treats XML numeric reference IDs as opaque", () => {
+  for (const token of ["b0005", "r41", "cpz1733-bib-0007", "bibr24-02601060251395426"]) {
+    assert.equal(isOpaqueCitationKey(token), true, token);
+    const context = normalizeContextualCitationContext({
+      token,
+      searchMode: "contextual",
+      parsedKeyHint: parseCitationKeyHint(token)
+    }, "beta");
+    assert.equal(context.token, "");
+    assert.equal(context.parsedKeyHint, null);
+  }
+  assert.equal(isOpaqueCitationKey("B2025"), false);
+});
+
 test("parseCitationKeyHint understands underscore and colon author-year keys", () => {
   const underscore = parseCitationKeyHint("Shariat_2025");
   const colon = parseCitationKeyHint("Shariat:2025");
@@ -62,6 +92,14 @@ test("parseCitationKeyHint normalizes diacritics in author-year keys", () => {
   assert.equal(accented.year, 1998);
   assert.equal(plain.surname, "Hunsch");
   assert.equal(plain.year, 1998);
+});
+
+test("parseCitationKeyHint folds common Latin letters that NFKD leaves intact", () => {
+  assert.deepEqual(parseCitationKeyHint("Łukaszewicz2020"), {
+    ...parseCitationKeyHint("Lukaszewicz2020"),
+    raw: "Łukaszewicz2020"
+  });
+  assert.equal(parseCitationKeyHint("Østergaard2021").surname, "Ostergaard");
 });
 
 test("parseCitationKeyHint can extract an optional first initial before or after the surname", () => {
@@ -114,8 +152,60 @@ test("findCitationAtCursor removes the active cite token from sentence and conte
   const result = findCitationAtCursor(source, cursorIndex, 500);
   assert.ok(result);
   assert.equal(result.sentenceText, "People find that magnetic braking saturates .");
+  assert.equal(result.citationPrefixText, "People find that magnetic braking saturates");
+  assert.equal(result.citationSuffixText, ".");
   assert.ok(!result.sentenceText.includes("Badry"));
   assert.ok(!result.contextText.includes("Badry"));
+});
+
+test("findCitationAtCursor keeps citation-proximal context intact across decimals and abbreviations", () => {
+  const source = "Earlier work discusses unrelated stellar populations. The median mass is 1.27 solar masses, e.g. for compact binaries governed by magnetic braking \\citep{ElBadry2024}. The next sentence is unrelated.";
+  const cursorIndex = source.indexOf("ElBadry2024") + 4;
+  const result = findCitationAtCursor(source, cursorIndex, 500);
+
+  assert.ok(result);
+  assert.match(result.citationPrefixText, /1\.27 solar masses, e\.g\. for compact binaries governed by magnetic braking$/);
+  assert.equal(result.citationSuffixText, ". The next sentence is unrelated.");
+});
+
+test("contextual extraction is sentence-bounded and independent of the context window setting", () => {
+  const source = "The first mobile-device study established the baseline. A second study used 1.27 measurements, e.g. from compact binaries. The method transfers to mobile devices \\citep [see] [p.~2] { Wells2022 } and remains useful after the citation. The next sentence is unrelated.";
+  const cursorIndex = source.indexOf("Wells2022") + 3;
+  const result = findCitationAtCursor(source, cursorIndex, 200);
+  const wideResult = findCitationAtCursor(source, cursorIndex, 1200);
+
+  assert.ok(result);
+  assert.equal(result.contextText, wideResult.contextText);
+  assert.equal(result.sentenceText, "The method transfers to mobile devices and remains useful after the citation.");
+  assert.match(result.contextText, /The first mobile-device study established the baseline\./);
+  assert.match(result.contextText, /A second study used 1\.27 measurements, e\.g\. from compact binaries\./);
+  assert.doesNotMatch(result.contextText, /The next sentence is unrelated/);
+  assert.equal(extractContextualContext("A. Previous. Current sentence.", "A. Previous. Current sentence.".indexOf("Current") + 2), "A. Previous. Current sentence.");
+});
+
+test("contextual extraction excludes LaTeX title metadata, comments, and later sections", () => {
+  const source = [
+    "% A commented title must not become query evidence.",
+    "\\documentclass{article}",
+    "\\newcommand{\\mobileterm}[1]{",
+    "  metadata macro body must not become query evidence.",
+    "}",
+    "\\title{Astronomy title about mobile devices}",
+    "\\author{Astronomy Author}",
+    "\\affiliation{Astronomy Institute}",
+    "Prior body sentence about stars. The mobile devices method \\citep { Wells2022 } works in practice.",
+    "\\begin{document}",
+    "\\section{Unrelated section}",
+    "Later section content should not leak into the cited context."
+  ].join("\n");
+  const result = findCitationAtCursor(source, source.indexOf("Wells2022") + 2, 500);
+
+  assert.ok(result);
+  assert.equal(result.sentenceText, "The mobile devices method works in practice.");
+  assert.match(result.contextText, /Prior body sentence about stars\./);
+  assert.doesNotMatch(result.contextText, /Astronomy title|Astronomy Author|Astronomy Institute|commented title|metadata macro body|Later section/);
+  assert.doesNotMatch(result.citationPrefixText, /Astronomy title|Astronomy Author|Astronomy Institute|commented title/);
+  assert.doesNotMatch(result.citationSuffixText, /Later section/);
 });
 
 test("findCitationAtCursor returns null outside a cite command", () => {

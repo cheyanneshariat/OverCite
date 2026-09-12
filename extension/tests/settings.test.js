@@ -2,7 +2,46 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { getSettings, getStorageArea, normalizeSettings, saveSettings } from "../src/core/settings.js";
+import { getSettings, getStorageArea, normalizeSettings, optionalOriginsForSettings, saveSettings } from "../src/core/settings.js";
+
+test("subject area is unconfigured by default and persists only after selection", () => {
+  assert.equal(normalizeSettings({}).subjectAreaConfigured, false);
+  assert.equal(normalizeSettings({ subjectAreaConfigured: true, sourceProfile: "physics" }).subjectAreaConfigured, true);
+  assert.equal(normalizeSettings({ subjectAreaConfigured: "false", sourceProfile: "astrophysics" }).subjectAreaConfigured, false);
+});
+
+test("subject presets request exactly their optional browser origins", () => {
+  assert.deepEqual(optionalOriginsForSettings(normalizeSettings({ sourceProfile: "astrophysics" })), [
+    "https://export.arxiv.org/*"
+  ]);
+  assert.deepEqual(optionalOriginsForSettings(normalizeSettings({ sourceProfile: "computer-science" })), [
+    "https://api.crossref.org/*",
+    "https://export.arxiv.org/*"
+  ]);
+  assert.deepEqual(optionalOriginsForSettings(normalizeSettings({ sourceProfile: "life-sciences" })), [
+    "https://api.crossref.org/*",
+    "https://eutils.ncbi.nlm.nih.gov/*"
+  ]);
+});
+
+test("browser onboarding blocks lookup until an explicit subject choice is saved", async () => {
+  const contentScript = await readFile(new URL("../src/content-script.js", import.meta.url), "utf8");
+  const backgroundScript = await readFile(new URL("../src/background.js", import.meta.url), "utf8");
+  const startLookup = contentScript.slice(contentScript.indexOf("async function startLookup"), contentScript.indexOf("async function ensureSubjectAreaSelected"));
+  assert.ok(startLookup.indexOf("ensureSubjectAreaSelected") < startLookup.indexOf("getEditorStateWithRetry"));
+  assert.match(contentScript, /Select the field that best matches your work\. OverCite will ask only once\./);
+  assert.match(contentScript, /subjectAreaConfigured: true/);
+  assert.match(contentScript, /REQUEST_SOURCE_PERMISSIONS/);
+  assert.match(contentScript, /pendingSubjectAreaPrompt\.resolve\(null\)/);
+  assert.match(contentScript, /choice\.profile === "astrophysics" && !hasAdsToken\(savedSettings\)/);
+  assert.match(contentScript, /type: MESSAGE_TYPES\.OPEN_OPTIONS/);
+  assert.match(contentScript, /label: "Open settings"/);
+  assert.match(contentScript, /if \(isMissingAdsTokenError\(error\)\)/);
+  assert.match(backgroundScript, /case MESSAGE_TYPES\.OPEN_OPTIONS:\s*return extensionApi\.runtime\.openOptionsPage\(\)/);
+  for (const profile of ["general", "physics", "computer-science", "math", "life-sciences", "chemistry", "astrophysics"]) {
+    assert.match(contentScript, new RegExp(`profile: "${profile}"`));
+  }
+});
 
 test("normalizeSettings accepts valid theme modes and defaults invalid ones to auto", () => {
   assert.equal(normalizeSettings({ themeMode: "dark" }).themeMode, "dark");
@@ -11,10 +50,10 @@ test("normalizeSettings accepts valid theme modes and defaults invalid ones to a
   assert.equal(normalizeSettings({ themeMode: "midnight" }).themeMode, "auto");
 });
 
-test("normalizeSettings defaults to staying on the bibliography tab after insert", () => {
-  assert.equal(normalizeSettings({}).returnToSourceAfterInsert, false);
+test("normalizeSettings defaults to returning to the source file after insert", () => {
+  assert.equal(normalizeSettings({}).returnToSourceAfterInsert, true);
   assert.equal(normalizeSettings({ returnToSourceAfterInsert: false }).returnToSourceAfterInsert, false);
-  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "not-a-boolean" }).returnToSourceAfterInsert, false);
+  assert.equal(normalizeSettings({ returnToSourceAfterInsert: "not-a-boolean" }).returnToSourceAfterInsert, true);
 });
 
 test("normalizeSettings can return to the source file after browser bibliography insert", () => {
@@ -30,9 +69,31 @@ test("options page exposes the source-return browser setting", async () => {
 
   assert.match(optionsHtml, /id="return-to-source-after-insert"/);
   assert.match(optionsHtml, /name="returnToSourceAfterInsert"/);
+  assert.match(optionsHtml, /name="returnToSourceAfterInsert" type="checkbox" checked/);
   assert.match(optionsHtml, /Return to source file after insert/);
   assert.match(optionsJs, /returnToSourceAfterInsertInput\.checked = Boolean\(settings\.returnToSourceAfterInsert\)/);
   assert.match(optionsJs, /returnToSourceAfterInsert: returnToSourceAfterInsertInput\.checked/);
+  assert.match(optionsHtml, /Default: Simple search\./);
+  assert.doesNotMatch(optionsHtml, /New installs start with simple search/);
+});
+
+test("options page hides context-length tuning without dropping legacy stored values", async () => {
+  const optionsHtml = await readFile(new URL("../options.html", import.meta.url), "utf8");
+  const optionsJs = await readFile(new URL("../src/options.js", import.meta.url), "utf8");
+
+  assert.doesNotMatch(optionsHtml, /context-window-chars|contextWindowChars|Context window/);
+  assert.doesNotMatch(optionsJs, /contextInput/);
+  assert.match(optionsJs, /contextWindowChars: savedSettings\.contextWindowChars/);
+  assert.equal(normalizeSettings({ contextWindowChars: 650 }).contextWindowChars, 650);
+});
+
+test("browser settings provide API-key setup links without a long field summary", async () => {
+  const optionsHtml = await readFile(new URL("../options.html", import.meta.url), "utf8");
+  assert.match(optionsHtml, /How to get API keys/);
+  assert.doesNotMatch(optionsHtml, /Astronomy \/ Astrophysics requires an ADS\/SciX token/);
+  assert.match(optionsHtml, /https:\/\/ui\.adsabs\.harvard\.edu\/user\/settings\/token/);
+  assert.match(optionsHtml, /https:\/\/scixplorer\.org\/user\/settings\/token/);
+  assert.match(optionsHtml, /https:\/\/www\.ncbi\.nlm\.nih\.gov\/books\/NBK53593\//);
 });
 
 test("normalizeSettings accepts valid citation key modes and defaults invalid ones to author-year", () => {
@@ -45,17 +106,36 @@ test("normalizeSettings accepts valid citation key modes and defaults invalid on
   assert.equal(normalizeSettings({ citationKeyMode: "other" }).citationKeyMode, "authoryear");
 });
 
-test("normalizeSettings accepts valid bibliography insert modes and defaults invalid ones to append", () => {
+test("normalizeSettings accepts valid bibliography insert modes and defaults missing or invalid ones to alphabetical", () => {
+  assert.equal(normalizeSettings({}).bibliographyInsertMode, "alphabetical");
   assert.equal(normalizeSettings({ bibliographyInsertMode: "alphabetical" }).bibliographyInsertMode, "alphabetical");
   assert.equal(normalizeSettings({ bibliographyInsertMode: "append" }).bibliographyInsertMode, "append");
-  assert.equal(normalizeSettings({ bibliographyInsertMode: "other" }).bibliographyInsertMode, "append");
+  assert.equal(normalizeSettings({ bibliographyInsertMode: "other" }).bibliographyInsertMode, "alphabetical");
 });
 
-test("normalizeSettings accepts valid default search modes and defaults invalid ones to contextual", () => {
+test("normalizeSettings accepts valid default search modes and defaults invalid ones to simple", () => {
+  assert.equal(normalizeSettings({}).defaultSearchMode, "simple");
   assert.equal(normalizeSettings({ defaultSearchMode: "simple" }).defaultSearchMode, "simple");
   assert.equal(normalizeSettings({ defaultSearchMode: "direct" }).defaultSearchMode, "direct");
   assert.equal(normalizeSettings({ defaultSearchMode: "contextual" }).defaultSearchMode, "contextual");
-  assert.equal(normalizeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "contextual");
+  assert.equal(normalizeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "simple");
+});
+
+test("normalizeSettings defaults to Classic and preserves explicit Beta opt-in", () => {
+  assert.equal(normalizeSettings({}).contextualSearchEngine, "classic");
+  assert.equal(normalizeSettings({ contextualSearchEngine: "beta" }).contextualSearchEngine, "beta");
+  assert.equal(normalizeSettings({ contextualSearchEngine: "classic" }).contextualSearchEngine, "classic");
+  assert.equal(normalizeSettings({ contextualSearchEngine: "other" }).contextualSearchEngine, "classic");
+});
+
+test("options page exposes the Context Beta rollback without changing Simple search", async () => {
+  const optionsHtml = await readFile(new URL("../options.html", import.meta.url), "utf8");
+  const optionsJs = await readFile(new URL("../src/options.js", import.meta.url), "utf8");
+  assert.match(optionsHtml, /id="contextual-search-engine"/);
+  assert.match(optionsHtml, /Context Beta/);
+  assert.match(optionsHtml, /Classic/);
+  assert.match(optionsHtml, /Reranking stays on this device/);
+  assert.match(optionsJs, /contextualSearchEngine: contextualSearchEngineInput\.value/);
 });
 
 test("normalizeSettings accepts source profiles and defaults invalid ones to Astrophysics", () => {

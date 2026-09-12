@@ -1,11 +1,19 @@
 {
   "name": "overcite-extension",
-  "version": "0.3.4",
+  "version": "0.4.8",
   "private": true,
   "license": "CC-BY-NC-ND-4.0",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-browser-dists.mjs",
-    "test": "node --test"
+    "build:chrome-firefox": "node scripts/build-browser-dists.mjs --skip-safari",
+    "test": "node --test",
+    "test:contextual": "node --test tests/contextual-benchmark.test.js tests/citation.test.js tests/ads.test.js tests/background-timeout.test.js",
+    "benchmark:contextual-beta": "node ../scripts/benchmark-contextual-beta-performance.mjs",
+    "test:chrome": "node tests/chrome-overleaf-regression.mjs",
+    "test:firefox": "node tests/firefox-overleaf-regression.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
   }
 }

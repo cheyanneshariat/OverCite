@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { normalizeVsCodeSettings, workspaceKeyFromFolder } from "../src/config.js";
 
@@ -107,9 +108,33 @@ test("normalizeVsCodeSettings preserves the public ADS-only upgrade path", () =>
   assert.equal(settings.contextWindowChars, 650);
 });
 
+test("legacy context length remains readable but is no longer a user-facing setting", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(packageJson.contributes.configuration.properties["overcite.contextWindowChars"], undefined);
+  assert.equal(normalizeVsCodeSettings({ contextWindowChars: 650 }).contextWindowChars, 650);
+
+  const extensionSource = await readFile(new URL("../src/extension.js", import.meta.url), "utf8");
+  assert.doesNotMatch(extensionSource, /findCitationAtCursor\(sourceText, cursorOffset, settings\.contextWindowChars\)/);
+});
+
 test("normalizeVsCodeSettings accepts direct as a valid default search mode", () => {
   assert.equal(normalizeVsCodeSettings({ defaultSearchMode: "direct" }).defaultSearchMode, "direct");
   assert.equal(normalizeVsCodeSettings({ defaultSearchMode: "other" }).defaultSearchMode, "contextual");
+});
+
+test("normalizeVsCodeSettings defaults bibliography insertion to alphabetical and preserves append", () => {
+  assert.equal(normalizeVsCodeSettings({}).bibliographyInsertMode, "alphabetical");
+  assert.equal(normalizeVsCodeSettings({ bibliographyInsertMode: "other" }).bibliographyInsertMode, "alphabetical");
+  assert.equal(normalizeVsCodeSettings({ bibliographyInsertMode: "append" }).bibliographyInsertMode, "append");
+});
+
+test("normalizeVsCodeSettings defaults to Classic and preserves explicit Beta opt-in", () => {
+  assert.equal(normalizeVsCodeSettings({}).defaultSearchMode, "simple");
+  assert.equal(normalizeVsCodeSettings({ defaultSearchMode: "contextual" }).defaultSearchMode, "contextual");
+  assert.equal(normalizeVsCodeSettings({}).contextualSearchEngine, "classic");
+  assert.equal(normalizeVsCodeSettings({ contextualSearchEngine: "beta" }).contextualSearchEngine, "beta");
+  assert.equal(normalizeVsCodeSettings({ contextualSearchEngine: "classic" }).contextualSearchEngine, "classic");
+  assert.equal(normalizeVsCodeSettings({ contextualSearchEngine: "other" }).contextualSearchEngine, "classic");
 });
 
 test("normalizeVsCodeSettings accepts typed and informative key modes and defaults invalid values to author-year", () => {

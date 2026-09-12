@@ -17,6 +17,194 @@ test("buildAdsQuery prefers fielded author/year search from parsed key hints", (
   );
 });
 
+test("Rice2021 builds a focused first-author/year query from the M51 citation context", () => {
+  const queries = buildAdsQueries({
+    token: "Rice2021",
+    searchMode: "contextual",
+    sentenceText: "This source confusion is also found in previous M51 studies. The study found at least one HST source near the X-ray position.",
+    contextText: "M51 Chandra X-ray sources have multiple optical HST counterpart candidates.",
+    parsedKeyHint: {
+      surname: "Rice",
+      year: 2021,
+      suffix: ""
+    }
+  });
+
+  assert.match(queries[0], /first_author:"Rice"/);
+  assert.ok(queries.some((query) => query.includes('first_author:"Rice"')));
+  assert.ok(queries.includes('first_author:"Rice" year:2021'));
+  assert.ok(queries.some((query) => /M51|Chandra|X-ray|optical|HST/i.test(query)));
+});
+
+test("contextual opening queries cover broad, focused, and inferred surname forms", () => {
+  for (const [surname, inferred] of [["VanRoestel", "Van-Roestel"], ["ElBadry", "El-Badry"]]) {
+    const queries = buildAdsQueries({
+      token: `${surname}2021`,
+      searchMode: "contextual",
+      sentenceText: "A precise paper title with classification methods and infrastructure",
+      contextText: "A precise paper title with classification methods and infrastructure",
+      parsedKeyHint: { surname, year: 2021, suffix: "" }
+    });
+
+    assert.match(queries[0], new RegExp(`first_author:\"${surname}\"`));
+    assert.match(queries[1], new RegExp(`first_author:\"${surname}\"`));
+    assert.ok(queries.slice(0, 4).some((query) => query.includes(`first_author:\"${inferred}\"`)));
+  }
+});
+
+test("contextual queries recover the citation-adjacent Strader terms when decimals corrupt sentence text", () => {
+  const queries = buildAdsQueries({
+    token: "Strader2019",
+    searchMode: "contextual",
+    sentenceText: "09~{\\rm M_\\odot}$ .",
+    citationPrefixText: "Redback pulsars also appear systematically massive, with a median inferred neutron star mass of $1.78\\pm0.09~{\\rm M_\\odot}$",
+    citationSuffixText: ". However, these measurements can be biased.",
+    contextText: "They infer a birth-mass distribution. Redback pulsars appear systematically massive.",
+    parsedKeyHint: { surname: "Strader", year: 2019, suffix: "" }
+  });
+
+  assert.match(queries[1], /redback pulsars systematically massive/);
+  assert.ok(!queries.slice(0, 4).some((query) => /odot|\\brm\\b/.test(query)));
+});
+
+test("contextual Yang2026 lookup uses the distinctive PSR identifier in the opening pair", () => {
+  const queries = buildAdsQueries({
+    token: "Yang2026",
+    searchMode: "contextual",
+    sentenceText: "6$ .",
+    citationPrefixText: "Finding NSs in hierarchical triples can test the kick model. Recently, PSR J0435+3233 is a pulsar--white-dwarf binary with a stellar tertiary",
+    citationSuffixText: ".",
+    contextText: "PSR J0435+3233 is a hierarchical triple with a white dwarf and stellar tertiary.",
+    parsedKeyHint: { surname: "Yang", year: 2026, suffix: "" }
+  });
+
+  assert.match(queries[1], /first_author:"Yang"/);
+  assert.match(queries[1], /author:"Yang"/);
+  assert.match(queries[1], /full:"PSR J0435\+3233"/);
+  assert.match(queries[1], /triple|tertiary/);
+  assert.doesNotMatch(queries[1], /recently/);
+});
+
+test("contextual lookup uses descriptive key suffixes to disambiguate same-author papers", () => {
+  const context = {
+    token: "Shariat2026GaiaNSDemographics",
+    searchMode: "contextual",
+    sentenceText: "The Gaia neutron-star abundance follows from the demographics analysis.",
+    contextText: "Gaia neutron-star demographics and birth rates.",
+    parsedKeyHint: { surname: "Shariat", year: 2026, suffix: "GaiaNSDemographics" }
+  };
+  const queries = buildAdsQueries(context);
+  assert.match(queries[1], /first_author:"Shariat" year:2026/);
+  assert.match(queries[1], /title:"gaia"/);
+  assert.match(queries[1], /title:"demographics"/);
+
+  const ranked = rerankAdsCandidates(context, [
+    { bibcode: "wdms", title: "A global view of post-interaction white dwarf-main sequence binaries", authors: ["Shariat, Cheyanne"], year: 2026 },
+    { bibcode: "demographics", title: "Gaia neutron stars in context: demographics, birth rates, and connections", authors: ["Shariat, Cheyanne"], year: 2026 }
+  ]);
+  assert.equal(ranked[0].bibcode, "demographics");
+});
+
+test("contextual lookup recognizes legacy underscore and colon author-year keys", () => {
+  const underscoreQueries = buildAdsQueries({
+    token: "doroshenko_orbit_2018",
+    searchMode: "contextual",
+    sentenceText: "The transient X-ray pulsar has a measured orbit.",
+    parsedKeyHint: { surname: null, year: null, suffix: "" }
+  });
+  assert.match(underscoreQueries[0], /first_author:"doroshenko"/);
+  assert.match(underscoreQueries[0], /year:2018/);
+  assert.match(underscoreQueries[1], /title:"orbit"/);
+
+  const colonQueries = buildAdsQueries({
+    token: "Hunter:2007",
+    searchMode: "contextual",
+    sentenceText: "Plots were made with Matplotlib.",
+    parsedKeyHint: { surname: null, year: null, suffix: "" }
+  });
+  assert.match(colonQueries[0], /first_author:"Hunter"/);
+  assert.match(colonQueries[0], /year:2007/);
+});
+
+test("contextual lookup ranks apostrophized first authors as exact author-year matches", () => {
+  const ranked = rerankAdsCandidates({
+    token: "ODoherty2023",
+    searchMode: "contextual",
+    sentenceText: "Binary neutron-star velocities constrain natal kicks.",
+    contextText: "An observationally derived kick distribution for neutron stars in binaries.",
+    parsedKeyHint: { surname: "Doherty", firstInitial: "O", year: 2023, suffix: "" }
+  }, [
+    { bibcode: "unrelated", title: "A different binary-star paper", authors: ["Other, Alice"], year: 2023, property: ["ARTICLE", "REFEREED"], doctype: "article" },
+    { bibcode: "target", title: "An observationally derived kick distribution for neutron stars in binary systems", authors: ["O'Doherty, Tyrone N."], year: 2023 }
+  ]);
+  assert.equal(ranked[0].bibcode, "target");
+  assert.equal(ranked[0].primaryMatchTier, 3);
+});
+
+test("contextual ADS bibcode keys lead with exact bibcode retrieval and ranking", () => {
+  const context = {
+    token: "1994MNRAS.268..430J",
+    searchMode: "contextual",
+    sentenceText: "Radio observations characterize the pulsar binary.",
+    parsedKeyHint: { surname: null, year: null, suffix: "" }
+  };
+  assert.equal(buildAdsQueries(context)[0], 'bibcode:"1994MNRAS.268..430J"');
+  const ranked = rerankAdsCandidates(context, [
+    { bibcode: "2025ApJ...999....1A", title: "Radio pulsars", authors: ["Other, A."], year: 2025 },
+    { bibcode: "1994MNRAS.268..430J", title: "Radio and Optical Observations of the PSR B1259-63 Binary", authors: ["Johnston, S."], year: 1994 }
+  ]);
+  assert.equal(ranked[0].bibcode, "1994MNRAS.268..430J");
+});
+
+test("contextual lookup does not mistake repository identifiers for ancient publication years", () => {
+  const queries = buildAdsQueries({
+    token: "emcee_10996751",
+    searchMode: "contextual",
+    sentenceText: "We sampled the posterior with emcee.",
+    parsedKeyHint: { surname: "emcee", year: 1099, suffix: "6751" }
+  });
+  assert.ok(!queries.some((query) => /year:1099/.test(query)));
+});
+
+test("ADS query builder preserves legacy RN contextual behavior until beta normalizes context", () => {
+  const queries = buildAdsQueries({
+    token: "RN75",
+    searchMode: "contextual",
+    sentenceText: "Magnetic braking shapes the evolution of close binaries",
+    citationPrefixText: "Magnetic braking shapes the evolution of close binaries",
+    citationSuffixText: ".",
+    contextText: "Magnetic braking shapes the evolution of close binaries.",
+    parsedKeyHint: { surname: "R", firstInitial: "N", year: 2025, suffix: "" }
+  });
+
+  assert.match(queries[0], /first_author:"R, N\*" year:2025/);
+  assert.ok(queries.some((query) => /first_author|author:|year:2025/.test(query)));
+});
+
+test("ADS query builder preserves legacy DBLP contextual behavior", () => {
+  const queries = buildAdsQueries({
+    token: "DBLP:journals/corr/GidarisK15",
+    searchMode: "contextual",
+    sentenceText: "A multi-region CNN combines object detection with semantic segmentation",
+    citationPrefixText: "A multi-region CNN combines object detection with semantic segmentation",
+    citationSuffixText: ".",
+    contextText: "Multi-region object detection and semantic segmentation.",
+    parsedKeyHint: { surname: "DBLP:journals/corr/GidarisK", year: 2015, suffix: "" }
+  });
+
+  assert.match(queries[0], /first_author:"DBLP:journals\/corr\/GidarisK"/);
+  assert.ok(queries.some((query) => /first_author|author:|year:2015/.test(query)));
+});
+
+test("simple and direct ADS lookup preserve opaque tokens verbatim", () => {
+  const parsedKeyHint = { surname: "R", firstInitial: "N", year: 2025, suffix: "" };
+  const simpleQueries = buildAdsQueries({ token: "RN75", searchMode: "simple", parsedKeyHint });
+  assert.match(simpleQueries[0], /first_author:"R, N\*" year:2025/);
+
+  const directQueries = buildAdsQueries({ token: "RN75", searchMode: "direct", parsedKeyHint });
+  assert.deepEqual(directQueries, ["RN75"]);
+});
+
 test("simple search mode uses author-year queries without contextual expansion", () => {
   const queries = buildAdsQueries({
     token: "Shariat25",
@@ -455,6 +643,25 @@ test("buildAdsQueries adds cautious fallbacks for surname variants and nearby ye
   assert.ok(queries.some((query) => query.includes('full:"gaia"')));
 });
 
+test("contextual VanRoestel keys try the raw surname before a synthesized hyphen variant", () => {
+  const queries = buildAdsQueries({
+    token: "VanRoestel_2021",
+    sentenceText: "The ZTF Source Classification Project methods and infrastructure",
+    contextText: "The ZTF Source Classification Project methods and infrastructure",
+    searchMode: "contextual",
+    parsedKeyHint: {
+      surname: "VanRoestel",
+      year: 2021
+    }
+  });
+
+  const firstRawIndex = queries.findIndex((query) => query.includes('first_author:"VanRoestel"'));
+  const firstHyphenatedIndex = queries.findIndex((query) => query.includes('first_author:"Van-Roestel"'));
+  assert.ok(firstRawIndex >= 0, "missing raw VanRoestel query");
+  assert.ok(firstHyphenatedIndex >= 0, "missing Van-Roestel fallback query");
+  assert.ok(firstRawIndex < firstHyphenatedIndex, "raw surname should be tried before punctuation inference");
+});
+
 test("collaboration-style keys add collaboration-aware query variants", () => {
   const explicitYearQueries = buildAdsQueries({
     token: "Planck18",
@@ -506,7 +713,7 @@ test("explicit collaboration surnames normalize back to collaboration-aware quer
   );
 });
 
-test("explicit author-year queries lead with first-author year and sentence phrase", () => {
+test("explicit author-year queries lead with broad recall then focused context", () => {
   const queries = buildAdsQueries({
     token: "Li25",
     sentenceText: "There are also other works on gamma ray burst afterglows",
@@ -519,10 +726,10 @@ test("explicit author-year queries lead with first-author year and sentence phra
 
   assert.equal(
     queries[0],
-    'first_author:"Li" year:2025 AND (title:"gamma ray burst afterglows" OR abstract:"gamma ray burst afterglows")'
+    '((first_author:"Li") OR (author:"Li Collaboration") OR (author:"Li Scientific Collaboration")) year:2025'
   );
   assert.match(queries[1], /first_author:"Li" year:2025/);
-  assert.match(queries[1], /afterglow/);
+  assert.match(queries[1], /gamma ray burst afterglows/);
   assert.ok(queries.includes('first_author:"Li" year:2025 AND full:"gamma ray burst afterglows"'));
   assert.ok(queries.includes('first_author:"Li" year:2025'));
 });
@@ -541,8 +748,9 @@ test("explicit author-year queries can use an optional first initial for common 
 
   assert.equal(
     queries[0],
-    'first_author:"Li, W*" year:2025 AND (title:"gamma ray burst afterglows" OR abstract:"gamma ray burst afterglows")'
+    'first_author:"Li, W*" year:2025'
   );
+  assert.match(queries[1], /gamma ray burst afterglows/);
   assert.ok(queries.includes('first_author:"Li, W*" year:2025'));
 });
 
@@ -557,12 +765,12 @@ test("buildAdsQueries prioritizes immediate sentence keywords over broader conte
     }
   });
 
-  const contextQuery = queries[0];
+  const contextQuery = queries[1];
   assert.ok(contextQuery.includes('magnetic braking saturates'));
   assert.ok(!contextQuery.includes('full:"gaia"'));
 });
 
-test("surname-only queries lead with author+phrase, then phrase-only, before author-only", () => {
+test("surname-only queries lead with broad author recall then contextual precision", () => {
   const queries = buildAdsQueries({
     token: "El-Badry",
     sentenceText: "magnetic braking saturates",
@@ -575,11 +783,10 @@ test("surname-only queries lead with author+phrase, then phrase-only, before aut
 
   assert.equal(
     queries[0],
-    'first_author:"El-Badry" AND (title:"magnetic braking saturates" OR abstract:"magnetic braking saturates")'
+    '(first_author:"El-Badry") OR (author:"El-Badry Collaboration") OR (author:"El-Badry Scientific Collaboration")'
   );
   assert.match(queries[1], /first_author:"El-Badry"/);
-  assert.match(queries[1], /braking/);
-  assert.match(queries[1], /brake/);
+  assert.match(queries[1], /magnetic braking saturates/);
   assert.match(queries[2], /first_author:"El-Badry"/);
   assert.ok(queries.includes('title:"magnetic braking saturates" OR abstract:"magnetic braking saturates"'));
   assert.ok(queries.includes('author:"El-Badry" AND full:"magnetic braking saturates"'));
@@ -616,10 +823,10 @@ test("common-surname surname-only queries strip filler words and prioritize titl
 
   assert.equal(
     queries[0],
-    'first_author:"Li" AND (title:"optical afterglows gamma" OR abstract:"optical afterglows gamma")'
+    '(first_author:"Li") OR (author:"Li Collaboration") OR (author:"Li Scientific Collaboration")'
   );
   assert.match(queries[1], /first_author:"Li"/);
-  assert.match(queries[1], /afterglow/);
+  assert.match(queries[1], /optical afterglows gamma/);
   assert.ok(queries.includes('title:"optical afterglows gamma ray bursts" OR abstract:"optical afterglows gamma ray bursts"'));
   assert.ok(queries.includes('author:"Li" AND full:"optical afterglows gamma ray bursts"'));
   assert.ok(!queries.some((query) => query.includes("others")));
@@ -641,11 +848,11 @@ test("multi-word surname-only queries prioritize first-author and the leading sc
 
   assert.equal(
     queries[0],
-    'first_author:"Perez Paolino" AND (title:"young stellar objects" OR abstract:"young stellar objects")'
+    '(first_author:"Perez Paolino") OR (author:"Perez Paolino Collaboration") OR (author:"Perez Paolino Scientific Collaboration")'
   );
   assert.equal(
     queries[1],
-    'first_author:"Perez Paolino" AND (title:"young stellar objects populations" OR abstract:"young stellar objects populations")'
+    'first_author:"Perez Paolino" AND (title:"young stellar objects" OR abstract:"young stellar objects")'
   );
   assert.ok(queries.some((query) => query === 'first_author:"Perez Paolino"'));
   assert.ok(queries.some((query) => query === 'author:"Perez Paolino"'));
@@ -664,11 +871,10 @@ test("author-year queries strip generic sentence filler and add title/abstract k
 
   assert.equal(
     queries[0],
-    'first_author:"Cheng" year:2025 AND (title:"galaxy mergers lensing" OR abstract:"galaxy mergers lensing")'
+    '((first_author:"Cheng") OR (author:"Cheng Collaboration") OR (author:"Cheng Scientific Collaboration")) year:2025'
   );
   assert.match(queries[1], /first_author:"Cheng" year:2025/);
-  assert.match(queries[1], /merger/);
-  assert.match(queries[1], /lens/);
+  assert.match(queries[1], /galaxy mergers lensing/);
   assert.ok(!queries.some((query) => query.includes("recent")));
   assert.ok(!queries.some((query) => query.includes("studies")));
   assert.ok(!queries.some((query) => query.includes("have")));

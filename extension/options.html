@@ -235,6 +235,22 @@
         padding: 0 14px 16px;
       }
 
+      .api-key-help p,
+      .api-key-help ol {
+        margin: 0;
+      }
+
+      .api-key-help ol {
+        padding-left: 1.25rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .api-key-help a {
+        color: var(--accent-2);
+        font-weight: 700;
+      }
+
       .source-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -338,15 +354,16 @@
           <h2>Search</h2>
           <label class="field">
             <span class="label-text">Search coverage</span>
-            <span class="hint">Choose which databases OverCite searches.</span>
+            <span class="hint">Choose your search sources.</span>
             <select id="source-profile" name="sourceProfile">
-              <option value="astrophysics">Astrophysics</option>
+              <option value="" disabled>Choose your subject area…</option>
+              <option value="general">General / Multidisciplinary</option>
               <option value="physics">Physics</option>
               <option value="math">Math</option>
               <option value="computer-science">Computer Science</option>
               <option value="life-sciences">Biology / Medicine</option>
               <option value="chemistry">Chemistry</option>
-              <option value="general">General / DOI</option>
+              <option value="astrophysics">Astronomy / Astrophysics</option>
               <option value="custom">Custom</option>
             </select>
           </label>
@@ -356,7 +373,7 @@
             <div class="advanced-body">
               <label class="field">
                 <span class="label-text">Search first</span>
-                <span class="hint">If this returns a strong match, OverCite stops here.</span>
+                <span class="hint">Primary database.</span>
                 <select id="primary-source" name="primarySource">
                   <option value="ads">ADS/SciX</option>
                   <option value="pubmed">PubMed</option>
@@ -368,7 +385,7 @@
               </label>
               <label class="field">
                 <span class="label-text">Try if needed</span>
-                <span class="hint">1 database is usually enough. Add 1-2 backups only for cross-field work.</span>
+                <span class="hint">Optional backup databases.</span>
                 <div class="source-grid" id="fallback-sources">
                   <label class="source-option"><input type="checkbox" name="fallbackSources" value="ads">ADS/SciX</label>
                   <label class="source-option"><input type="checkbox" name="fallbackSources" value="pubmed">PubMed</label>
@@ -393,12 +410,40 @@
             <span class="hint">Optional. Improves PubMed rate limits.</span>
             <input id="ncbi-api-token" name="ncbiApiToken" type="password" autocomplete="off" spellcheck="false">
           </label>
+          <details>
+            <summary>How to get API keys</summary>
+            <div class="advanced-body api-key-help">
+              <div>
+                <p class="label-text">ADS/SciX token</p>
+                <ol>
+                  <li>Sign in to NASA ADS or SciX.</li>
+                  <li>Open your account's API Token page.</li>
+                  <li>Copy the token and paste it into the ADS/SciX token field above.</li>
+                </ol>
+                <p class="hint">
+                  Open <a href="https://ui.adsabs.harvard.edu/user/settings/token" target="_blank" rel="noopener noreferrer">NASA ADS token settings</a>
+                  or <a href="https://scixplorer.org/user/settings/token" target="_blank" rel="noopener noreferrer">SciX token settings</a>.
+                </p>
+              </div>
+              <div>
+                <p class="label-text">NCBI key (optional)</p>
+                <ol>
+                  <li>Sign in to your NCBI account.</li>
+                  <li>Open Account Settings, then API Key Management.</li>
+                  <li>Create a key and paste it into the NCBI key field above.</li>
+                </ol>
+                <p class="hint">
+                  See the <a href="https://www.ncbi.nlm.nih.gov/books/NBK53593/" target="_blank" rel="noopener noreferrer">official NCBI API-key instructions</a>.
+                </p>
+              </div>
+            </div>
+          </details>
         </section>
         <section class="section">
           <h2>Appearance</h2>
           <label class="field">
           <span class="label-text">Theme</span>
-          <span class="hint">Used here and in the Overleaf popup.</span>
+          <span class="hint">Settings and popup theme.</span>
           <select id="theme-mode" name="themeMode">
             <option value="auto">Auto</option>
             <option value="light">Light</option>
@@ -410,7 +455,7 @@
           <h2>Citations</h2>
         <label class="field">
           <span class="label-text">Citation key style</span>
-          <span class="hint">Choose short author-year keys, richer keys, bibcodes, or the key you typed.</span>
+          <span class="hint">Citation-key format.</span>
           <select id="citation-key-mode" name="citationKeyMode">
             <option value="authoryear">Author + Full Year</option>
             <option value="authoryear-underscore">Author_Year</option>
@@ -423,39 +468,42 @@
         </label>
         <label class="field">
           <span class="label-text">Bibliography order</span>
-          <span class="hint">Append new entries or keep the bibliography sorted.</span>
+          <span class="hint">Default: Alphabetical.</span>
           <select id="bibliography-insert-mode" name="bibliographyInsertMode">
             <option value="append">Append at end</option>
-            <option value="alphabetical">Insert alphabetically</option>
+            <option value="alphabetical" selected>Insert alphabetically</option>
           </select>
         </label>
         <label class="checkbox-field">
-          <input id="return-to-source-after-insert" name="returnToSourceAfterInsert" type="checkbox">
+          <input id="return-to-source-after-insert" name="returnToSourceAfterInsert" type="checkbox" checked>
           <span class="checkbox-copy">
             <span class="label-text">Return to source file after insert</span>
-            <span class="hint">After updating the bibliography, reopen the original <code>.tex</code> file instead of leaving the editor on the <code>.bib</code> file.</span>
+            <span class="hint">Return to the original <code>.tex</code> file after insertion.</span>
           </span>
         </label>
         <label class="field">
           <span class="label-text">Default search mode</span>
-          <span class="hint">Contextual is best for normal citation keys. Simple search and raw query stay available in the popup.</span>
+          <span class="hint">Default: Simple search.</span>
           <select id="default-search-mode" name="defaultSearchMode">
             <option value="contextual">Contextual</option>
-            <option value="simple">Simple search</option>
+            <option value="simple" selected>Simple search</option>
             <option value="direct">Raw query</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label-text">Contextual engine</span>
+          <span class="hint">Reranking stays on this device.</span>
+          <select id="contextual-search-engine" name="contextualSearchEngine">
+            <option value="beta">Context Beta (experimental)</option>
+            <option value="classic" selected>Classic</option>
           </select>
         </label>
         </section>
         <section class="section">
           <h2>Project</h2>
         <label class="field">
-          <span class="label-text">Context window</span>
-          <span class="hint">Recommended: <code>400</code>-<code>600</code> characters. Default: <code>500</code>.</span>
-          <input id="context-window-chars" name="contextWindowChars" type="number" min="200" max="1200" step="50" value="500" placeholder="500">
-        </label>
-        <label class="field">
           <span class="label-text">Project bib file</span>
-          <span class="hint">Optional. Map an Overleaf project id from the project URL to the <code>.bib</code> file OverCite should use.</span>
+          <span class="hint">Optional per-project <code>.bib</code> file.</span>
           <textarea id="project-overrides" name="defaultProjectBibFileOverride" spellcheck="false" placeholder='{"project-id":"references.bib"}'></textarea>
           <span class="field-example">Example: <code>{"69c405a0":"references.bib"}</code></span>
         </label>

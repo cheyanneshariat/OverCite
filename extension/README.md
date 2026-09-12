@@ -1,6 +1,8 @@
 # OverCite
 
-OverCite is a browser extension for Overleaf that searches literature sources from inside a `\cite{...}` command, previews likely matches, and inserts BibTeX into your project. It defaults to fast ADS/SciX-only search and can use subject-area presets or custom primary/fallback sources.
+Maintenance release: Classic is the default contextual engine; Context Beta requires an explicit selection and remains experimental. Explicit saved preferences are retained. Full literal titles in Simple Search now use Crossref title queries rather than author-name queries.
+
+OverCite is a browser extension for Overleaf that searches literature sources from inside a `\cite{...}` command, previews likely matches, and inserts BibTeX into your project. Before the first lookup after this update, it requires a subject-area choice with nothing preselected; the choice selects a source preset and can be changed later.
 
 ## What is implemented
 
@@ -29,14 +31,14 @@ This keeps v1 on the client side without depending on undocumented Overleaf back
 2. Enable Developer mode
 3. Click `Load unpacked`
 4. Select the local `extension/dist/chrome/` folder from this repository
-5. Open the extension options page, choose your subject area, and paste your ADS/SciX API token if you want ADS/SciX results or ADS/SciX-only mode
+5. Trigger OverCite and choose your subject area in the one-time prompt; use the options page later to change it or add an ADS/SciX token
 
 ### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click `Load Temporary Add-on...`
 3. Select `manifest.json` from the local `extension/dist/firefox/` folder
-4. Open the extension options page, choose your subject area, and paste your ADS/SciX API token if you want ADS/SciX results or ADS/SciX-only mode
+4. Trigger OverCite and choose your subject area in the one-time prompt; use the options page later to change it or add an ADS/SciX token
 
 ### Safari
 
@@ -44,15 +46,23 @@ Safari support lives in the repository as a separate Xcode wrapper rather than a
 
 ## Trigger inside Overleaf
 
+The first trigger after installing or updating to browser v0.3.11 asks for a subject area before reading the editor or searching. Nothing is selected by default, closing the prompt cancels the lookup, and the saved choice prevents repeat prompts.
+
+Astronomy / Astrophysics search requires a NASA ADS or SciX API token. If it is missing, OverCite opens the extension settings and focuses the token field instead of retrying the same request.
+The API Keys section includes an expandable setup guide with direct token links. Physics can use ADS/SciX when a token is present but still searches Crossref and arXiv without one. PubMed works without an NCBI key; the key only improves its rate limit. The General, Computer Science, Math, and Chemistry presets require no API key.
+
 - Open your target bibliography file such as `references.bib`, `refs.bib`, or any other `.bib` file as an editor tab once before using OverCite
 - Put the cursor inside a citation command such as `\citep{Perlmutter99}`
 - Press `Alt+Shift+E`, or remap the `OverCite` command in your browser's extension shortcut settings
 - Pick the record you want
 
-For non-empty citation keys, the popup also exposes two small mode toggles:
+New browser installs start in `Simple search` for non-empty citation keys. Existing saved preferences are left unchanged, and empty `\cite{}` lookups stay contextual. Depending on the active mode, the popup exposes the other two options from:
 
+- `Contextual search` adds nearby sentence context
 - `Simple search` reruns the lookup from the typed token only
 - `Raw query` sends the typed token directly to the configured sources. ADS/SciX fielded queries stay on ADS/SciX when ADS/SciX is configured.
+
+Context Beta is experimental in v0.4.8. Common author-year names and ambiguous prose can return incorrect or missing papers; review suggestions before insertion. New non-empty lookups default to Simple Search, while saved preferences are preserved and empty citations remain contextual. Beta reranks locally using automatically selected context, and provider coverage and availability limit recovery. Simple Search and Raw Query do not use the beta ranker. Select `Classic` under `Contextual engine` to compare.
 
 The options page also lets you choose how inserted citation keys are written:
 
@@ -63,7 +73,9 @@ The options page also lets you choose how inserted citation keys are written:
 - `Bibcode` for keys like `2025PASP..137i4201S`
 - `Keep Typed Key` to preserve what you entered when possible
 
-Browser users can also enable `Return to source file after insert` to switch back to the original `.tex` file after OverCite finishes updating the target `.bib` file. When this is enabled, the popup dismisses immediately after insertion and the editor return continues in the background. The default keeps the current behavior and leaves the editor on the bibliography file after insertion.
+Browser users can disable `Return to source file after insert` if they prefer to remain on the bibliography after OverCite finishes updating the target `.bib` file. Without a saved or synced preference, the default returns to the original `.tex` file; the popup dismisses immediately after insertion and the editor return continues in the background.
+
+After a successful insertion, OverCite can show an acknowledgment reminder at most once every 90 days. You can copy the preferred text, snooze for 90 days, or disable reminders permanently. The schedule is stored only in local extension storage; no usage or manuscript activity is reported.
 
 Short examples:
 
@@ -75,6 +87,9 @@ Short examples:
 ## Test
 
 ```bash
-npm run build
+npm run build:chrome-firefox
 npm test
+npm run benchmark:contextual-beta
+npm run test:chrome
+npm run test:firefox
 ```

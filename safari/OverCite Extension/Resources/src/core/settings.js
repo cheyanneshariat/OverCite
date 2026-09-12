@@ -47,6 +47,7 @@ export function normalizeSettings(rawSettings = {}) {
   const citationKeyMode = normalizeCitationKeyMode(rawSettings.citationKeyMode);
   const bibliographyInsertMode = normalizeBibliographyInsertMode(rawSettings.bibliographyInsertMode);
   const defaultSearchMode = normalizeDefaultSearchMode(rawSettings.defaultSearchMode);
+  const contextualSearchEngine = normalizeContextualSearchEngine(rawSettings.contextualSearchEngine);
   const adsApiToken = String(rawSettings.adsApiToken ?? DEFAULT_SETTINGS.adsApiToken).trim();
   const sourceApiTokens = normalizeSourceApiTokens(rawSettings.sourceApiTokens, adsApiToken);
   const sourceProfile = normalizeSourceProfile(rawSettings.sourceProfile);
@@ -54,6 +55,7 @@ export function normalizeSettings(rawSettings = {}) {
   const fallbackSources = normalizeFallbackSources(rawSettings.fallbackSources, primarySource, sourceProfile);
   return {
     adsApiToken,
+    subjectAreaConfigured: normalizeBooleanSetting(rawSettings.subjectAreaConfigured, false),
     sourceProfile,
     primarySource,
     fallbackSources,
@@ -65,11 +67,31 @@ export function normalizeSettings(rawSettings = {}) {
     returnToSourceAfterInsert: normalizeBooleanSetting(rawSettings.returnToSourceAfterInsert, DEFAULT_SETTINGS.returnToSourceAfterInsert),
     citationKeyMode,
     bibliographyInsertMode,
-    defaultSearchMode
+    defaultSearchMode,
+    contextualSearchEngine
   };
 }
 
 const SOURCE_IDS = new Set(["ads", "crossref", "arxiv", "inspire", "datacite", "pubmed"]);
+
+const SOURCE_OPTIONAL_ORIGINS = Object.freeze({
+  arxiv: ["https://export.arxiv.org/*"],
+  crossref: ["https://api.crossref.org/*"],
+  datacite: ["https://api.datacite.org/*"],
+  inspire: ["https://inspirehep.net/*"],
+  pubmed: ["https://eutils.ncbi.nlm.nih.gov/*"]
+});
+
+export function optionalOriginsForSettings(settings) {
+  const sourceIds = [
+    settings?.primarySource,
+    ...(Array.isArray(settings?.fallbackSources) ? settings.fallbackSources : [])
+  ];
+  if (String(settings?.sourceProfile ?? "").trim().toLowerCase() === "astrophysics") {
+    sourceIds.push("arxiv");
+  }
+  return [...new Set(sourceIds.flatMap((sourceId) => SOURCE_OPTIONAL_ORIGINS[sourceId] ?? []))];
+}
 
 const SOURCE_PRESETS = Object.freeze({
   "ads-only": {
@@ -217,4 +239,9 @@ function normalizeDefaultSearchMode(defaultSearchMode) {
     return normalized;
   }
   return DEFAULT_SETTINGS.defaultSearchMode;
+}
+
+function normalizeContextualSearchEngine(contextualSearchEngine) {
+  const normalized = String(contextualSearchEngine ?? DEFAULT_SETTINGS.contextualSearchEngine).trim().toLowerCase();
+  return normalized === "beta" ? "beta" : "classic";
 }

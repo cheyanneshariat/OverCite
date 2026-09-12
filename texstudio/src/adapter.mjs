@@ -133,7 +133,7 @@ export async function prepareTexstudioRequest(request = {}, options = {}) {
   }
 
   let resolvedSearchMode = normalizeSearchMode(request.searchMode, settings.defaultSearchMode);
-  if (resolvedSearchMode === "direct" && !String(citationContext.token ?? "").trim()) {
+  if (!String(citationContext.token ?? "").trim()) {
     if (normalizeModeValue(request.searchMode) === "direct") {
       throw new Error("Raw query mode requires a non-empty citation token.");
     }

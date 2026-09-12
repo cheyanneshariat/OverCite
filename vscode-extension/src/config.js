@@ -10,6 +10,7 @@ export function normalizeVsCodeSettings(rawSettings = {}) {
   const citationKeyMode = String(rawSettings.citationKeyMode ?? DEFAULT_SETTINGS.citationKeyMode).trim().toLowerCase();
   const bibliographyInsertMode = String(rawSettings.bibliographyInsertMode ?? DEFAULT_SETTINGS.bibliographyInsertMode).trim().toLowerCase();
   const defaultSearchMode = String(rawSettings.defaultSearchMode ?? DEFAULT_SETTINGS.defaultSearchMode).trim().toLowerCase();
+  const contextualSearchEngine = String(rawSettings.contextualSearchEngine ?? DEFAULT_SETTINGS.contextualSearchEngine).trim().toLowerCase();
   const adsApiToken = String(rawSettings.adsApiToken ?? DEFAULT_SETTINGS.adsApiToken).trim();
   const sourceProfile = normalizeSourceProfile(rawSettings.sourceProfile);
   const primarySource = normalizePrimarySource(rawSettings.primarySource, sourceProfile);
@@ -28,8 +29,9 @@ export function normalizeVsCodeSettings(rawSettings = {}) {
     citationKeyMode: citationKeyMode === "typed" || citationKeyMode === "informative" || citationKeyMode === "authoryear" || citationKeyMode === "authoryear-underscore" || citationKeyMode === "authoryear-colon" || citationKeyMode === "bibcode"
       ? citationKeyMode
       : DEFAULT_SETTINGS.citationKeyMode,
-    bibliographyInsertMode: bibliographyInsertMode === "alphabetical" ? "alphabetical" : "append",
+    bibliographyInsertMode: bibliographyInsertMode === "append" ? "append" : "alphabetical",
     defaultSearchMode: defaultSearchMode === "simple" || defaultSearchMode === "direct" ? defaultSearchMode : "contextual",
+    contextualSearchEngine: contextualSearchEngine === "beta" ? "beta" : "classic",
     projectBibFileOverrides: overrides
   };
 }

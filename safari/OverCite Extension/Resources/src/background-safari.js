@@ -9,11 +9,16 @@ const __overciteSafariModules = Object.create(null);
     SEARCH_ADS: "searchAds",
     EXPORT_BIBTEX: "exportBibtex",
     RESOLVE_BIB_TARGET: "resolveBibTarget",
-    APPLY_INSERTION: "applyInsertion"
+    APPLY_INSERTION: "applyInsertion",
+    REQUEST_SOURCE_PERMISSIONS: "requestSourcePermissions",
+    OPEN_OPTIONS: "openOptions",
+    CLAIM_ACKNOWLEDGMENT_REMINDER: "claimAcknowledgmentReminder",
+    DISABLE_ACKNOWLEDGMENT_REMINDER: "disableAcknowledgmentReminder"
   });
 
   const DEFAULT_SETTINGS = Object.freeze({
     adsApiToken: "",
+    subjectAreaConfigured: false,
     sourceProfile: "astrophysics",
     primarySource: "ads",
     fallbackSources: [],
@@ -22,10 +27,11 @@ const __overciteSafariModules = Object.create(null);
     contextWindowChars: 500,
     shortcutHelpText: "Alt+Shift+E",
     themeMode: "auto",
-    returnToSourceAfterInsert: false,
+    returnToSourceAfterInsert: true,
     citationKeyMode: "authoryear",
-    bibliographyInsertMode: "append",
-    defaultSearchMode: "contextual"
+    bibliographyInsertMode: "alphabetical",
+    defaultSearchMode: "simple",
+    contextualSearchEngine: "classic"
   });
 
   const TITLE_STOPWORDS = new Set([
@@ -79,6 +85,7 @@ const __overciteSafariModules = Object.create(null);
     "paper",
     "people",
     "recent",
+    "recently",
     "result",
     "results",
     "show",
@@ -111,6 +118,67 @@ const __overciteSafariModules = Object.create(null);
     "targets"
   ]);
   __overciteSafariModules["src/core/constants.js"] = { exports: { MESSAGE_TYPES, DEFAULT_SETTINGS, TITLE_STOPWORDS, CONTEXT_STOPWORDS } };
+})();
+
+/* src/core/acknowledgment.js */
+(() => {
+  const ACKNOWLEDGMENT_REMINDER_VERSION = 2;
+  const ACKNOWLEDGMENT_REMINDER_STORAGE_KEY = "acknowledgmentReminderVersion";
+  const ACKNOWLEDGMENT_REMINDER_NEXT_AT_STORAGE_KEY = "acknowledgmentReminderNextEligibleAt";
+  const ACKNOWLEDGMENT_REMINDER_DISABLED_STORAGE_KEY = "acknowledgmentReminderDisabled";
+  const ACKNOWLEDGMENT_REMINDER_INTERVAL_MS = 90 * 24 * 60 * 60 * 1000;
+  const ACKNOWLEDGMENT_REMINDER_PROMPT =
+    "Publishing work that used OverCite? Please consider acknowledging it!";
+  const ACKNOWLEDGMENT_TEXT =
+    "This work made use of \\texttt{OverCite} \\citep{Shariat2026}, an in-editor citation tool for \\LaTeX.";
+
+  function createAcknowledgmentReminderClaim(storage, { now = () => Date.now() } = {}) {
+    let handledThisSession = false;
+
+    return async function claimAcknowledgmentReminder() {
+      if (handledThisSession || !storage) {
+        return false;
+      }
+      handledThisSession = true;
+
+      try {
+        const stored = await storage.get([
+          ACKNOWLEDGMENT_REMINDER_NEXT_AT_STORAGE_KEY,
+          ACKNOWLEDGMENT_REMINDER_DISABLED_STORAGE_KEY
+        ]);
+        if (stored?.[ACKNOWLEDGMENT_REMINDER_DISABLED_STORAGE_KEY] === true) {
+          return false;
+        }
+        const currentTime = now();
+        const nextEligibleAt = Number(stored?.[ACKNOWLEDGMENT_REMINDER_NEXT_AT_STORAGE_KEY] ?? 0);
+        if (Number.isFinite(nextEligibleAt) && nextEligibleAt > currentTime) {
+          return false;
+        }
+        await storage.set({
+          [ACKNOWLEDGMENT_REMINDER_STORAGE_KEY]: ACKNOWLEDGMENT_REMINDER_VERSION,
+          [ACKNOWLEDGMENT_REMINDER_NEXT_AT_STORAGE_KEY]: currentTime + ACKNOWLEDGMENT_REMINDER_INTERVAL_MS
+        });
+        return true;
+      } catch (error) {
+        console.warn("[OverCite] Could not persist the acknowledgment reminder state.", error);
+        return false;
+      }
+    };
+  }
+
+  async function disableAcknowledgmentReminder(storage) {
+    if (!storage) {
+      return false;
+    }
+    try {
+      await storage.set({ [ACKNOWLEDGMENT_REMINDER_DISABLED_STORAGE_KEY]: true });
+      return true;
+    } catch (error) {
+      console.warn("[OverCite] Could not disable acknowledgment reminders.", error);
+      return false;
+    }
+  }
+  __overciteSafariModules["src/core/acknowledgment.js"] = { exports: { disableAcknowledgmentReminder, createAcknowledgmentReminderClaim, ACKNOWLEDGMENT_REMINDER_VERSION, ACKNOWLEDGMENT_REMINDER_STORAGE_KEY, ACKNOWLEDGMENT_REMINDER_NEXT_AT_STORAGE_KEY, ACKNOWLEDGMENT_REMINDER_DISABLED_STORAGE_KEY, ACKNOWLEDGMENT_REMINDER_INTERVAL_MS, ACKNOWLEDGMENT_REMINDER_PROMPT, ACKNOWLEDGMENT_TEXT } };
 })();
 
 /* src/core/project.js */
@@ -233,6 +301,7 @@ const __overciteSafariModules = Object.create(null);
     const citationKeyMode = normalizeCitationKeyMode(rawSettings.citationKeyMode);
     const bibliographyInsertMode = normalizeBibliographyInsertMode(rawSettings.bibliographyInsertMode);
     const defaultSearchMode = normalizeDefaultSearchMode(rawSettings.defaultSearchMode);
+    const contextualSearchEngine = normalizeContextualSearchEngine(rawSettings.contextualSearchEngine);
     const adsApiToken = String(rawSettings.adsApiToken ?? DEFAULT_SETTINGS.adsApiToken).trim();
     const sourceApiTokens = normalizeSourceApiTokens(rawSettings.sourceApiTokens, adsApiToken);
     const sourceProfile = normalizeSourceProfile(rawSettings.sourceProfile);
@@ -240,6 +309,7 @@ const __overciteSafariModules = Object.create(null);
     const fallbackSources = normalizeFallbackSources(rawSettings.fallbackSources, primarySource, sourceProfile);
     return {
       adsApiToken,
+      subjectAreaConfigured: normalizeBooleanSetting(rawSettings.subjectAreaConfigured, false),
       sourceProfile,
       primarySource,
       fallbackSources,
@@ -251,11 +321,31 @@ const __overciteSafariModules = Object.create(null);
       returnToSourceAfterInsert: normalizeBooleanSetting(rawSettings.returnToSourceAfterInsert, DEFAULT_SETTINGS.returnToSourceAfterInsert),
       citationKeyMode,
       bibliographyInsertMode,
-      defaultSearchMode
+      defaultSearchMode,
+      contextualSearchEngine
     };
   }
 
   const SOURCE_IDS = new Set(["ads", "crossref", "arxiv", "inspire", "datacite", "pubmed"]);
+
+  const SOURCE_OPTIONAL_ORIGINS = Object.freeze({
+    arxiv: ["https://export.arxiv.org/*"],
+    crossref: ["https://api.crossref.org/*"],
+    datacite: ["https://api.datacite.org/*"],
+    inspire: ["https://inspirehep.net/*"],
+    pubmed: ["https://eutils.ncbi.nlm.nih.gov/*"]
+  });
+
+  function optionalOriginsForSettings(settings) {
+    const sourceIds = [
+      settings?.primarySource,
+      ...(Array.isArray(settings?.fallbackSources) ? settings.fallbackSources : [])
+    ];
+    if (String(settings?.sourceProfile ?? "").trim().toLowerCase() === "astrophysics") {
+      sourceIds.push("arxiv");
+    }
+    return [...new Set(sourceIds.flatMap((sourceId) => SOURCE_OPTIONAL_ORIGINS[sourceId] ?? []))];
+  }
 
   const SOURCE_PRESETS = Object.freeze({
     "ads-only": {
@@ -404,7 +494,12 @@ const __overciteSafariModules = Object.create(null);
     }
     return DEFAULT_SETTINGS.defaultSearchMode;
   }
-  __overciteSafariModules["src/core/settings.js"] = { exports: { getSettings, saveSettings, getStorageArea, normalizeSettings } };
+
+  function normalizeContextualSearchEngine(contextualSearchEngine) {
+    const normalized = String(contextualSearchEngine ?? DEFAULT_SETTINGS.contextualSearchEngine).trim().toLowerCase();
+    return normalized === "beta" ? "beta" : "classic";
+  }
+  __overciteSafariModules["src/core/settings.js"] = { exports: { getSettings, saveSettings, getStorageArea, normalizeSettings, optionalOriginsForSettings } };
 })();
 
 /* src/core/bibtex.js */
@@ -595,50 +690,145 @@ const __overciteSafariModules = Object.create(null);
     return match ? match[1] : null;
   }
 
+  function isEscapedCharacter(text, index) {
+    let slashCount = 0;
+    for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+      slashCount += 1;
+    }
+    return slashCount % 2 === 1;
+  }
+
+  function findNextBibEntryHeader(bibText, startIndex) {
+    let inLineComment = false;
+    for (let index = startIndex; index < bibText.length; index += 1) {
+      const char = bibText[index];
+      if (inLineComment) {
+        if (char === "\n" || char === "\r") {
+          inLineComment = false;
+        }
+        continue;
+      }
+      if (char === "%" && !isEscapedCharacter(bibText, index)) {
+        inLineComment = true;
+        continue;
+      }
+      if (char !== "@") {
+        continue;
+      }
+
+      let cursor = index + 1;
+      while (cursor < bibText.length && /[A-Za-z]/.test(bibText[cursor])) {
+        cursor += 1;
+      }
+      if (cursor === index + 1) {
+        continue;
+      }
+      const type = bibText.slice(index + 1, cursor).trim();
+      while (cursor < bibText.length && /\s/.test(bibText[cursor])) {
+        cursor += 1;
+      }
+      if (bibText[cursor] === "{" || bibText[cursor] === "(") {
+        return { entryStart: index, openIndex: cursor, type };
+      }
+    }
+    return null;
+  }
+
+  function scanBibEntryBlock(bibText, header) {
+    const openDelimiter = bibText[header.openIndex];
+    const closeDelimiter = openDelimiter === "{" ? "}" : ")";
+    let delimiterDepth = 1;
+    let braceDepth = openDelimiter === "{" ? 1 : 0;
+    let commaIndex = -1;
+    let inQuote = false;
+    let inLineComment = false;
+
+    for (let cursor = header.openIndex + 1; cursor < bibText.length; cursor += 1) {
+      const char = bibText[cursor];
+      if (inLineComment) {
+        if (char === "\n" || char === "\r") {
+          inLineComment = false;
+        }
+        continue;
+      }
+      if (char === "%" && !isEscapedCharacter(bibText, cursor)) {
+        inLineComment = true;
+        continue;
+      }
+      if (char === "\"" && !isEscapedCharacter(bibText, cursor) && (openDelimiter === "(" ? braceDepth === 0 : delimiterDepth === 1)) {
+        inQuote = !inQuote;
+        continue;
+      }
+      if (inQuote || isEscapedCharacter(bibText, cursor)) {
+        continue;
+      }
+
+      if (openDelimiter === "{") {
+        if (char === "{") {
+          delimiterDepth += 1;
+        } else if (char === "}") {
+          delimiterDepth -= 1;
+          if (delimiterDepth === 0) {
+            return { ...header, commaIndex, end: cursor + 1 };
+          }
+        } else if (char === "," && delimiterDepth === 1 && commaIndex < 0) {
+          commaIndex = cursor;
+        }
+        continue;
+      }
+
+      if (char === "{") {
+        braceDepth += 1;
+      } else if (char === "}" && braceDepth > 0) {
+        braceDepth -= 1;
+      } else if (braceDepth === 0 && char === "(") {
+        delimiterDepth += 1;
+      } else if (braceDepth === 0 && char === closeDelimiter) {
+        delimiterDepth -= 1;
+        if (delimiterDepth === 0) {
+          return { ...header, commaIndex, end: cursor + 1 };
+        }
+      } else if (braceDepth === 0 && char === "," && delimiterDepth === 1 && commaIndex < 0) {
+        commaIndex = cursor;
+      }
+    }
+    return null;
+  }
+
   function parseBibEntries(bibText) {
     const entries = [];
     let index = 0;
     while (index < bibText.length) {
-      const entryStart = bibText.indexOf("@", index);
-      if (entryStart < 0) {
+      const header = findNextBibEntryHeader(bibText, index);
+      if (!header) {
         break;
       }
-      const openBrace = bibText.indexOf("{", entryStart);
-      if (openBrace < 0) {
+      const block = scanBibEntryBlock(bibText, header);
+      if (!block) {
         break;
       }
-      const header = bibText.slice(entryStart + 1, openBrace).trim();
-      const type = header.split(/\s+/)[0];
-      const commaIndex = bibText.indexOf(",", openBrace);
-      if (commaIndex < 0) {
-        break;
+      index = block.end;
+      const normalizedType = header.type.toLowerCase();
+      if (normalizedType === "comment" || normalizedType === "preamble" || normalizedType === "string" || block.commaIndex < 0) {
+        continue;
       }
-      const key = bibText.slice(openBrace + 1, commaIndex).trim();
-      let depth = 1;
-      let cursor = openBrace + 1;
-      while (cursor < bibText.length && depth > 0) {
-        const char = bibText[cursor];
-        if (char === "{") {
-          depth += 1;
-        } else if (char === "}") {
-          depth -= 1;
-        }
-        cursor += 1;
+      const key = bibText.slice(header.openIndex + 1, block.commaIndex).trim();
+      if (!key) {
+        continue;
       }
-      const raw = bibText.slice(entryStart, cursor).trim();
+      const raw = bibText.slice(header.entryStart, block.end).trim();
       entries.push({
-        type,
+        type: header.type,
         key,
         raw,
-        start: entryStart,
-        end: cursor,
+        start: header.entryStart,
+        end: block.end,
         doi: normalizeLooseText(parseFieldValue(raw, "doi")),
         title: normalizeLooseText(parseFieldValue(raw, "title")),
         adsurl: parseFieldValue(raw, "adsurl"),
         bibcode: normalizeLooseText(extractBibcodeFromAdsUrl(parseFieldValue(raw, "adsurl"))),
         year: parseFieldValue(raw, "year")
       });
-      index = cursor;
     }
     return entries;
   }
@@ -677,11 +867,12 @@ const __overciteSafariModules = Object.create(null);
 
   function appendBibtexEntry(bibText, entryText) {
     const trimmedText = bibText.trimEnd();
-    const trimmedEntry = entryText.trim();
+    const lineEnding = bibText.includes("\r\n") ? "\r\n" : "\n";
+    const trimmedEntry = entryText.trim().replace(/\r\n|\r|\n/g, lineEnding);
     if (!trimmedText) {
-      return `${trimmedEntry}\n`;
+      return `${trimmedEntry}${lineEnding}`;
     }
-    return `${trimmedText}\n\n${trimmedEntry}\n`;
+    return `${trimmedText}${lineEnding}${lineEnding}${trimmedEntry}${lineEnding}`;
   }
 
   function compareKeys(left, right) {
@@ -689,7 +880,10 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function insertBibtexEntryAlphabetically(bibText, entryText, finalKey) {
-    const entries = parseBibEntries(bibText);
+    return insertAlphabetically(bibText, entryText, finalKey, parseBibEntries(bibText));
+  }
+
+  function insertAlphabetically(bibText, entryText, finalKey, entries) {
     if (!entries.length) {
       return appendBibtexEntry(bibText, entryText);
     }
@@ -699,14 +893,15 @@ const __overciteSafariModules = Object.create(null);
       return appendBibtexEntry(bibText, entryText);
     }
 
-    const trimmedEntry = entryText.trim();
+    const lineEnding = bibText.includes("\r\n") ? "\r\n" : "\n";
+    const trimmedEntry = entryText.trim().replace(/\r\n|\r|\n/g, lineEnding);
     const before = bibText.slice(0, insertBefore.start).trimEnd();
     const after = bibText.slice(insertBefore.start).trimStart();
 
     if (!before) {
-      return `${trimmedEntry}\n\n${after}\n`;
+      return `${trimmedEntry}${lineEnding}${lineEnding}${after}${lineEnding}`;
     }
-    return `${before}\n\n${trimmedEntry}\n\n${after}\n`;
+    return `${before}${lineEnding}${lineEnding}${trimmedEntry}${lineEnding}${lineEnding}${after}${lineEnding}`;
   }
 
   function computeInsertionResult(updatedBibText, rewrittenBibtex) {
@@ -742,10 +937,11 @@ const __overciteSafariModules = Object.create(null);
       keyMode: candidate?.keyMode,
       typedToken: candidate?.typedToken
     });
-    const rewrittenBibtex = rewriteBibtexKey(bibtex, finalKey);
-    const insertMode = String(candidate?.bibliographyInsertMode ?? "append").toLowerCase();
+    const rewrittenBibtex = rewriteBibtexKey(bibtex, finalKey)
+      .replace(/\r\n|\r|\n/g, bibText.includes("\r\n") ? "\r\n" : "\n");
+    const insertMode = String(candidate?.bibliographyInsertMode ?? "alphabetical").toLowerCase();
     const updatedBibText = insertMode === "alphabetical"
-      ? insertBibtexEntryAlphabetically(bibText, rewrittenBibtex, finalKey)
+      ? insertAlphabetically(bibText, rewrittenBibtex, finalKey, entries)
       : appendBibtexEntry(bibText, rewrittenBibtex);
     const insertionResult = computeInsertionResult(updatedBibText, rewrittenBibtex);
     return {
@@ -767,6 +963,10 @@ const __overciteSafariModules = Object.create(null);
     return String(value ?? "")
       .normalize("NFKD")
       .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[ŁłØøĐđÐðÞþÆæŒœıß]/g, (letter) => ({
+        Ł: "L", ł: "l", Ø: "O", ø: "o", Đ: "D", đ: "d", Ð: "D", ð: "d",
+        Þ: "Th", þ: "th", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", ı: "i", ß: "ss"
+      })[letter] ?? letter)
       .replace(/\\[A-Za-z]+/g, " ")
       .replace(/[^A-Za-z0-9\s]/g, " ")
       .toLowerCase()
@@ -774,16 +974,66 @@ const __overciteSafariModules = Object.create(null);
       .trim();
   }
 
-  function keywordSet(value) {
-    return new Set(
-      normalizeText(value)
-        .split(" ")
-        .filter((token) => token.length >= 3 && !CONTEXT_STOPWORDS.has(token))
-    );
+  function sanitizeContextText(value) {
+    return String(value ?? "")
+      .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+      .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+      .replace(/\\(?:ref|eqref|pageref|label)\s*\{[^{}]*\}/g, " ")
+      .replace(/\$[^$]*\$/g, " ")
+      .replace(/\\\([^]*?\\\)|\\\[[^]*?\\\]/g, " ");
+  }
+
+  function keywordSequence(value) {
+    return normalizeText(sanitizeContextText(value))
+      .split(" ")
+      .filter((token) => token.length >= 3 && !CONTEXT_STOPWORDS.has(token));
   }
 
   function keywordList(value) {
-    return [...keywordSet(value)];
+    return [...new Set(keywordSequence(value))];
+  }
+
+  function contextualKeywordList(citationContext) {
+    const before = keywordSequence(citationContext?.citationPrefixText ?? "").slice(-10);
+    const after = keywordSequence(citationContext?.citationSuffixText ?? "").slice(0, 3);
+    const proximal = [...new Set([...before, ...after])];
+    return proximal.length >= 2 ? proximal : keywordList(citationContext?.sentenceText ?? "");
+  }
+
+  function contextualKeywordConcepts(citationContext) {
+    return contextualKeywordList(citationContext).map((token) => expandKeywordVariants(token));
+  }
+
+  function distinctiveContextIdentifier(citationContext) {
+    const context = [
+      citationContext?.citationPrefixText,
+      citationContext?.sentenceText,
+      citationContext?.contextText,
+      citationContext?.citationSuffixText
+    ].filter(Boolean).join(" ");
+    return context.match(/\b(?:[A-Z]{2,}\s+)?[A-Z]\d{3,5}[+-]\d{3,5}\b/i)?.[0] ?? "";
+  }
+
+  function hasDistinctiveContextIdentifier(citationContext) {
+    return Boolean(distinctiveContextIdentifier(citationContext));
+  }
+
+  function buildDistinctiveContextQuery(citationContext) {
+    const identifier = distinctiveContextIdentifier(citationContext);
+    if (!identifier) {
+      return null;
+    }
+    const identifierTerms = new Set(normalizeText(identifier).split(" ").filter(Boolean));
+    const topicTerms = [...new Set(contextualKeywordConcepts(citationContext).flat())]
+      .filter((token) => token.length >= 5 && !identifierTerms.has(token))
+      .reverse()
+      .slice(0, 6);
+    const identifierQuery = `full:"${escapeQueryValue(identifier)}"`;
+    if (!topicTerms.length) {
+      return identifierQuery;
+    }
+    const topicQuery = topicTerms.map((token) => `full:"${escapeQueryValue(token)}"`).join(" OR ");
+    return `${identifierQuery} AND (${topicQuery})`;
   }
 
   function expandKeywordVariants(token) {
@@ -825,6 +1075,76 @@ const __overciteSafariModules = Object.create(null);
     return String(value ?? "").replace(/"/g, '\\"');
   }
 
+  function plausibleCitationYear(value) {
+    const year = Number(value);
+    return Number.isInteger(year) && year >= 1800 && year <= new Date().getFullYear() + 3;
+  }
+
+  function splitContextualKeyTerms(value) {
+    return [...new Set(String(value ?? "")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      .split(/[^A-Za-z0-9]+/)
+      .map((term) => normalizeText(term))
+      .filter((term) => term.length >= 4 && !CONTEXT_STOPWORDS.has(term)))];
+  }
+
+  function contextualKeyHint(citationContext) {
+    const original = citationContext?.parsedKeyHint;
+    const token = String(citationContext?.token ?? "").trim();
+    if (!token) {
+      return original;
+    }
+
+    if (original?.surname && plausibleCitationYear(original.year)) {
+      return { ...original, keyTerms: splitContextualKeyTerms(original.suffix) };
+    }
+
+    const trailingYear = token.match(/^([^_]+)_(.+)_(\d{4})$/)
+      ?? token.match(/^(.*?)[_:](\d{4})$/)
+      ?? token.match(/^([^-]+)-(.*)-(\d{4})$/);
+    if (trailingYear && plausibleCitationYear(trailingYear.at(-1))) {
+      const prefix = String(trailingYear[1] ?? "").trim();
+      const middle = trailingYear.length === 4 ? String(trailingYear[2] ?? "") : "";
+      const surname = prefix.replace(/[{}]/g, "").trim();
+      if (surname && /^[A-Za-z][A-Za-z'`.-]*$/.test(surname)) {
+        return {
+          raw: token,
+          normalized: token.replace(/[{}\s]/g, ""),
+          surname,
+          firstInitial: null,
+          year: Number(trailingYear.at(-1)),
+          suffix: middle,
+          keyTerms: splitContextualKeyTerms(middle)
+        };
+      }
+    }
+
+    if (original?.year && !plausibleCitationYear(original.year)) {
+      return { ...original, surname: null, firstInitial: null, year: null, suffix: "", keyTerms: [] };
+    }
+    return { ...original, keyTerms: splitContextualKeyTerms(original?.suffix) };
+  }
+
+  function withContextualKeyHint(citationContext) {
+    return { ...citationContext, parsedKeyHint: contextualKeyHint(citationContext) };
+  }
+
+  function directAdsBibcodeToken(token) {
+    const value = String(token ?? "").trim();
+    return value.length === 19 && /^\d{4}[A-Za-z&.]{5}/.test(value) ? value : "";
+  }
+
+  function buildAuthorYearKeyTermsQuery(surname, year, keyTerms) {
+    if (!surname || !year || !keyTerms?.length) {
+      return null;
+    }
+    const terms = keyTerms.slice(0, 4)
+      .map((term) => `(title:"${escapeQueryValue(term)}" OR abstract:"${escapeQueryValue(term)}")`)
+      .join(" AND ");
+    return `first_author:"${escapeQueryValue(surname)}" year:${year} AND ${terms}`;
+  }
+
   function isAuthorLikeToken(token) {
     const trimmed = String(token ?? "").trim();
     if (/\s/.test(trimmed)) {
@@ -848,6 +1168,10 @@ const __overciteSafariModules = Object.create(null);
       }
     }
     variants.add(raw);
+    const leadingCamelSegment = raw.match(/^([A-Z][a-z]{3,})[A-Z]/)?.[1];
+    if (leadingCamelSegment) {
+      variants.add(leadingCamelSegment);
+    }
     const withoutPunctuation = raw.replace(/['`.\s]/g, "");
     if (withoutPunctuation) {
       variants.add(withoutPunctuation);
@@ -859,7 +1183,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildContextKeywordQuery(citationContext) {
-    const sentenceConcepts = keywordConcepts(citationContext?.sentenceText ?? "").slice(0, 5);
+    const sentenceConcepts = contextualKeywordConcepts(citationContext).slice(0, 5);
     const concepts = [...sentenceConcepts];
     if (concepts.length < 2) {
       const contextConcepts = keywordConcepts(citationContext?.contextText ?? "")
@@ -877,7 +1201,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildTitleAbstractKeywordQuery(citationContext) {
-    const sentenceConcepts = keywordConcepts(citationContext?.sentenceText ?? "").slice(0, 5);
+    const sentenceConcepts = contextualKeywordConcepts(citationContext).slice(0, 5);
     const concepts = [...sentenceConcepts];
     if (concepts.length < 2) {
       const contextConcepts = keywordConcepts(citationContext?.contextText ?? "")
@@ -903,7 +1227,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildSentencePhrase(citationContext) {
-    const tokens = keywordList(citationContext?.sentenceText ?? "");
+    const tokens = contextualKeywordList(citationContext);
     if (tokens.length < 2) {
       return null;
     }
@@ -911,7 +1235,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildLeadingKeywordPhrase(citationContext) {
-    const tokens = keywordList(citationContext?.sentenceText ?? "");
+    const tokens = contextualKeywordList(citationContext);
     if (tokens.length < 2) {
       return null;
     }
@@ -919,7 +1243,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function buildTrailingKeywordPhrase(citationContext) {
-    const tokens = keywordList(citationContext?.sentenceText ?? "");
+    const tokens = contextualKeywordList(citationContext);
     if (tokens.length < 2) {
       return null;
     }
@@ -978,6 +1302,14 @@ const __overciteSafariModules = Object.create(null);
       return null;
     }
     return `first_author:"${escapeQueryValue(surname)}" year:${year} AND ${keywordQuery}`;
+  }
+
+  function buildAuthorYearDistinctiveContextQuery(surname, year, citationContext) {
+    const distinctiveQuery = buildDistinctiveContextQuery(citationContext);
+    if (!surname || !year || !distinctiveQuery) {
+      return null;
+    }
+    return `((first_author:"${escapeQueryValue(surname)}") OR (author:"${escapeQueryValue(surname)}")) year:${year} AND ${distinctiveQuery}`;
   }
 
   function buildFirstAuthorYearInitialTitleAbstractKeywordQuery(surname, firstInitial, year, citationContext) {
@@ -1068,7 +1400,7 @@ const __overciteSafariModules = Object.create(null);
     const raw = normalizeText(surname);
     const hint = parseCollaborationHint(surname);
     if (!hint) {
-      return raw ? [raw] : [];
+      return [...new Set(buildSurnameVariants(surname).map((variant) => normalizeText(variant)).filter(Boolean))];
     }
     return [...new Set([
       raw,
@@ -1365,10 +1697,15 @@ const __overciteSafariModules = Object.create(null);
     if (citationContext?.searchMode === "simple") {
       return buildSimpleAdsQueries(citationContext);
     }
+    citationContext = withContextualKeyHint(citationContext);
     const queries = new Set();
     const hint = citationContext?.parsedKeyHint;
-    const primarySurname = hint?.surname
-      ? (buildSurnameVariants(hint.surname)[0] ?? hint.surname)
+    // Keep the surname exactly as typed for the first contextual queries. Some
+    // compact family names (for example VanRoestel) are valid ADS author forms;
+    // punctuation variants remain available later as fallbacks.
+    const primarySurname = hint?.surname ?? null;
+    const inferredSurname = primarySurname
+      ? buildSurnameVariants(primarySurname).find((surname) => surname !== primarySurname) ?? null
       : null;
     const token = String(citationContext?.token ?? "").trim();
     const isEmptyTokenLookup = !token;
@@ -1415,6 +1752,12 @@ const __overciteSafariModules = Object.create(null);
     const primaryFirstAuthorYearTitleAbstractKeywordQuery = primarySurname && hint?.year
       ? buildFirstAuthorYearTitleAbstractKeywordQuery(primarySurname, hint.year, citationContext)
       : null;
+    const primaryAuthorYearDistinctiveContextQuery = primarySurname && hint?.year
+      ? buildAuthorYearDistinctiveContextQuery(primarySurname, hint.year, citationContext)
+      : null;
+    const primaryAuthorYearKeyTermsQuery = primarySurname && hint?.year
+      ? buildAuthorYearKeyTermsQuery(primarySurname, hint.year, hint.keyTerms)
+      : null;
     const primaryFirstAuthorYearInitialTitleAbstractKeywordQuery = primarySurname && hint?.firstInitial && hint?.year
       ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(primarySurname, hint.firstInitial, hint.year, citationContext)
       : null;
@@ -1441,6 +1784,35 @@ const __overciteSafariModules = Object.create(null);
       : null;
     const titleAbstractKeywordQuery = buildTitleAbstractKeywordQuery(citationContext);
 
+    function preferredSurnameQuery(surname) {
+      if (!surname) {
+        return null;
+      }
+      if (hint?.year) {
+        return (hint.firstInitial
+          ? buildFirstAuthorYearInitialTitleAbstractPhraseQuery(surname, hint.firstInitial, hint.year, citationContext)
+          : null)
+          ?? buildFirstAuthorYearTitleAbstractPhraseQuery(surname, hint.year, citationContext)
+          ?? (hint.firstInitial
+            ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(surname, hint.firstInitial, hint.year, citationContext)
+            : null)
+          ?? buildFirstAuthorYearTitleAbstractKeywordQuery(surname, hint.year, citationContext)
+          ?? (hint.firstInitial
+            ? buildFirstAuthorYearInitialSentencePhraseQuery(surname, hint.firstInitial, hint.year, citationContext)
+            : null)
+          ?? buildFirstAuthorYearSentencePhraseQuery(surname, hint.year, citationContext)
+          ?? (hint.firstInitial
+            ? buildFirstAuthorYearInitialQuery(surname, hint.firstInitial, hint.year)
+            : null)
+          ?? buildFirstAuthorOrCollaborationYearQuery(surname, hint.year);
+      }
+      return buildFirstAuthorLeadingTitleAbstractPhraseQuery(surname, citationContext)
+        ?? buildFirstAuthorTitleAbstractPhraseQuery(surname, citationContext)
+        ?? buildFirstAuthorTitleAbstractKeywordQuery(surname, citationContext)
+        ?? buildFirstAuthorSentencePhraseQuery(surname, citationContext)
+        ?? buildFirstAuthorOrCollaborationQuery(surname);
+    }
+
     if (isEmptyTokenLookup) {
       if (leadTrailTitleAbstractQuery) {
         queries.add(leadTrailTitleAbstractQuery);
@@ -1465,6 +1837,15 @@ const __overciteSafariModules = Object.create(null);
       }
       queries.add(primaryQuery);
     } else if (hint?.surname && hint?.year) {
+      // Run the strongest raw and inferred surname forms as the progressive
+      // opening pair. This covers both compact ADS names (VanRoestel) and
+      // punctuation-normalized names (El-Badry) without serially walking the
+      // full contextual query expansion.
+      queries.add(primaryFirstAuthorYearInitialQuery ?? primaryFirstAuthorYearQuery);
+      queries.add(primaryAuthorYearDistinctiveContextQuery ?? primaryAuthorYearKeyTermsQuery);
+      queries.add(preferredSurnameQuery(primarySurname));
+      queries.add(inferredSurname ? buildFirstAuthorOrCollaborationYearQuery(inferredSurname, hint.year) : null);
+      queries.add(preferredSurnameQuery(inferredSurname));
       if (primaryFirstAuthorYearInitialTitleAbstractPhraseQuery) {
         queries.add(primaryFirstAuthorYearInitialTitleAbstractPhraseQuery);
       }
@@ -1521,6 +1902,7 @@ const __overciteSafariModules = Object.create(null);
         queries.add(contextQuery);
       }
     } else if (hint?.surname && !hint?.year && primaryAuthorPhraseQuery) {
+      queries.add(primaryFirstAuthorQuery);
       if (primaryFirstAuthorLeadingTitleAbstractPhraseQuery) {
         queries.add(primaryFirstAuthorLeadingTitleAbstractPhraseQuery);
       }
@@ -1563,6 +1945,10 @@ const __overciteSafariModules = Object.create(null);
       }
       queries.add(primaryQuery);
     } else {
+      const bibcode = directAdsBibcodeToken(token);
+      if (bibcode) {
+        queries.add(`bibcode:"${escapeQueryValue(bibcode)}"`);
+      }
       queries.add(primaryQuery);
       if (sentencePhraseQuery) {
         queries.add(sentencePhraseQuery);
@@ -1723,16 +2109,22 @@ const __overciteSafariModules = Object.create(null);
     if (citationContext?.searchMode === "simple") {
       return rerankSimpleAdsCandidates(citationContext, candidates);
     }
+    citationContext = withContextualKeyHint(citationContext);
     const hint = citationContext?.parsedKeyHint;
     const token = String(citationContext?.token ?? "").trim();
+    const directBibcode = directAdsBibcodeToken(token);
     const normalizedToken = normalizeText(token);
     const tokenLooksLikeTitle = !hint?.year && normalizedToken.split(" ").filter(Boolean).length >= 3;
     const isEmptyTokenLookup = !token;
     const contextKeywordConcepts = keywordConcepts(citationContext?.contextText ?? "");
-    const sentenceKeywordConcepts = keywordConcepts(citationContext?.sentenceText ?? "");
+    const sentenceKeywordConcepts = contextualKeywordConcepts(citationContext);
     const sentencePhrase = normalizeText(buildSentencePhrase(citationContext) ?? "");
     const leadingPhrase = normalizeText(buildLeadingKeywordPhrase(citationContext) ?? "");
     const trailingPhrase = normalizeText(buildTrailingKeywordPhrase(citationContext) ?? "");
+    const distinctiveIdentifier = normalizeText(distinctiveContextIdentifier(citationContext));
+    const distinctiveIdentifierTerms = new Set(distinctiveIdentifier.split(" ").filter(Boolean));
+    const distinctiveTopicConcepts = contextualKeywordConcepts(citationContext)
+      .filter((concept) => concept.some((term) => term.length >= 5 && !distinctiveIdentifierTerms.has(term)));
 
     return candidates
       .map((candidate) => {
@@ -1742,6 +2134,15 @@ const __overciteSafariModules = Object.create(null);
         const firstAuthor = normalizeText(candidate.authors[0] ?? "");
         const allAuthors = normalizeText(candidate.authors.join(" "));
         const collaborationFirstAuthor = /collaboration/.test(firstAuthor);
+        const identifierMatches = Boolean(distinctiveIdentifier && (
+          titleText.includes(distinctiveIdentifier) || abstractText.includes(distinctiveIdentifier)
+        ));
+        let matchesFirstAuthor = false;
+        let matchesAnyAuthor = false;
+
+        if (directBibcode && normalizeText(candidate.bibcode) === normalizeText(directBibcode)) {
+          score += 5000;
+        }
 
         if (tokenLooksLikeTitle) {
           score += computeTitleTokenScore(normalizedToken, titleText);
@@ -1749,13 +2150,16 @@ const __overciteSafariModules = Object.create(null);
 
         if (hint?.surname) {
           const surnameVariants = buildHintSurnameMatchVariants(hint.surname);
+          if (hint.firstInitial) {
+            surnameVariants.push(normalizeText(`${hint.firstInitial} ${hint.surname}`));
+          }
           const baseSurname = normalizeText(parseCollaborationHint(hint.surname)?.base ?? hint.surname);
-          const matchesFirstAuthor = authorNameMatchesSurnameVariants(firstAuthor, surnameVariants);
-          const matchesAnyAuthor = candidate.authors.some((author) => authorNameMatchesSurnameVariants(author, surnameVariants));
+          matchesFirstAuthor = authorNameMatchesSurnameVariants(firstAuthor, surnameVariants);
+          matchesAnyAuthor = candidate.authors.some((author) => authorNameMatchesSurnameVariants(author, surnameVariants));
           if (matchesFirstAuthor) {
-            score += 80;
+            score += 180;
           } else if (matchesAnyAuthor) {
-            score += 40;
+            score += 55;
           }
           if (collaborationFirstAuthor && baseSurname && firstAuthor.startsWith(baseSurname)) {
             score += 36;
@@ -1772,9 +2176,8 @@ const __overciteSafariModules = Object.create(null);
         }
 
         if (citationContext?.parsedKeyHint?.surname && citationContext?.parsedKeyHint?.year) {
-          const surnameVariants = buildHintSurnameMatchVariants(citationContext.parsedKeyHint.surname);
-          if (!authorNameMatchesSurnameVariants(firstAuthor, surnameVariants)) {
-            score -= 25;
+          if (!matchesFirstAuthor) {
+            score -= 240;
           }
         }
 
@@ -1783,19 +2186,29 @@ const __overciteSafariModules = Object.create(null);
         }
 
         if (hint?.year && candidate.year === hint.year) {
-          score += 60;
-        } else if (hint?.year && candidate.year && String(candidate.year).endsWith(String(hint.year).slice(-2))) {
-          score += 20;
+          score += 240;
+        } else if (hint?.year && candidate.year && Math.abs(Number(candidate.year) - Number(hint.year)) === 1) {
+          score += 30;
+        } else if (hint?.year && candidate.year) {
+          score -= 220;
         }
 
-        if (hint?.year && candidate.year === hint.year && contextualTitleLeadMatches(titleText, leadingPhrase)) {
-          score += 420;
+        if (hint?.year && candidate.year === hint.year && matchesFirstAuthor && contextualTitleLeadMatches(titleText, leadingPhrase)) {
+          score += 260;
         }
 
         if (hint?.suffix) {
           const suffix = normalizeText(hint.suffix);
           if (suffix && titleText.includes(suffix)) {
             score += 18;
+          }
+        }
+
+        for (const keyTerm of hint?.keyTerms ?? []) {
+          if (titleText.includes(keyTerm)) {
+            score += 70;
+          } else if (abstractText.includes(keyTerm)) {
+            score += 12;
           }
         }
 
@@ -1839,10 +2252,35 @@ const __overciteSafariModules = Object.create(null);
           }
         }
 
-        score += adsPublicationQualityScore(candidate);
-        return { ...candidate, score };
+        if (identifierMatches) {
+          score += 35;
+          let topicMatches = 0;
+          for (const concept of distinctiveTopicConcepts) {
+            if (concept.some((term) => titleText.includes(term))) {
+              score += 14;
+              topicMatches += 1;
+            } else if (concept.some((term) => abstractText.includes(term))) {
+              score += 4;
+              topicMatches += 1;
+            }
+          }
+          if (topicMatches >= 2) {
+            score += 30;
+          }
+        }
+
+        score += contextualPublicationQualityScore(candidate);
+        const primaryMatchTier = hint?.surname && hint?.year
+          ? (matchesFirstAuthor && candidate.year === hint.year
+            ? 3
+            : (matchesFirstAuthor && candidate.year && Math.abs(Number(candidate.year) - Number(hint.year)) === 1
+              ? 2
+              : (matchesAnyAuthor && candidate.year === hint.year ? 1 : 0)))
+          : 0;
+        return { ...candidate, score, primaryMatchTier };
       })
       .sort((left, right) =>
+        right.primaryMatchTier - left.primaryMatchTier ||
         right.score - left.score ||
         (right.citationCount || 0) - (left.citationCount || 0) ||
         compareYears(right.year, left.year)
@@ -2023,7 +2461,636 @@ const __overciteSafariModules = Object.create(null);
 
     return score;
   }
-  __overciteSafariModules["src/core/ads.js"] = { exports: { buildAdsQuery, buildAdsQueries, mapAdsDocToCandidate, rerankAdsCandidates } };
+
+  function contextualPublicationQualityScore(candidate) {
+    const score = adsPublicationQualityScore(candidate);
+    return score > 0 ? Math.min(score, 120) : score;
+  }
+  __overciteSafariModules["src/core/ads.js"] = { exports: { hasDistinctiveContextIdentifier, buildAdsQuery, buildAdsQueries, mapAdsDocToCandidate, rerankAdsCandidates } };
+})();
+
+/* src/core/contextual-beta.js */
+(() => {
+  const { CONTEXT_STOPWORDS } = __overciteSafariModules["src/core/constants.js"].exports;
+  const { normalizeContextualCitationContext } = __overciteSafariModules["src/core/citation.js"].exports;
+  const { rerankAdsCandidates } = __overciteSafariModules["src/core/ads.js"].exports;
+  // Contextual Search Beta is a deliberately small, local feature ranker.
+  // It reranks provider candidates only; it never invents papers or metadata.
+  // Explicit identifiers and author/year constraints remain hard ordering tiers.
+  const CONTEXTUAL_BETA_MODEL_VERSION = "context-hybrid-4";
+  const MIN_TIER_MODEL_SPREAD = 20;
+  const MAX_SENTENCE_CHARS = 4_000;
+  const MAX_PREFIX_CHARS = 4_000;
+  const MAX_SUFFIX_CHARS = 2_000;
+  const MAX_CONTEXT_CHARS = 12_000;
+
+  const MODEL_WEIGHTS = Object.freeze({
+    titleCoverage: 190,
+    abstractCoverage: 58,
+    titleSpecificity: 70,
+    titleBigramCoverage: 72,
+    abstractBigramCoverage: 18,
+    identifierCoverage: 105,
+    keyTitleCoverage: 155,
+    softwareTitleMatch: 260,
+    tokenAuthorMatch: 210,
+    tokenTitleMatch: 210,
+    tokenTitlePhraseMatch: 260,
+    tokenTitleAcronymMatch: 260
+  });
+
+  const PARTICLES = new Set(["al", "bin", "da", "de", "del", "della", "der", "di", "du", "el", "la", "le", "van", "von"]);
+  const GENERIC_CONTEXT_TERMS = new Set([
+    "analysis", "approach", "data", "distribution", "model", "models", "method", "methods",
+    "measurement", "measurements", "population", "populations", "sample", "samples", "system", "systems"
+  ]);
+  const CITATION_BOILERPLATE_TERMS = new Set([
+    "above", "article", "below", "bibliograph", "bibliographic", "bibliography", "cit",
+    "citation", "detail", "discuss", "earlier", "elsewhere", "entry", "follow", "later",
+    "next", "original", "paper", "previous", "prior", "record", "refer", "reference",
+    "referenc", "relevant", "section", "see", "show", "shown", "source", "use", "work"
+  ]);
+
+  function applyContextualBetaReranking(citationContext, rankedCandidates) {
+    if (citationContext?.searchMode !== "contextual" || !Array.isArray(rankedCandidates) || rankedCandidates.length === 0) {
+      return rankedCandidates;
+    }
+
+    const normalizedContext = normalizeContextualCitationContext(citationContext, "beta");
+    if (normalizedContext !== citationContext) {
+      rankedCandidates = rerankAdsCandidates(normalizedContext, rankedCandidates);
+      citationContext = normalizedContext;
+    }
+
+    const evidence = buildContextEvidence(citationContext);
+    evidence.tokenTitleSignalCounts = countTokenTitleSignals(citationContext, rankedCandidates, evidence);
+    const documentFrequencies = buildDocumentFrequencies(rankedCandidates);
+    const ranked = rankedCandidates.map((candidate, baselineIndex) => {
+      const features = contextualBetaFeatures(citationContext, candidate, evidence, documentFrequencies, rankedCandidates.length);
+      const modelScore = dotModel(features);
+      const decisiveTitleMatch = hasDecisiveTitleMatch(citationContext, candidate);
+      const identityTier = contextualIdentityTier(citationContext, candidate, decisiveTitleMatch);
+      return {
+        ...candidate,
+        score: Number(candidate?.score ?? 0) + modelScore,
+        contextualBeta: {
+          modelVersion: CONTEXTUAL_BETA_MODEL_VERSION,
+          modelScore,
+          identityTier,
+          decisiveTitleMatch
+        },
+        __contextualBetaBaselineIndex: baselineIndex
+      };
+    });
+    const tierModelSpreads = modelScoreSpreadsByTier(ranked);
+
+    return ranked
+      .sort((left, right) => {
+        const tierDifference = Number(right.contextualBeta?.identityTier ?? 0) - Number(left.contextualBeta?.identityTier ?? 0);
+        if (tierDifference) return tierDifference;
+        const tier = Number(left.contextualBeta?.identityTier ?? 0);
+        if (Number(tierModelSpreads.get(tier) ?? 0) < MIN_TIER_MODEL_SPREAD) {
+          return Number(left.__contextualBetaBaselineIndex ?? 0) - Number(right.__contextualBetaBaselineIndex ?? 0);
+        }
+        return Number(right.score ?? 0) - Number(left.score ?? 0) ||
+          Number(right.citationCount ?? 0) - Number(left.citationCount ?? 0) ||
+          Number(left.__contextualBetaBaselineIndex ?? 0) - Number(right.__contextualBetaBaselineIndex ?? 0);
+      })
+      .map(({ __contextualBetaBaselineIndex, ...candidate }) => candidate);
+  }
+
+  function contextualBetaFeatures(citationContext, candidate, suppliedEvidence = null, documentFrequencies = null, candidateCount = 1) {
+    citationContext = normalizeContextualCitationContext(citationContext, "beta");
+    const evidence = suppliedEvidence ?? buildContextEvidence(citationContext);
+    const titleTerms = uniqueTerms(candidate?.title);
+    const abstractTerms = uniqueTerms(candidate?.abstract);
+    const titleSet = new Set(titleTerms);
+    const abstractSet = new Set(abstractTerms);
+    const frequencies = documentFrequencies ?? buildDocumentFrequencies([candidate]);
+    const totalEvidenceWeight = sumEvidenceWeight(evidence.weightedTerms, frequencies, candidateCount);
+    const titleCoverage = weightedEvidenceCoverage(evidence.weightedTerms, titleSet, frequencies, candidateCount, totalEvidenceWeight);
+    const abstractCoverage = weightedEvidenceCoverage(evidence.weightedTerms, abstractSet, frequencies, candidateCount, totalEvidenceWeight);
+    const titleSpecificity = weightedCandidateSpecificity(titleTerms, evidence.termSet, frequencies, candidateCount);
+    const titleBigramCoverage = bigramCoverage(evidence.proximalTerms, titleTerms);
+    const abstractBigramCoverage = bigramCoverage(evidence.proximalTerms, abstractTerms);
+    const identifierCoverage = setCoverage(evidence.identifiers, new Set([
+      ...titleSet,
+      ...abstractSet,
+      ...extractIdentifiers(candidateMetadataText(candidate))
+    ]));
+    const keyTerms = contextualKeyTerms(citationContext);
+    const keyTitleCoverage = setCoverage(keyTerms, titleSet);
+    const softwareName = softwareNameHint(citationContext);
+    const normalizedTitle = normalize(candidate?.title);
+    const softwareTitleMatch = softwareName && normalizedTitle.includes(softwareName) ? 1 : 0;
+    const tokenTerms = evidence.hasSubstantiveProse
+      ? tokenLexicalTerms(citationContext?.token)
+      : new Set();
+    const authorFamilies = (Array.isArray(candidate?.authors) ? candidate.authors : []).map(authorFamily).filter(Boolean);
+    const tokenAuthorMatch = authorFamilies.some((family) => lexicalTermMatchesCompactValue(tokenTerms, family)) ? 1 : 0;
+    const tokenTitleMatch = titleTerms.some((term) => tokenTerms.has(term)) ? 1 : 0;
+    const tokenTitlePhraseMatch = evidence.hasSubstantiveProse &&
+      Number(evidence.tokenTitleSignalCounts?.phrase ?? 1) === 1 &&
+      titlePhraseMatchesToken(tokenTerms, titleTerms) ? 1 : 0;
+    const tokenTitleAcronymMatch = evidence.hasSubstantiveProse &&
+      Number(evidence.tokenTitleSignalCounts?.acronym ?? 1) === 1 &&
+      titleAcronymMatchesToken(citationContext?.token, titleTerms) ? 1 : 0;
+
+    return {
+      titleCoverage,
+      abstractCoverage,
+      titleSpecificity,
+      titleBigramCoverage,
+      abstractBigramCoverage,
+      identifierCoverage,
+      keyTitleCoverage,
+      softwareTitleMatch,
+      tokenAuthorMatch,
+      tokenTitleMatch,
+      tokenTitlePhraseMatch,
+      tokenTitleAcronymMatch
+    };
+  }
+
+  function contextualIdentityTier(citationContext, candidate, decisiveTitleMatch = hasDecisiveTitleMatch(citationContext, candidate)) {
+    if (candidateIdentifierMatches(citationContext, candidate)) return 6;
+    const hint = contextualParsedKeyHint(citationContext);
+    if (!hint?.surname) {
+      if (decisiveTitleMatch) return 5;
+      return Number(candidate?.primaryMatchTier ?? 0);
+    }
+    const expectedYear = Number(hint.year);
+    const candidateYear = Number(candidate?.year);
+    const exactYear = Number.isFinite(expectedYear) && Number.isFinite(candidateYear) && expectedYear === candidateYear;
+    const adjacentYear = Number.isFinite(expectedYear) && Number.isFinite(candidateYear) && Math.abs(expectedYear - candidateYear) === 1;
+    const authors = Array.isArray(candidate?.authors) ? candidate.authors : [];
+    const firstFamily = authorFamily(authors[0]);
+    const allFamilies = authors.map(authorFamily).filter(Boolean);
+    const normalizedHint = compact(hint.surname);
+    const firstMatches = Boolean(normalizedHint && familyMatchesHint(firstFamily, normalizedHint));
+    const anyMatches = Boolean(normalizedHint && allFamilies.some((family) => familyMatchesHint(family, normalizedHint)));
+    const compoundMatches = compoundAuthorKeyMatches(hint.surname, allFamilies);
+    const groupMatches = groupAuthorMatchesHint(authors[0], normalizedHint);
+    const initialCompatible = !hint.firstInitial || !authorGivenInitial(authors[0]) ||
+      compact(authorGivenInitial(authors[0])) === compact(hint.firstInitial) ||
+      familyParticleInitialMatches(firstFamily, normalizedHint, hint.firstInitial);
+    const strongFirstMatch = (firstMatches && initialCompatible) || compoundMatches || groupMatches;
+
+    if (decisiveTitleMatch && strongFirstMatch &&
+        (!hint.year || exactYear || adjacentYear)) {
+      return 5;
+    }
+
+    if (hint.year) {
+      if (exactYear && strongFirstMatch) return 4;
+      // Broad-provider issue years can differ from the preprint/key year.
+      // Let topical evidence order these same-author candidates together.
+      if (adjacentYear && strongFirstMatch) return candidate.sourceId && candidate.sourceId !== "ads" ? 4 : 3;
+      if (exactYear && anyMatches) return 2;
+      if (strongFirstMatch) return 1;
+      return 0;
+    }
+    if (strongFirstMatch) return 3;
+    if (anyMatches) return 2;
+    return 0;
+  }
+
+  function hasDecisiveTitleMatch(citationContext, candidate) {
+    if (citationContext?.searchMode !== "contextual") return false;
+    const lead = extractSentenceLead(boundedText(citationContext?.sentenceText, MAX_SENTENCE_CHARS));
+    const normalizedLead = normalize(lead);
+    const normalizedTitle = normalize(candidate?.title);
+    const exactTitle = Boolean(
+      normalizedLead &&
+      normalizedTitle &&
+      terms(normalizedLead).length >= 4 &&
+      normalizedLead === normalizedTitle
+    );
+    if (!exactTitle) return false;
+    const hint = contextualParsedKeyHint(citationContext);
+    if (!hint?.surname) return true;
+    const authors = Array.isArray(candidate?.authors) ? candidate.authors : [];
+    const firstFamily = authorFamily(authors[0]);
+    const families = authors.map(authorFamily).filter(Boolean);
+    const normalizedHint = compact(hint.surname);
+    const authorCompatible = familyMatchesHint(firstFamily, normalizedHint) ||
+      compoundAuthorKeyMatches(hint.surname, families) ||
+      groupAuthorMatchesHint(authors[0], normalizedHint);
+    if (!authorCompatible) return false;
+    const givenInitial = authorGivenInitial(authors[0]);
+    const initialCompatible = !hint.firstInitial || !givenInitial ||
+      compact(givenInitial) === compact(hint.firstInitial) ||
+      familyParticleInitialMatches(firstFamily, normalizedHint, hint.firstInitial);
+    if (!initialCompatible) return false;
+    const expectedYear = Number(hint.year);
+    const candidateYear = Number(candidate?.year);
+    return !hint.year || !Number.isFinite(candidateYear) ||
+      Math.abs(candidateYear - expectedYear) <= 1;
+  }
+
+  function extractSentenceLead(value) {
+    return String(value ?? "").trim().match(/^(.+?)\s+(?:is|was|introduced|describes|presents|reports|shows|provides|uses)\b/)?.[1]?.trim() ?? "";
+  }
+
+  function groupAuthorMatchesHint(author, normalizedHint) {
+    const normalizedAuthor = normalize(author);
+    if (!normalizedAuthor || !normalizedHint || normalizedHint.length < 3) return false;
+    const compactAuthor = compact(normalizedAuthor.replace(/^the\s+/, ""));
+    const compactHint = compact(normalizedHint.replace(/^the\s+/, ""));
+    const suffixPattern = /(collaboration|consortium|team|group)$/;
+    if (!suffixPattern.test(compactAuthor)) return false;
+    const authorBase = compactAuthor.replace(suffixPattern, "").replace(/scientific$/, "");
+    const hintBase = compactHint.replace(suffixPattern, "").replace(/scientific$/, "");
+    return Boolean(authorBase && authorBase === hintBase);
+  }
+
+  function dotModel(features) {
+    let score = 0;
+    for (const [name, weight] of Object.entries(MODEL_WEIGHTS)) {
+      score += Number(features[name] ?? 0) * weight;
+    }
+    return Math.round(score * 1000) / 1000;
+  }
+
+  function buildContextEvidence(citationContext) {
+    // Proximity windows intentionally span beyond the active sentence so the
+    // classic search path has fallback context.  The beta ranker must not give
+    // that neighbouring prose its higher proximity weight: it can describe the
+    // next citation and invert two otherwise-correct same-author results.
+    const prefixText = currentSentenceTail(boundedText(citationContext?.citationPrefixText, MAX_PREFIX_CHARS, true));
+    const suffixText = currentSentenceHead(boundedText(citationContext?.citationSuffixText, MAX_SUFFIX_CHARS));
+    const sentenceText = boundedText(citationContext?.sentenceText, MAX_SENTENCE_CHARS);
+    const contextText = boundedText(citationContext?.contextText, MAX_CONTEXT_CHARS);
+    const prefix = terms(prefixText).slice(-28);
+    const suffix = terms(suffixText).slice(0, 10);
+    const sentence = terms(sentenceText);
+    const localEvidence = new Set([...prefix, ...suffix, ...sentence]);
+    const context = localEvidence.size >= 3 ? [] : terms(contextText);
+    const weightedTerms = new Map();
+    addWeightedTerms(weightedTerms, context, 0.55);
+    addWeightedTerms(weightedTerms, sentence, 1.1);
+    addWeightedTerms(weightedTerms, prefix, 1.8);
+    addWeightedTerms(weightedTerms, suffix, 1.35);
+    const proximalTerms = [...prefix, ...suffix];
+    const identifiers = new Set([
+      ...extractIdentifiers(prefixText),
+      ...extractIdentifiers(sentenceText),
+      ...extractIdentifiers(suffixText),
+      ...extractIdentifiers(contextText)
+    ]);
+    return {
+      weightedTerms,
+      proximalTerms: proximalTerms.length >= 2 ? proximalTerms : sentence,
+      termSet: new Set(weightedTerms.keys()),
+      identifiers,
+      hasProse: Boolean(prefix.length || suffix.length || sentence.length || context.length),
+      hasSubstantiveProse: isSubstantiveContext([...prefix, ...suffix, ...sentence, ...context])
+    };
+  }
+
+  function addWeightedTerms(target, values, weight) {
+    for (const value of values) {
+      target.set(value, Math.max(Number(target.get(value) ?? 0), weight));
+    }
+  }
+
+  function isSubstantiveContext(values) {
+    const unique = new Set(values);
+    if (unique.size < 3) return false;
+    let informativeTerms = 0;
+    for (const term of unique) {
+      if (!CITATION_BOILERPLATE_TERMS.has(term)) informativeTerms += 1;
+    }
+    return informativeTerms >= 2;
+  }
+
+  function buildDocumentFrequencies(candidates) {
+    const frequencies = new Map();
+    for (const candidate of candidates) {
+      const present = new Set([...uniqueTerms(candidate?.title), ...uniqueTerms(candidate?.abstract)]);
+      for (const term of present) {
+        frequencies.set(term, Number(frequencies.get(term) ?? 0) + 1);
+      }
+    }
+    return frequencies;
+  }
+
+  function sumEvidenceWeight(weightedTerms, frequencies, candidateCount) {
+    let total = 0;
+    for (const [term, proximityWeight] of weightedTerms) {
+      total += proximityWeight * inverseDocumentFrequency(term, frequencies, candidateCount);
+    }
+    return total || 1;
+  }
+
+  function weightedEvidenceCoverage(weightedTerms, candidateTerms, frequencies, candidateCount, denominator) {
+    let matched = 0;
+    for (const [term, proximityWeight] of weightedTerms) {
+      if (candidateTerms.has(term)) {
+        matched += proximityWeight * inverseDocumentFrequency(term, frequencies, candidateCount);
+      }
+    }
+    return Math.min(1, matched / denominator);
+  }
+
+  function weightedCandidateSpecificity(candidateTerms, evidenceTerms, frequencies, candidateCount) {
+    let numerator = 0;
+    let denominator = 0;
+    for (const term of candidateTerms) {
+      const weight = inverseDocumentFrequency(term, frequencies, candidateCount);
+      denominator += weight;
+      if (evidenceTerms.has(term)) {
+        numerator += weight;
+      }
+    }
+    return denominator ? Math.min(1, numerator / denominator) : 0;
+  }
+
+  function inverseDocumentFrequency(term, frequencies, candidateCount) {
+    const frequency = Number(frequencies.get(term) ?? 0);
+    return Math.log((Math.max(1, candidateCount) + 1) / (frequency + 1)) + 1;
+  }
+
+  function bigramCoverage(contextTerms, candidateTerms) {
+    const contextBigrams = bigrams(contextTerms);
+    if (!contextBigrams.size) return 0;
+    const candidateBigrams = bigrams(candidateTerms);
+    let matches = 0;
+    for (const bigram of contextBigrams) {
+      if (candidateBigrams.has(bigram)) matches += 1;
+    }
+    return matches / contextBigrams.size;
+  }
+
+  function bigrams(values) {
+    const output = new Set();
+    for (let index = 0; index + 1 < values.length; index += 1) {
+      output.add(`${values[index]} ${values[index + 1]}`);
+    }
+    return output;
+  }
+
+  function setCoverage(expected, actual) {
+    if (!expected?.size) return 0;
+    let matches = 0;
+    for (const value of expected) {
+      if (actual.has(value)) matches += 1;
+    }
+    return matches / expected.size;
+  }
+
+  function contextualKeyTerms(citationContext) {
+    const hint = contextualParsedKeyHint(citationContext);
+    const values = Array.isArray(hint?.keyTerms) && hint.keyTerms.length
+      ? hint.keyTerms
+      : splitCamelCase(hint?.suffix);
+    return new Set(values.flatMap((value) => terms(value)));
+  }
+
+  function softwareNameHint(citationContext) {
+    const token = String(citationContext?.token ?? "").trim();
+    const repositoryStyle = token.match(/^([A-Za-z][A-Za-z0-9.+-]{1,30})[_:-]\d{6,}$/);
+    if (repositoryStyle) return normalize(repositoryStyle[1]).replace(/\s+/g, "");
+    if (/^[a-z][a-z0-9.+-]{2,24}$/.test(token) && !contextualParsedKeyHint(citationContext)?.year) {
+      return normalize(token).replace(/\s+/g, "");
+    }
+    return "";
+  }
+
+  function contextualParsedKeyHint(citationContext) {
+    return normalizeContextualCitationContext(citationContext, "beta")?.parsedKeyHint;
+  }
+
+  function tokenLexicalTerms(value) {
+    const separated = String(value ?? "")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Za-z])(\d)/g, "$1 $2")
+      .replace(/(\d)([A-Za-z])/g, "$1 $2");
+    return new Set(normalize(separated).split(" ").filter((term) =>
+      term.length >= 3 &&
+      !CONTEXT_STOPWORDS.has(term) &&
+      !["dblp", "journals", "corr"].includes(term)
+    ));
+  }
+
+  function lexicalTermMatchesCompactValue(tokenTerms, value) {
+    const normalizedValue = compact(value);
+    if (!normalizedValue) return false;
+    return tokenTerms.has(normalizedValue);
+  }
+
+  function titleAcronymMatchesToken(token, titleTerms) {
+    const compactToken = String(token ?? "").replace(/[^A-Za-z]/g, "").toLowerCase();
+    if (!/^[A-Z][A-Z0-9-]{2,11}$/.test(String(token ?? "")) || compactToken.length < 3 || !titleTerms.length) {
+      return false;
+    }
+    const acronym = titleTerms.map((term) => term[0]).join("");
+    return acronym.startsWith(compactToken);
+  }
+
+  function titlePhraseMatchesToken(tokenTerms, titleTerms) {
+    if (tokenTerms.size < 2 || !titleTerms.length) return false;
+    const compactTokenTerms = [...tokenTerms].map(stem).join("");
+    return compactTokenTerms.length >= 6 && titleTerms.join("").includes(compactTokenTerms);
+  }
+
+  function countTokenTitleSignals(citationContext, candidates, evidence) {
+    if (!evidence.hasSubstantiveProse) return { phrase: 0, acronym: 0 };
+    const tokenTerms = tokenLexicalTerms(citationContext?.token);
+    let phrase = 0;
+    let acronym = 0;
+    for (const candidate of candidates) {
+      const titleTerms = uniqueTerms(candidate?.title);
+      phrase += Number(titlePhraseMatchesToken(tokenTerms, titleTerms));
+      acronym += Number(titleAcronymMatchesToken(citationContext?.token, titleTerms));
+    }
+    return { phrase, acronym };
+  }
+
+  function modelScoreSpreadsByTier(rankedCandidates) {
+    const ranges = new Map();
+    for (const candidate of rankedCandidates) {
+      const tier = Number(candidate.contextualBeta?.identityTier ?? 0);
+      const score = Number(candidate.contextualBeta?.modelScore ?? 0);
+      const range = ranges.get(tier) ?? { min: score, max: score };
+      range.min = Math.min(range.min, score);
+      range.max = Math.max(range.max, score);
+      ranges.set(tier, range);
+    }
+    return new Map([...ranges].map(([tier, range]) => [tier, range.max - range.min]));
+  }
+
+  function extractIdentifiers(value) {
+    const normalized = normalize(value);
+    return new Set(normalized.split(" ").filter((term) => /\d/.test(term) && term.length >= 4));
+  }
+
+  function candidateIdentifierMatches(citationContext, candidate) {
+    const token = String(citationContext?.token ?? "").trim();
+    if (!token) return false;
+    const lowerToken = token.toLowerCase();
+    if (/^\d{4}[a-z&.]{5}.{10}$/i.test(token) && lowerToken === String(candidate?.bibcode ?? "").toLowerCase()) {
+      return true;
+    }
+    const doi = normalizeDoi(token);
+    if (doi && doi === normalizeDoi(candidate?.doi)) return true;
+    const arxivId = normalizeArxivId(token);
+    if (arxivId && [candidate?.eprint, candidate?.doi].some((value) => arxivId === normalizeArxivId(value))) return true;
+    return false;
+  }
+
+  function normalizeDoi(value) {
+    const normalized = String(value ?? "").trim().toLowerCase()
+      .replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "")
+      .replace(/^doi:\s*/, "");
+    return /^10\.\d{4,9}\/.+/.test(normalized) ? normalized : "";
+  }
+
+  function normalizeArxivId(value) {
+    const normalized = String(value ?? "").trim().toLowerCase()
+      .replace(/^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\//, "")
+      .replace(/^arxiv:\s*/, "")
+      .replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "")
+      .replace(/^10\.48550\/arxiv\./, "")
+      .replace(/\.pdf$/, "");
+    return normalized.match(/^(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?$/)?.[1] ?? "";
+  }
+
+  function candidateMetadataText(candidate) {
+    return [
+      candidate?.bibcode,
+      candidate?.doi,
+      candidate?.eprint,
+      candidate?.id,
+      candidate?.bibtexExportId,
+      ...(Array.isArray(candidate?.identifier) ? candidate.identifier : [])
+    ].filter(Boolean).join(" ");
+  }
+
+  function compoundAuthorKeyMatches(surnameHint, authorFamilies) {
+    const pieces = splitCamelCase(surnameHint);
+    if (pieces.length < 2 || !authorFamilies.length) return false;
+    const compactFamilies = authorFamilies.map(compact);
+    const firstPiece = compact(pieces[0]);
+    if (!firstPiece || compactFamilies[0] !== firstPiece) return false;
+    for (let split = 1; split < pieces.length; split += 1) {
+      const remainder = compact(pieces.slice(split).join(""));
+      if (remainder && compactFamilies.slice(1).includes(remainder)) return true;
+    }
+    return false;
+  }
+
+  function familyMatchesHint(family, normalizedHint) {
+    const rawFamily = String(family ?? "").trim();
+    const normalizedFamily = compact(family);
+    if (!normalizedFamily || !normalizedHint) return false;
+    if (normalizedFamily === normalizedHint) return true;
+    // Citation-key parsers commonly interpret the leading O in names such as
+    // O'Doherty as an initial. Accept that single-letter particle without making
+    // broader suffix matches that could merge unrelated surnames.
+    return /^[ODLodl]['’`-][A-Za-z]/.test(rawFamily) &&
+      normalizedFamily.length === normalizedHint.length + 1 &&
+      normalizedFamily.endsWith(normalizedHint);
+  }
+
+  function authorGivenInitial(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw || /\b(?:collaboration|consortium|team|group)\b/i.test(raw)) return "";
+    const given = raw.includes(",") ? raw.split(",").slice(1).join(" ") : raw.split(/\s+/)[0];
+    return normalize(given).match(/[a-z]/)?.[0] ?? "";
+  }
+
+  function familyParticleInitialMatches(family, normalizedHint, initial) {
+    const rawFamily = String(family ?? "").trim();
+    return Boolean(
+      normalizedHint &&
+      initial &&
+      /^[ODLodl]['’`-][A-Za-z]/.test(rawFamily) &&
+      compact(rawFamily).endsWith(normalizedHint) &&
+      compact(rawFamily[0]) === compact(initial)
+    );
+  }
+
+  function splitCamelCase(value) {
+    return String(value ?? "")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      .split(/[^A-Za-z]+/)
+      .filter(Boolean);
+  }
+
+  function authorFamily(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    if (raw.includes(",")) return raw.split(",")[0].trim();
+    const values = raw.split(/\s+/).filter(Boolean);
+    if (values.length <= 1) return values[0] ?? "";
+    let start = values.length - 1;
+    while (start > 0 && PARTICLES.has(normalize(values[start - 1]))) start -= 1;
+    return values.slice(start).join(" ");
+  }
+
+  function uniqueTerms(value) {
+    return [...new Set(terms(value))];
+  }
+
+  function terms(value) {
+    return normalize(value)
+      .split(" ")
+      .map(stem)
+      .filter((term) => term.length >= 3 && !CONTEXT_STOPWORDS.has(term) && !GENERIC_CONTEXT_TERMS.has(term));
+  }
+
+  function stem(value) {
+    if (value.length >= 6 && value.endsWith("ies")) return `${value.slice(0, -3)}y`;
+    if (value.length >= 6 && value.endsWith("ing")) return value.slice(0, -3);
+    if (value.length >= 5 && value.endsWith("ed")) return value.slice(0, -2);
+    if (value.length >= 5 && value.endsWith("s") && !value.endsWith("ss")) return value.slice(0, -1);
+    return value;
+  }
+
+  function compact(value) {
+    return normalize(value).replace(/\s+/g, "");
+  }
+
+  function normalize(value) {
+    return String(value ?? "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[ŁłØøĐđÐðÞþÆæŒœıß]/g, (letter) => ({
+        Ł: "L", ł: "l", Ø: "O", ø: "o", Đ: "D", đ: "d", Ð: "D", ð: "d",
+        Þ: "Th", þ: "th", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", ı: "i", ß: "ss"
+      })[letter] ?? letter)
+      .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+      .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+      .replace(/\\[A-Za-z]+/g, " ")
+      .replace(/[^A-Za-z0-9\s]/g, " ")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function boundedText(value, maxChars, keepEnd = false) {
+    const text = String(value ?? "");
+    if (text.length <= maxChars) return text;
+    return keepEnd ? text.slice(-maxChars) : text.slice(0, maxChars);
+  }
+
+  function currentSentenceTail(value) {
+    const text = String(value ?? "");
+    let start = 0;
+    for (const match of text.matchAll(/[.!?](?=\s+(?:[A-Z\\]|$)|$)/g)) {
+      start = Number(match.index ?? -1) + 1;
+    }
+    return text.slice(start).trim();
+  }
+
+  function currentSentenceHead(value) {
+    const text = String(value ?? "");
+    const boundary = text.match(/[.!?](?=\s+(?:[A-Z\\]|$)|$)/);
+    return text.slice(0, boundary?.index == null ? text.length : boundary.index + 1).trim();
+  }
+  __overciteSafariModules["src/core/contextual-beta.js"] = { exports: { applyContextualBetaReranking, contextualBetaFeatures, contextualIdentityTier, CONTEXTUAL_BETA_MODEL_VERSION } };
 })();
 
 /* src/core/sources.js */
@@ -2079,8 +3146,11 @@ const __overciteSafariModules = Object.create(null);
 
   const ARXIV_CACHE_TTL_MS = 10 * 60 * 1000;
   const ARXIV_MIN_REQUEST_SPACING_MS = 3200;
+  const CROSSREF_MIN_REQUEST_SPACING_MS = 210;
+  const RUNTIME_FETCH_MARKER = Symbol.for("overcite.runtimeFetch");
   const arxivTextCache = new Map();
   let lastArxivRequestAt = 0;
+  const crossrefRuntimeScheduler = createRateLimitedScheduler(CROSSREF_MIN_REQUEST_SPACING_MS);
 
   const SOURCE_ROUTING_PRESETS = Object.freeze({
     "ads-only": {
@@ -2357,9 +3427,9 @@ const __overciteSafariModules = Object.create(null);
     }
 
     if (citationContext?.searchMode !== "simple") {
-      parts.push(...keywordList(citationContext?.sentenceText ?? "").slice(0, 7));
+      parts.push(...citationProximityKeywords(citationContext).slice(0, 7));
       if (parts.length < 6) {
-        parts.push(...keywordList(citationContext?.contextText ?? "").slice(0, 6 - parts.length));
+        parts.push(...contextKeywordList(citationContext?.contextText ?? "").slice(0, 6 - parts.length));
       }
     }
 
@@ -2371,13 +3441,63 @@ const __overciteSafariModules = Object.create(null);
 
   function buildContextOnlySearchQuery(citationContext = {}) {
     const parts = [
-      ...keywordList(citationContext?.sentenceText ?? "").slice(0, 8),
-      ...keywordList(citationContext?.contextText ?? "").slice(0, 8)
+      ...citationProximityKeywords(citationContext).slice(0, 8),
+      ...contextKeywordList(citationContext?.contextText ?? "").slice(0, 8)
     ];
     return uniqueStrings(parts).slice(0, 9).join(" ").trim();
   }
 
-  function buildArxivSearchQuery(citationContext = {}) {
+  // Query evidence is not a literal title. Prefer terms next to the citation,
+  // remove TeX scaffolding, and keep the provider query short enough to be useful.
+  function contextualEvidenceTerms(context = {}) {
+    const clean = (value) => String(value ?? "")
+      .replace(/\\IEEEPARstart\{([^{}]*)\}\{([^{}]*)\}/g, "$1$2")
+      .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+      .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*|ref|eqref|pageref|label)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+      .replace(/\$[^$]*\$/g, " ")
+      .replace(/\\[a-zA-Z]+\*?/g, " ");
+    const generic = new Set("is was are were when because etc gains gain great interest can could would should also such many more most few recent recently years study studies work works known mainly help latter used use using shows shown show proposed presents provides paper publication target suggest suggested however thus hence include includes including involves have has been being their these those where which through within between before after first second compared comparison approach approaches method methods result results technique techniques theory theoretically experimentally generally usually relevant research context sentence following see potentiates determine determines extended remain whether factor factors perhaps dramatically found even commonly suffer".split(" "));
+    // Function words and general academic narration must not consume the
+    // provider's small term budget ahead of the actual scientific subject.
+    const narration = new Set("a an the not only but they them we our you your he she it its there here about into onto out up down very highly much less than then now still just both either neither each every all any some one two three four five six seven eight nine ten new old true false other different various several another again along among across around toward towards without while since although despite therefore otherwise moreover furthermore namely e.g i.e become becomes became becoming emerge emerged emerging lead leads leading introduce introduced introducing aim aims aimed aiming establish established establishing apply applied applying enable enabled enabling allow allowed allowing improve improved improving develop developed developing stimulate stimulated stimulating rapid rapidly success successful successfully important importance significant significance considerable tremendous great rich wide range plethora myriad number people million billion role part aspects aspect capabilities capability concerns concern valuable originally stated intensively studied common commonly generally general practical fundamental perhaps increasingly growing recognition markedly adapted figure table tikzpicture book arxiv".split(" "));
+    const terms = (value) => contextKeywordList(clean(value)).filter((term) => !generic.has(term) && !narration.has(term) && !/^\d+$/.test(term));
+    const prefix = terms(context.citationPrefixText).slice(-6);
+    const suffix = terms(context.citationSuffixText).slice(0, 3);
+    const sentence = terms(context.sentenceText);
+    const hint = context.parsedKeyHint;
+    const keyWords = String(hint?.suffix ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").split(/[_:\-\s]+/)
+      .flatMap(terms).filter((term) => !/^\d+$/.test(term));
+    // The containing sentence is a coherent claim. A raw prefix/suffix window
+    // can instead land in the preceding claim or in generic trailing prose.
+    // The last few words before the citation identify its local clause (for
+    // example one item in a long list); fill the rest from coherent prose.
+    return uniqueStrings([...keyWords.slice(0, 2), ...prefix.slice(-4), ...sentence, ...suffix, ...terms(context.contextText)])
+      .filter((term) => !hint?.surname || term !== normalizeText(hint.surname))
+      .slice(0, 8);
+  }
+
+  function explicitContextTitle(context = {}) {
+    const token = String(context.token ?? "").trim();
+    // Punctuation-separated bibliography keys are not literal paper titles.
+    // Require actual word boundaries in user-entered title text; do not turn
+    // DBLP paths, slug keys, or author-number-topic keys into title queries.
+    if (token.split(/\s+/).length >= 3 && isTitleLikeToken(token, context.parsedKeyHint)) return token;
+    const sentence = String(context.sentenceText ?? "").trim();
+    const quoted = sentence.match(/(?:\b(?:paper|article|work)\s+(?:titled|entitled|called)|\btitle\s*:)\s*[“"]([^“”"\n]{12,220})[”"]/i);
+    if (quoted && isTitleLikeToken(quoted[1])) return quoted[1];
+    // Retain deliberate title fixtures/user input without classifying every
+    // three-word subject preceding "is" or "was" as a publication title.
+    return sentence.match(/^(.{12,220}?)\s+is\s+(?:the\s+)?(?:target\s+)?(?:publication|paper)\b/i)?.[1]?.trim() ?? "";
+  }
+
+  function contextualArxivId(context = {}) {
+    const token = String(context.token || context.typedToken || "").trim();
+    return token.match(/(?:^|[A-Za-z:_-])(\d{2}(?:0[1-9]|1[0-2])\.\d{4,5})(?:v\d+)?(?=$|[:_-])/i)?.[1]
+      ?? token.match(/^abs[-:](\d{2}(?:0[1-9]|1[0-2]))[-:](\d{4,5})(?:v\d+)?$/i)?.slice(1).join(".")
+      ?? "";
+  }
+
+  function buildArxivSearchQuery(citationContext = {}, settings = {}) {
     const hint = citationContext?.parsedKeyHint;
     const token = String(citationContext?.token ?? "").trim();
     if (citationContext?.searchMode === "direct" && token) {
@@ -2388,13 +3508,32 @@ const __overciteSafariModules = Object.create(null);
       return `ti:${quoteArxivTerm(token)}`;
     }
 
+    const distinctiveIdentifier = distinctiveContextIdentifier(citationContext);
+    if (citationContext?.searchMode === "contextual" && distinctiveIdentifier) {
+      const identifierClauses = [];
+      if (hint?.surname) {
+        identifierClauses.push(`au:${quoteArxivTerm(hint.surname)}`);
+      }
+      identifierClauses.push(`all:${quoteArxivTerm(distinctiveIdentifier)}`);
+      if (hint?.year) {
+        identifierClauses.push(`submittedDate:[${hint.year}01010000 TO ${hint.year}12312359]`);
+      }
+      return identifierClauses.join(" AND ");
+    }
+
     const clauses = [];
     if (hint?.surname && !isGenericAuthorFamily(hint.surname)) {
       clauses.push(`au:${quoteArxivTerm(hint.surname)}`);
     }
 
-    const titleClause = buildArxivContextTitleClause(citationContext);
+    const literalTitle = isContextBeta(citationContext, settings) ? explicitContextTitle(citationContext) : "";
+    const titleClause = isContextBeta(citationContext, settings)
+      ? (literalTitle ? `ti:${quoteArxivTerm(literalTitle)}` : "")
+      : buildArxivContextTitleClause(citationContext);
     if (titleClause) {
+      if (citationContext?.searchMode === "contextual" && settings?.contextualSearchEngine === "beta") {
+        return titleClause;
+      }
       clauses.push(titleClause);
       return clauses.join(" AND ");
     }
@@ -2403,7 +3542,10 @@ const __overciteSafariModules = Object.create(null);
       clauses.push(`submittedDate:[${hint.year}01010000 TO ${hint.year}12312359]`);
     }
 
-    const contextTokens = keywordList(`${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`)
+    const contextTokens = (isContextBeta(citationContext, settings) ? contextualEvidenceTerms(citationContext) : uniqueStrings([
+      ...citationProximityKeywords(citationContext),
+      ...contextKeywordList(citationContext?.contextText ?? "")
+    ]))
       .filter((term) => !hint?.surname || term !== String(hint.surname).toLowerCase())
       .slice(0, 5);
     if (contextTokens.length) {
@@ -2415,10 +3557,27 @@ const __overciteSafariModules = Object.create(null);
     return clauses.join(" AND ");
   }
 
+  function distinctiveContextIdentifier(citationContext = {}) {
+    const context = [
+      citationContext?.citationPrefixText,
+      citationContext?.sentenceText,
+      citationContext?.contextText,
+      citationContext?.citationSuffixText
+    ].filter(Boolean).join(" ");
+    return context.match(/\b(?:[A-Z]{2,}\s+)?[A-Z]\d{3,5}[+-]\d{3,5}\b/i)?.[0] ?? "";
+  }
+
   function directTitleSearchToken(token) {
     const normalized = String(token ?? "").trim();
     const withoutYear = normalized.replace(/\s+\d{4}\s*$/, "").trim();
     return isTitleLikeToken(withoutYear, null) ? withoutYear : "";
+  }
+
+  function citationProximityKeywords(citationContext = {}) {
+    const before = contextKeywordList(citationContext?.citationPrefixText ?? "").slice(-10);
+    const after = contextKeywordList(citationContext?.citationSuffixText ?? "").slice(0, 3);
+    const proximal = uniqueStrings([...before, ...after]);
+    return proximal.length >= 2 ? proximal : contextKeywordList(citationContext?.sentenceText ?? "");
   }
 
   function buildArxivAuthorYearFallbackQuery(citationContext = {}) {
@@ -2556,6 +3715,10 @@ const __overciteSafariModules = Object.create(null);
       ["author", formatAuthorsForBibtex(candidate.authors)],
       ["title", candidate.title],
       ["journal", candidate.journal],
+      ["volume", candidate.volume],
+      ["number", candidate.issue],
+      ["pages", candidate.pages],
+      ["eid", candidate.articleNumber],
       ["booktitle", candidate.booktitle],
       ["publisher", candidate.publisher],
       ["year", candidate.year ? String(candidate.year) : ""],
@@ -2578,7 +3741,7 @@ const __overciteSafariModules = Object.create(null);
       return [];
     }
     if (sourceId === SOURCE_IDS.CROSSREF) {
-      return searchCrossref(query, citationContext, fetchImpl);
+      return searchCrossref(query, citationContext, fetchImpl, settings);
     }
     if (sourceId === SOURCE_IDS.DATACITE) {
       return searchDataCite(query, citationContext, fetchImpl);
@@ -2587,7 +3750,7 @@ const __overciteSafariModules = Object.create(null);
       return searchPubMed(query, citationContext, settings, fetchImpl);
     }
     if (sourceId === SOURCE_IDS.ARXIV) {
-      return searchArxiv(citationContext, fetchImpl);
+      return searchArxiv(citationContext, settings, fetchImpl);
     }
     if (sourceId === SOURCE_IDS.INSPIRE) {
       return searchInspire(query, citationContext, fetchImpl);
@@ -2614,25 +3777,95 @@ const __overciteSafariModules = Object.create(null);
     return /\b(data|dataset|datasets|software|code|repository|repositories|zenodo|figshare|archive|catalog|catalogue|supplement|supplementary)\b/.test(text);
   }
 
-  async function searchCrossref(query, citationContext, fetchImpl) {
+  async function searchCrossref(query, citationContext, fetchImpl, settings = {}) {
+    return searchCrossrefUnqueued(query, citationContext, fetchImpl, settings);
+  }
+
+  async function searchCrossrefUnqueued(query, citationContext, fetchImpl, settings = {}) {
+    const serialContextBeta = isContextBeta(citationContext, settings) && shouldUseArxivRuntimeGuards(fetchImpl);
+    const retryOptions = {
+      ...crossrefSearchRetryOptions(citationContext, serialContextBeta),
+      scheduler: serialContextBeta ? crossrefRuntimeScheduler : null,
+      retryOnAbort: !serialContextBeta
+    };
     const directDoi = directDoiFromContext(citationContext);
     if (directDoi) {
       const url = new URL(`https://api.crossref.org/works/${encodeURIComponent(directDoi)}`);
-      const payload = await fetchJsonAllowNotFound(url, fetchImpl, "Crossref DOI lookup", {}, { retries: 1, fallbackDelayMs: 750 });
+      const payload = await fetchJsonAllowNotFound(url, fetchImpl, "Crossref DOI lookup", {}, retryOptions);
       if (!payload) {
         return [];
       }
       return [mapCrossrefWork(payload?.message)].filter(isUsableCandidate);
     }
-    const urls = buildCrossrefUrls(query, citationContext);
-    const payloads = await fetchJsonBatches(urls, fetchImpl, "Crossref search", {}, crossrefSearchRetryOptions(citationContext));
-    return payloads.flatMap((payload) => payload?.message?.items ?? []).map(mapCrossrefWork).filter(isUsableCandidate);
+    const urls = buildCrossrefUrls(query, citationContext, settings);
+    const payloads = await fetchJsonBatches(
+      urls,
+      fetchImpl,
+      "Crossref search",
+      {},
+      retryOptions,
+      (payload) => crossrefPayloadHasExactContextMatch(payload, citationContext),
+      serialContextBeta ? 1 : urls.length
+    );
+    const candidates = payloads.flatMap((payload) => payload?.message?.items ?? []).map(mapCrossrefWork).filter(isUsableCandidate);
+    return filterCrossrefDistinctiveTitleMismatches(candidates, citationContext, settings);
   }
 
-  function crossrefSearchRetryOptions(citationContext = {}) {
+  function filterCrossrefDistinctiveTitleMismatches(candidates, citationContext = {}, settings = {}) {
+    if (citationContext?.searchMode !== "contextual" || settings?.contextualSearchEngine !== "beta") {
+      return candidates;
+    }
+    const lead = explicitContextTitle(citationContext);
+    const normalizedLead = normalizeText(lead);
+    if (!normalizedLead || normalizedLead.split(" ").length < 4) {
+      return candidates;
+    }
+    const matching = candidates.filter((candidate) => titlesStronglyOverlap(normalizedLead, normalizeText(candidate?.title)));
+    if (matching.length) {
+      return matching;
+    }
+    // A title-shaped sentence lead is strong evidence that the user supplied a
+    // literal title. When Crossref cannot match it, returning same-author/year
+    // records is more misleading than allowing another provider—or a clear
+    // no-results state—to win.
+    return lead ? [] : candidates;
+  }
+
+  function titlesStronglyOverlap(expectedTitle, candidateTitle) {
+    if (!expectedTitle || !candidateTitle) {
+      return false;
+    }
+    if (expectedTitle === candidateTitle || expectedTitle.startsWith(candidateTitle) || candidateTitle.startsWith(expectedTitle)) {
+      return true;
+    }
+    const expectedTerms = uniqueStrings(expectedTitle.split(" ").filter((term) => term.length >= 3));
+    const candidateTerms = new Set(candidateTitle.split(" "));
+    const matched = expectedTerms.filter((term) => candidateTerms.has(term)).length;
+    return matched >= 4 && matched / expectedTerms.length >= 0.7;
+  }
+
+  function crossrefPayloadHasExactContextMatch(payload, citationContext) {
+    const titleQuery = normalizeText(buildCrossrefTitleQuery(buildBroadSearchQuery(citationContext), citationContext));
+    if (!titleQuery) return false;
+    const hint = citationContext?.parsedKeyHint;
+    return (payload?.message?.items ?? []).some((work) => {
+      if (normalizeText(first(work?.title)) !== titleQuery) return false;
+      const candidateYear = Number(extractCrossrefYear(work));
+      const expectedYear = Number(hint?.year);
+      if (hint?.year && (!Number.isFinite(candidateYear) || Math.abs(candidateYear - expectedYear) > 1)) return false;
+      if (!hint?.surname) return true;
+      const firstAuthor = formatCrossrefAuthor(work?.author?.[0]);
+      const normalizedAuthor = normalizeText(firstAuthor);
+      const normalizedHint = normalizeText(hint.surname);
+      return authorFamilyMatches(hint.surname, firstAuthor) ||
+        (normalizedAuthor.startsWith(`${normalizedHint} `) && /\b(?:collaboration|consortium|team|group)\b/.test(normalizedAuthor));
+    });
+  }
+
+  function crossrefSearchRetryOptions(citationContext = {}, serialContextBeta = false) {
     return {
       retries: 1,
-      fallbackDelayMs: 750,
+      fallbackDelayMs: serialContextBeta ? 1100 : 750,
       timeoutMs: isPreArxivCitation(citationContext) ? 9000 : (hasCrossrefTitleQuery(citationContext) ? 7000 : 3500)
     };
   }
@@ -2690,8 +3923,16 @@ const __overciteSafariModules = Object.create(null);
   }
 
   async function searchPubMed(query, citationContext, settings, fetchImpl) {
-    const searchTerms = uniqueStrings([
+    const beta = isContextBeta(citationContext, settings);
+    const searchTerms = uniqueStrings(beta && !directDoiFromContext(citationContext) && !directPubMedIdFromContext(citationContext) ? [
+      buildPubMedAuthorYearSearchTerm(citationContext),
+      explicitContextTitle(citationContext)
+        ? `${quotePubMedTerm(explicitContextTitle(citationContext))}[Title]`
+        : contextualEvidenceTerms(citationContext).slice(0, 4).map(term => `${term}[Title/Abstract]`).join(" AND "),
+      contextualEvidenceTerms(citationContext).slice(0, 6).join(" ")
+    ] : [
       buildPubMedSearchTerm(query, citationContext),
+      isContextBeta(citationContext, settings) ? buildPubMedAuthorYearSearchTerm(citationContext) : "",
       buildPubMedTitleYearSearchTerm(query, citationContext),
       buildPubMedFallbackSearchTerm(query, citationContext)
     ]).filter(Boolean);
@@ -2700,7 +3941,7 @@ const __overciteSafariModules = Object.create(null);
       const searchUrl = new URL("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi");
       searchUrl.searchParams.set("db", "pubmed");
       searchUrl.searchParams.set("retmode", "json");
-      searchUrl.searchParams.set("retmax", "12");
+      searchUrl.searchParams.set("retmax", beta ? "40" : "12");
       searchUrl.searchParams.set("sort", "relevance");
       searchUrl.searchParams.set("term", term);
       appendNcbiApiKey(searchUrl, settings);
@@ -2727,22 +3968,26 @@ const __overciteSafariModules = Object.create(null);
       .filter(isUsableCandidate);
   }
 
-  async function searchArxiv(citationContext, fetchImpl) {
-    const searchQuery = buildArxivSearchQuery(citationContext);
-    const directArxivId = directArxivIdFromContext(citationContext);
+  async function searchArxiv(citationContext, settings, fetchImpl) {
+    const searchQuery = buildArxivSearchQuery(citationContext, settings);
+    const directArxivId = directArxivIdFromContext(citationContext) ||
+      (isContextBeta(citationContext, settings) ? contextualArxivId(citationContext) : "");
+    // A pre-1991 submittedDate range cannot retrieve an arXiv submission.
+    // Explicit identifiers still take precedence; Simple/Raw remain unchanged.
+    if (isContextBeta(citationContext, settings) && isPreArxivCitation(citationContext) && !directArxivId) return [];
     if (!searchQuery && !directArxivId) {
       return [];
     }
     const authorYearQuery = buildArxivAuthorYearFallbackQuery(citationContext);
     const preprintYearQuery = buildArxivPreprintYearFallbackQuery(citationContext);
     try {
-      const firstBatch = await fetchArxivQuery({ searchQuery, directArxivId, fetchImpl });
+      const firstBatch = await fetchArxivQuery({ searchQuery, directArxivId, fetchImpl, citationContext });
       let candidates = firstBatch;
       if (!candidates.length && !directArxivId && authorYearQuery && authorYearQuery !== searchQuery) {
-        candidates = await fetchArxivQuery({ searchQuery: authorYearQuery, fetchImpl });
+        candidates = await fetchArxivQuery({ searchQuery: authorYearQuery, fetchImpl, citationContext });
       }
-      if (preprintYearQuery && preprintYearQuery !== searchQuery && preprintYearQuery !== authorYearQuery && shouldTryArxivPreprintYearFallback(candidates, citationContext)) {
-        const fallbackBatch = await fetchArxivQuery({ searchQuery: preprintYearQuery, fetchImpl });
+      if ((!isContextBeta(citationContext, settings) || !directArxivId) && preprintYearQuery && preprintYearQuery !== searchQuery && preprintYearQuery !== authorYearQuery && shouldTryArxivPreprintYearFallback(candidates, citationContext)) {
+        const fallbackBatch = await fetchArxivQuery({ searchQuery: preprintYearQuery, fetchImpl, citationContext });
         return mergeDuplicateCandidates([...candidates, ...fallbackBatch]);
       }
       if (candidates.length || directArxivId) {
@@ -2750,7 +3995,13 @@ const __overciteSafariModules = Object.create(null);
       }
       return [];
     } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
       if (!isArxivRecoverableError(error) || directArxivId) {
+        throw error;
+      }
+      if (citationContext?.searchMode === "contextual") {
         throw error;
       }
       if (citationContext?.searchMode === "simple") {
@@ -2778,7 +4029,7 @@ const __overciteSafariModules = Object.create(null);
       .filter(isUsableCandidate);
   }
 
-  async function fetchArxivQuery({ searchQuery = "", directArxivId = "", fetchImpl }) {
+  async function fetchArxivQuery({ searchQuery = "", directArxivId = "", fetchImpl, citationContext = {} }) {
     const url = new URL("https://export.arxiv.org/api/query");
     if (directArxivId) {
       url.searchParams.set("id_list", directArxivId);
@@ -2787,11 +4038,13 @@ const __overciteSafariModules = Object.create(null);
     }
     url.searchParams.set("start", "0");
     url.searchParams.set("max_results", "12");
-    const text = await fetchArxivText(url, fetchImpl);
+    const text = await fetchArxivText(url, fetchImpl, {
+      retryRateLimit: citationContext?.searchMode !== "contextual"
+    });
     return parseArxivEntries(text).map(mapArxivWork).filter(isUsableCandidate);
   }
 
-  async function fetchArxivText(url, fetchImpl) {
+  async function fetchArxivText(url, fetchImpl, { retryRateLimit = true } = {}) {
     const cacheKey = url.toString();
     const useCache = shouldUseArxivRuntimeGuards(fetchImpl);
     if (useCache) {
@@ -2811,6 +4064,9 @@ const __overciteSafariModules = Object.create(null);
       return text;
     }
     if (firstResponse.status === 429) {
+      if (!retryRateLimit) {
+        throw new Error("arXiv is rate limiting searches. Wait a few seconds and try again.");
+      }
       await sleep(retryDelayMs(firstResponse));
       const retryResponse = await fetchTextResponse(url, fetchImpl);
       if (retryResponse.ok) {
@@ -2872,7 +4128,7 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function shouldUseArxivRuntimeGuards(fetchImpl) {
-    return fetchImpl === globalThis.fetch;
+    return fetchImpl === globalThis.fetch || fetchImpl?.[RUNTIME_FETCH_MARKER] === true;
   }
 
   async function waitForArxivTurn() {
@@ -2923,14 +4179,21 @@ const __overciteSafariModules = Object.create(null);
     }
     let response;
     try {
-      response = await fetchWithTimeout(fetchImpl, url.toString(), {
-        headers: {
-          Accept: "application/json",
-          ...headers
-        }
-      }, retryOptions.timeoutMs);
+      const request = async () => {
+        const result = await fetchWithTimeout(fetchImpl, url.toString(), {
+          headers: {
+            Accept: "application/json",
+            ...headers
+          }
+        }, retryOptions.timeoutMs);
+        retryOptions.scheduler?.observeResponse(result);
+        return result;
+      };
+      response = retryOptions.scheduler
+        ? await retryOptions.scheduler.run(request)
+        : await request();
     } catch (error) {
-      if (isAbortLikeError(error) && retryOptions.retries > 0) {
+      if (isAbortLikeError(error) && retryOptions.retries > 0 && retryOptions.retryOnAbort !== false) {
         await sleep(Number(retryOptions.fallbackDelayMs ?? 0) || 0);
         return fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers, {
           ...retryOptions,
@@ -2998,13 +4261,41 @@ const __overciteSafariModules = Object.create(null);
     }
   }
 
-  async function fetchJsonBatches(urls, fetchImpl, label, headers = {}, retryOptions = {}) {
-    const batches = await Promise.allSettled(urls.map((url) => fetchJson(url, fetchImpl, label, headers, retryOptions)));
+  async function fetchJsonBatches(urls, fetchImpl, label, headers = {}, retryOptions = {}, shouldStop = () => false, maxInFlight = urls.length) {
+    if (maxInFlight <= 1) {
+      const payloads = [];
+      const errors = [];
+      for (const url of urls) {
+        try {
+          const payload = await fetchJson(url, fetchImpl, label, headers, retryOptions);
+          payloads.push(payload);
+          if (shouldStop(payload)) return payloads;
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (!payloads.length && errors.length) {
+        throw errors[0];
+      }
+      return payloads;
+    }
+    const pending = urls.map((url) => {
+      let promise;
+      promise = fetchJson(url, fetchImpl, label, headers, retryOptions).then(
+        (value) => ({ status: "fulfilled", value, promise }),
+        (reason) => ({ status: "rejected", reason, promise })
+      );
+      return promise;
+    });
+    const unsettled = new Set(pending);
     const payloads = [];
     const errors = [];
-    for (const batch of batches) {
+    while (unsettled.size) {
+      const batch = await Promise.race(unsettled);
+      unsettled.delete(batch.promise);
       if (batch.status === "fulfilled") {
         payloads.push(batch.value);
+        if (shouldStop(batch.value)) return payloads;
       } else {
         errors.push(batch.reason);
       }
@@ -3015,11 +4306,84 @@ const __overciteSafariModules = Object.create(null);
     return payloads;
   }
 
-  function buildCrossrefUrls(query, citationContext) {
+  function createRateLimitedScheduler(initialSpacingMs) {
+    let tail = Promise.resolve();
+    let minimumSpacingMs = initialSpacingMs;
+    let lastRequestAt = 0;
+    return {
+      run: (task) => {
+        const run = tail.then(async () => {
+          const waitMs = minimumSpacingMs - (Date.now() - lastRequestAt);
+          if (waitMs > 0) {
+            await sleep(waitMs);
+          }
+          lastRequestAt = Date.now();
+          return task();
+        });
+        tail = run.catch(() => {});
+        return run;
+      },
+      observeResponse: (response) => {
+        const limit = Number(response?.headers?.get?.("x-rate-limit-limit"));
+        const intervalMs = parseRateLimitIntervalMs(response?.headers?.get?.("x-rate-limit-interval"));
+        if (Number.isFinite(limit) && limit > 0 && Number.isFinite(intervalMs) && intervalMs > 0) {
+          minimumSpacingMs = Math.max(
+            CROSSREF_MIN_REQUEST_SPACING_MS,
+            Math.ceil(intervalMs / limit) + 50
+          );
+        }
+      }
+    };
+  }
+
+  function parseRateLimitIntervalMs(value) {
+    const match = String(value ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|m)$/i);
+    if (!match) return null;
+    const amount = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    return amount * (unit === "ms" ? 1 : unit === "s" ? 1000 : 60000);
+  }
+
+  function contextualCrossrefAuthorFallback(surname) {
+    const raw = String(surname ?? "").trim();
+    const parts = raw.replace(/([a-z])([A-Z])/g, "$1 $2").split(/\s+/);
+    // Citation keys can concatenate surnames. Try natural spacing only in
+    // the existing fallback; never expand abbreviations or infer new names.
+    return parts.length >= 2 && parts.length <= 3 && parts.every(part => /^[A-Za-z]{3,}$/.test(part))
+      ? parts.join(" ")
+      : raw;
+  }
+
+  function buildCrossrefUrls(query, citationContext, settings = {}) {
+    if (isContextBeta(citationContext, settings)) {
+      const hint = citationContext.parsedKeyHint;
+      const title = explicitContextTitle(citationContext);
+      const evidence = contextualEvidenceTerms(citationContext).join(" ");
+      const urls = [];
+      if (title) urls.push(crossrefUrl({ title, rows: 40 }));
+      if (hint?.surname) {
+        // Online-first and issue years can differ. Use a small date tolerance
+        // for semantic recall, then an exact-year author-only fallback.
+        urls.push(crossrefUrl({ bibliographic: evidence, author: hint.surname, year: hint.year, yearTolerance: 2, rows: 40 }));
+        // A broad identity fallback protects sparse/atypical context and keeps
+        // the successful author/year path available to the contextual ranker.
+        urls.push(crossrefUrl({ author: contextualCrossrefAuthorFallback(hint.surname), year: hint.year, rows: 40 }));
+      } else if (!title) {
+        urls.push(crossrefUrl({ bibliographic: evidence || query, rows: 40 }));
+      }
+      return dedupeUrls(urls).slice(0, 2);
+    }
     const hint = citationContext?.parsedKeyHint;
     const urls = [];
     const contextQuery = buildContextOnlySearchQuery(citationContext);
     const titleQuery = buildCrossrefTitleQuery(query, citationContext);
+    // The parser may provisionally label a yearless full title as a surname.
+    // In explicit token-only modes, do not send that entire title as an author.
+    if ((citationContext.searchMode === "simple" || citationContext.searchMode === "direct")
+      && !hint?.year && String(citationContext.token ?? "").trim().split(/\s+/).length >= 3
+      && titleQuery === String(citationContext.token ?? "").trim()) {
+      return [crossrefUrl({ title: titleQuery })];
+    }
     for (const canonicalTitleQuery of canonicalCrossrefTitleQueries(citationContext)) {
       urls.push(crossrefUrl({
         title: canonicalTitleQuery,
@@ -3043,6 +4407,12 @@ const __overciteSafariModules = Object.create(null);
         author: hint.surname,
         year: hint.year
       }));
+      if (isContextBeta(citationContext, settings)) {
+        urls.push(crossrefUrl({
+          author: hint.surname,
+          year: hint.year
+        }));
+      }
     } else if (hint?.surname) {
       urls.push(crossrefUrl({
         bibliographic: [hint.surname, contextQuery].filter(Boolean).join(" "),
@@ -3132,6 +4502,18 @@ const __overciteSafariModules = Object.create(null);
     }
     const text = buildContextOnlySearchQuery(citationContext) || query;
     return keywordList(text).slice(0, 8).join(" ");
+  }
+
+  function buildPubMedAuthorYearSearchTerm(citationContext = {}) {
+    const hint = citationContext?.parsedKeyHint;
+    if (!hint?.surname || !hint?.year) {
+      return "";
+    }
+    return `${pubMedAuthorTerm(hint.surname)}[Author] AND ${hint.year}[dp]`;
+  }
+
+  function isContextBeta(citationContext = {}, settings = {}) {
+    return citationContext?.searchMode === "contextual" && settings?.contextualSearchEngine === "beta";
   }
 
   function buildPubMedTitleYearSearchTerm(query, citationContext = {}) {
@@ -3256,10 +4638,10 @@ const __overciteSafariModules = Object.create(null);
     }
   }
 
-  function crossrefUrl({ bibliographic = "", title = "", author = "", year = null } = {}) {
+  function crossrefUrl({ bibliographic = "", title = "", author = "", year = null, yearTolerance = 0, rows = 12 } = {}) {
     const url = new URL("https://api.crossref.org/works");
-    url.searchParams.set("rows", "12");
-    url.searchParams.set("select", "DOI,title,author,published-print,published-online,published,issued,container-title,abstract,is-referenced-by-count,type,URL,publisher");
+    url.searchParams.set("rows", String(rows));
+    url.searchParams.set("select", "DOI,title,author,published-print,published-online,published,issued,container-title,abstract,is-referenced-by-count,type,URL,publisher,volume,issue,page,article-number");
     if (title) {
       url.searchParams.set("query.title", title);
     }
@@ -3270,7 +4652,9 @@ const __overciteSafariModules = Object.create(null);
       url.searchParams.set("query.author", author);
     }
     if (year) {
-      url.searchParams.set("filter", `from-pub-date:${year}-01-01,until-pub-date:${year}-12-31`);
+      const startYear = Number(year) - yearTolerance;
+      const endYear = Number(year) + yearTolerance;
+      url.searchParams.set("filter", `from-pub-date:${startYear}-01-01,until-pub-date:${endYear}-12-31`);
     }
     return url;
   }
@@ -3292,6 +4676,10 @@ const __overciteSafariModules = Object.create(null);
       doi: normalizeDoi(work?.DOI),
       citationCount: work?.["is-referenced-by-count"],
       journal: first(work?.["container-title"]),
+      volume: work?.volume,
+      issue: work?.issue,
+      pages: work?.page,
+      articleNumber: work?.["article-number"],
       booktitle: type.includes("proceedings") ? first(work?.["container-title"]) : "",
       publisher: work?.publisher,
       type,
@@ -3339,6 +4727,9 @@ const __overciteSafariModules = Object.create(null);
       doi,
       citationCount: 0,
       journal: record?.fulljournalname || record?.source,
+      volume: record?.volume,
+      issue: record?.issue,
+      pages: record?.pages,
       type: "journal-article",
       url: record?.uid ? `https://pubmed.ncbi.nlm.nih.gov/${record.uid}/` : "",
       bibtexExportId: doi || record?.uid,
@@ -3454,6 +4845,10 @@ const __overciteSafariModules = Object.create(null);
       doi,
       citationCount: Number(candidate.citationCount ?? 0) || 0,
       journal: String(candidate.journal ?? "").trim(),
+      volume: String(candidate.volume ?? "").trim(),
+      issue: String(candidate.issue ?? "").trim(),
+      pages: String(candidate.pages ?? "").trim(),
+      articleNumber: String(candidate.articleNumber ?? "").trim(),
       booktitle: String(candidate.booktitle ?? "").trim(),
       publisher: String(candidate.publisher ?? "").trim(),
       type: String(candidate.type ?? "").trim(),
@@ -3509,9 +4904,11 @@ const __overciteSafariModules = Object.create(null);
       keys.push(arxivKey);
     }
     const title = normalizeText(candidate?.title);
-    const firstAuthor = firstAuthorFamilyKey(candidate?.authors?.[0]);
-    if (title && firstAuthor) {
-      keys.push(`work:${title}:${firstAuthor}`);
+    const firstAuthor = firstAuthorIdentityKey(candidate?.authors?.[0]);
+    const workYear = Number(candidate?.year);
+    if (title && firstAuthor && Number.isInteger(workYear)) {
+      keys.push(`work:${title}:${firstAuthor}:${workYear}`);
+      keys.push(`work:${title}:${firstAuthor}:${workYear - 1}`);
     }
     if (candidate?.doi) {
       keys.push(`doi:${candidate.doi.toLowerCase()}`);
@@ -3554,6 +4951,18 @@ const __overciteSafariModules = Object.create(null);
     return tokens.slice(familyStart).join(" ");
   }
 
+  function firstAuthorIdentityKey(author) {
+    const family = firstAuthorFamilyKey(author);
+    if (!family) {
+      return "";
+    }
+    const raw = String(author ?? "").trim();
+    const given = raw.includes(",")
+      ? normalizeText(raw.split(",").slice(1).join(" "))
+      : normalizeText(raw).split(" ").slice(0, -family.split(" ").length).join(" ");
+    return `${family}:${given.slice(0, 1) || "_"}`;
+  }
+
   function preferCandidate(left, right) {
     const leftAuthority = sourceAuthorityScore(left);
     const rightAuthority = sourceAuthorityScore(right);
@@ -3593,6 +5002,10 @@ const __overciteSafariModules = Object.create(null);
       doi: preferredDoi(primary, secondary),
       year: preferredYear(primary, secondary),
       journal: primary.journal || secondary.journal,
+      volume: primary.volume || secondary.volume,
+      issue: primary.issue || secondary.issue,
+      pages: primary.pages || secondary.pages,
+      articleNumber: primary.articleNumber || secondary.articleNumber,
       booktitle: primary.booktitle || secondary.booktitle,
       publisher: primary.publisher || secondary.publisher,
       url: preferredUrl(primary, secondary),
@@ -3741,7 +5154,9 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function arxivIdFromText(value) {
-    const match = String(value ?? "").trim().match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
+    const match = String(value ?? "").trim().match(
+      /^(?:arxiv:\s*|https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?(?:\.pdf)?\/?$/i
+    );
     return stripArxivVersion(match?.[1] ?? "");
   }
 
@@ -3830,6 +5245,10 @@ const __overciteSafariModules = Object.create(null);
     return String(value ?? "")
       .normalize("NFKD")
       .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[ŁłØøĐđÐðÞþÆæŒœıß]/g, (letter) => ({
+        Ł: "L", ł: "l", Ø: "O", ø: "o", Đ: "D", đ: "d", Ð: "D", ð: "d",
+        Þ: "Th", þ: "th", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", ı: "i", ß: "ss"
+      })[letter] ?? letter)
       .replace(/[^A-Za-z0-9\s]/g, " ")
       .toLowerCase()
       .replace(/\s+/g, " ")
@@ -3850,6 +5269,15 @@ const __overciteSafariModules = Object.create(null);
         .split(" ")
         .filter((token) => token.length >= 3 && !SOURCE_STOPWORDS.has(token))
     );
+  }
+
+  function contextKeywordList(value) {
+    return keywordList(String(value ?? "")
+      .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+      .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+      .replace(/\\(?:ref|eqref|pageref|label)\s*\{[^{}]*\}/g, " ")
+      .replace(/\$[^$]*\$/g, " ")
+      .replace(/\\\([^]*?\\\)|\\\[[^]*?\\\]/g, " "));
   }
 
   function uniqueStrings(values) {
@@ -3890,19 +5318,56 @@ const __overciteSafariModules = Object.create(null);
     }
     return Boolean(String(sourceApiTokens?.[credentialKey] ?? "").trim());
   }
-  __overciteSafariModules["src/core/sources.js"] = { exports: { searchBroadCandidates, searchBroadCandidatesForSources, buildSourcePlan, buildSourceRouting, isAdsOnlyProfile, isFieldedAdsDirectQuery, buildBroadSearchQuery, exportCandidateBibtex, SOURCE_IDS, SOURCE_DEFINITIONS } };
+  __overciteSafariModules["src/core/sources.js"] = { exports: { searchBroadCandidates, searchBroadCandidatesForSources, buildSourcePlan, buildSourceRouting, isAdsOnlyProfile, isFieldedAdsDirectQuery, buildBroadSearchQuery, contextualArxivId, exportCandidateBibtex, SOURCE_IDS, SOURCE_DEFINITIONS } };
 })();
 
 /* src/background.js */
 (() => {
-  const { mapAdsDocToCandidate, buildAdsQueries, rerankAdsCandidates } = __overciteSafariModules["src/core/ads.js"].exports;
+  const { mapAdsDocToCandidate, buildAdsQueries, rerankAdsCandidates, hasDistinctiveContextIdentifier } = __overciteSafariModules["src/core/ads.js"].exports;
+  const { applyContextualBetaReranking } = __overciteSafariModules["src/core/contextual-beta.js"].exports;
+  const { runOrderedQueryQueue } = __overciteSafariModules["src/core/query-queue.js"].exports;
+  const { ACKNOWLEDGMENT_REMINDER_PROMPT, ACKNOWLEDGMENT_TEXT, createAcknowledgmentReminderClaim, disableAcknowledgmentReminder } = __overciteSafariModules["src/core/acknowledgment.js"].exports;
   const { applyBibInsertion, generatePreferredKey } = __overciteSafariModules["src/core/bibtex.js"].exports;
+  const { normalizeContextualCitationContext } = __overciteSafariModules["src/core/citation.js"].exports;
   const { DEFAULT_SETTINGS, MESSAGE_TYPES } = __overciteSafariModules["src/core/constants.js"].exports;
   const { resolveBibTargetFromProjectState } = __overciteSafariModules["src/core/project.js"].exports;
-  const { getSettings, saveSettings } = __overciteSafariModules["src/core/settings.js"].exports;
-  const { buildSourceRouting, exportCandidateBibtex, searchBroadCandidatesForSources, SOURCE_IDS } = __overciteSafariModules["src/core/sources.js"].exports;
+  const { getSettings, optionalOriginsForSettings, saveSettings } = __overciteSafariModules["src/core/settings.js"].exports;
+  const { buildSourceRouting, contextualArxivId, exportCandidateBibtex, searchBroadCandidatesForSources, SOURCE_IDS } = __overciteSafariModules["src/core/sources.js"].exports;
   const extensionApi = globalThis.browser ?? globalThis.chrome;
   const ARXIV_CITATION_ENRICHMENT_TIMEOUT_MS = 900;
+  const ADS_SEARCH_REQUEST_TIMEOUT_MS = 6500;
+  const ADS_SEARCH_BUDGET_MS = 12000;
+  const ADS_EXPORT_TIMEOUT_MS = 12000;
+  const LITERATURE_SEARCH_BUDGET_MS = 30000;
+  const RUNTIME_FETCH_MARKER = Symbol.for("overcite.runtimeFetch");
+  const activeTabSearches = new Map();
+  const searchProgressHandlers = new WeakMap();
+  const searchReadyHandlers = new WeakMap();
+  // Completed responses only: aborting one tab must never cancel another tab's
+  // request. Credentials partition this short-lived, memory-only cache.
+  const adsResponseCache = new Map();
+  const ADS_CACHE_TTL_MS = 120000;
+  const ADS_CACHE_MAX_ENTRIES = 64;
+  let settingsRevision = 0;
+  const settingsStorageAreaName = extensionApi.storage?.sync ? "sync" : "local";
+  const SEARCH_SETTING_KEYS = Object.freeze([
+    "adsApiToken",
+    "sourceApiTokens",
+    "sourceProfile",
+    "primarySource",
+    "fallbackSources",
+    "contextualSearchEngine",
+    "citationKeyMode",
+    "defaultSearchMode",
+    "subjectAreaConfigured",
+    "contextWindowChars"
+  ]);
+  const CONTEXTUAL_RESULT_CACHE_VERSION = "contextual-results-v2";
+  const CONTEXTUAL_RESULT_CACHE_TTL_MS = 120000;
+  const CONTEXTUAL_RESULT_CACHE_MAX_ENTRIES = 32;
+  const CONTEXTUAL_RESULT_CACHE_STORAGE_KEY = "overciteContextualResultCacheV1";
+  const contextualResultMemoryCache = new Map();
+  const claimAcknowledgmentReminder = createAcknowledgmentReminderClaim(extensionApi.storage?.local);
 
   extensionApi.runtime.onInstalled.addListener(async () => {
     const settings = await getSettings();
@@ -3934,14 +5399,35 @@ const __overciteSafariModules = Object.create(null);
     return true;
   });
 
-  async function handleMessage(message) {
+  // Options pages and the overlay currently save through the background message
+  // handler, but a sync-storage update can also arrive from another extension
+  // context. In either case an in-flight tab search must not be allowed to
+  // publish candidates computed with the previous routing/token/settings state.
+  extensionApi.storage?.onChanged?.addListener?.((changes, areaName) => {
+    if (areaName !== settingsStorageAreaName || !hasSearchAffectingSettingChange(changes)) {
+      return;
+    }
+    invalidateActiveTabSearches();
+  });
+
+  async function handleMessage(message, sender = {}) {
     switch (message?.type) {
       case MESSAGE_TYPES.GET_SETTINGS:
         return getSettings();
       case MESSAGE_TYPES.SAVE_SETTINGS:
-        return saveSettings(message.settings);
+        return saveSettingsFromMessage(message.settings);
+      case MESSAGE_TYPES.REQUEST_SOURCE_PERMISSIONS:
+        return requestSourcePermissions(message.settings);
+      case MESSAGE_TYPES.OPEN_OPTIONS:
+        return extensionApi.runtime.openOptionsPage();
       case MESSAGE_TYPES.SEARCH_ADS:
-        return searchLiterature(message.citationContext);
+        return searchFromTab(message, sender);
+      case "cancelSearch": {
+        const key = `${sender.tab?.id}:${sender.frameId ?? 0}`;
+        const active = activeTabSearches.get(key);
+        if (active?.requestId === message.requestId) active.controller.abort();
+        return true;
+      }
       case MESSAGE_TYPES.EXPORT_BIBTEX:
         return exportBibtex(message.candidate ?? message.bibcode);
       case MESSAGE_TYPES.RESOLVE_BIB_TARGET: {
@@ -3953,36 +5439,288 @@ const __overciteSafariModules = Object.create(null);
       }
       case MESSAGE_TYPES.APPLY_INSERTION:
         return applyBibInsertion(message.payload);
+      case MESSAGE_TYPES.CLAIM_ACKNOWLEDGMENT_REMINDER:
+        return {
+          show: await claimAcknowledgmentReminder(),
+          prompt: ACKNOWLEDGMENT_REMINDER_PROMPT,
+          acknowledgmentText: ACKNOWLEDGMENT_TEXT
+        };
+      case MESSAGE_TYPES.DISABLE_ACKNOWLEDGMENT_REMINDER:
+        return disableAcknowledgmentReminder(extensionApi.storage?.local);
       default:
         throw new Error(`Unknown OverCite message type: ${message?.type ?? "undefined"}`);
     }
   }
 
-  async function searchLiterature(citationContext) {
+  async function requestSourcePermissions(settings) {
+    const origins = optionalOriginsForSettings(settings);
+    if (!origins.length || !extensionApi.permissions?.request) {
+      return true;
+    }
+    try {
+      const maybePromise = extensionApi.permissions.request({ origins });
+      if (maybePromise?.then) {
+        return Boolean(await maybePromise);
+      }
+    } catch (error) {
+      if (!/callback/i.test(String(error?.message ?? error))) {
+        throw error;
+      }
+    }
+    return new Promise((resolve, reject) => {
+      extensionApi.permissions.request({ origins }, (granted) => {
+        const runtimeError = extensionApi.runtime?.lastError;
+        if (runtimeError) {
+          reject(new Error(runtimeError.message));
+          return;
+        }
+        resolve(Boolean(granted));
+      });
+    });
+  }
+
+  async function saveSettingsFromMessage(nextSettings) {
+    const previousSettings = await getSettings();
+    const savedSettings = await saveSettings(nextSettings);
+    // The storage change listener normally performs this invalidation during
+    // saveSettings. Keep the explicit comparison for browser/test runtimes that
+    // do not expose storage.onChanged, while avoiding needless cancellation for
+    // idempotent saves (notably onboarding and settings-page re-renders).
+    if (hasSearchAffectingSettingsChanged(previousSettings, savedSettings)) {
+      invalidateActiveTabSearches();
+    }
+    return savedSettings;
+  }
+
+  function hasSearchAffectingSettingChange(changes) {
+    return SEARCH_SETTING_KEYS.some((key) => {
+      const change = changes?.[key];
+      return change && !sameSettingValue(change.oldValue, change.newValue);
+    });
+  }
+
+  function hasSearchAffectingSettingsChanged(previousSettings, nextSettings) {
+    return SEARCH_SETTING_KEYS.some((key) => !sameSettingValue(previousSettings?.[key], nextSettings?.[key]));
+  }
+
+  function sameSettingValue(left, right) {
+    if (Object.is(left, right)) {
+      return true;
+    }
+    if (left === undefined || right === undefined || left === null || right === null) {
+      return false;
+    }
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch {
+      return false;
+    }
+  }
+
+  function invalidateActiveTabSearches() {
+    settingsRevision += 1;
+    for (const [key, active] of activeTabSearches.entries()) {
+      active.controller.abort();
+      active.invalidatedBySettings = true;
+      activeTabSearches.delete(key);
+      if (!Number.isInteger(active.tabId)) {
+        continue;
+      }
+      void extensionApi.tabs.sendMessage(active.tabId, {
+        type: "ezcite:settingsChanged",
+        reason: "search-settings-changed"
+      }, { frameId: active.frameId }).catch(() => {});
+    }
+  }
+
+  async function searchFromTab(message, sender) {
+    const tabId = sender.tab?.id;
+    if (!Number.isInteger(tabId) || typeof message.requestId !== "string") {
+      return searchLiterature(message.citationContext);
+    }
+    const key = `${tabId}:${sender.frameId ?? 0}`;
+    activeTabSearches.get(key)?.controller.abort();
+    const active = {
+      requestId: message.requestId,
+      controller: new AbortController(),
+      settingsRevision,
+      tabId,
+      frameId: sender.frameId ?? 0
+    };
+    activeTabSearches.set(key, active);
+    let revision = 0;
+    try {
+      const result = await searchLiterature(message.citationContext, active.controller.signal, (results) => {
+        if (!isCurrentTabSearch(active, key)) return;
+        void extensionApi.tabs.sendMessage(tabId, {
+          type: "ezcite:searchProgress", requestId: active.requestId, revision: ++revision, results
+        }, { frameId: sender.frameId ?? 0 }).catch(() => {});
+      }, (results) => {
+        if (!isCurrentTabSearch(active, key)) return;
+        void extensionApi.tabs.sendMessage(tabId, {
+          type: "ezcite:searchReady", requestId: active.requestId, results
+        }, { frameId: sender.frameId ?? 0 }).catch(() => {});
+      }, () => isCurrentTabSearch(active, key));
+      if (!isCurrentTabSearch(active, key)) {
+        throw new Error("Literature search was cancelled because search settings changed.");
+      }
+      return result;
+    } finally {
+      if (activeTabSearches.get(key) === active) activeTabSearches.delete(key);
+    }
+  }
+
+  function isCurrentTabSearch(active, key) {
+    return !active.controller.signal.aborted &&
+      !active.invalidatedBySettings &&
+      active.settingsRevision === settingsRevision &&
+      activeTabSearches.get(key) === active;
+  }
+
+  async function searchLiterature(citationContext, externalSignal = null, onProgress = null, onReady = null, isCurrent = () => true) {
+    return runWithAbortDeadline(
+      async (signal) => {
+        if (onProgress) searchProgressHandlers.set(signal, onProgress);
+        if (onReady) searchReadyHandlers.set(signal, onReady);
+        try {
+          return await searchLiteratureWithinBudget(citationContext, signal, isCurrent);
+        } finally {
+          searchProgressHandlers.delete(signal);
+          searchReadyHandlers.delete(signal);
+        }
+      },
+      LITERATURE_SEARCH_BUDGET_MS,
+      "Literature search",
+      externalSignal
+    );
+  }
+
+  function publishSearchProgress(signal, citationContext, settings, candidates) {
+    if (signal?.aborted || citationContext?.searchMode !== "contextual" ||
+        settings.contextualSearchEngine !== "beta") return;
+    const handler = searchProgressHandlers.get(signal);
+    if (!handler || !candidates.length) return;
+    const results = finalizeCandidates(citationContext, settings, candidates);
+    if (results.length) {
+      // The UI retains this preview; the normal response supplies the final ranking.
+      searchProgressHandlers.delete(signal);
+      handler(results);
+    }
+  }
+
+  async function searchLiteratureWithinBudget(citationContext, searchSignal, isCurrent = () => true) {
     const settings = await getSettings();
+    citationContext = normalizeContextualCitationContext(citationContext, settings.contextualSearchEngine);
+    const contextualCacheKey = citationContext?.searchMode === "contextual"
+      ? await buildContextualResultCacheKey(citationContext, settings)
+      : null;
+    if (!isCurrent() || searchSignal?.aborted) {
+      throw new Error("Literature search was cancelled because its request is no longer current.");
+    }
+    if (contextualCacheKey) {
+      const cachedResults = await readContextualResultCache(contextualCacheKey);
+      if (!isCurrent() || searchSignal?.aborted) {
+        throw new Error("Literature search was cancelled because its request is no longer current.");
+      }
+      if (cachedResults?.length) {
+        const restored = restoreContextualCacheResults(cachedResults, citationContext, settings);
+        publishSearchReady(searchSignal, restored);
+        return restored;
+      }
+    }
+    const results = await searchLiteratureWithinBudgetUncached(citationContext, settings, searchSignal);
+    if (!isCurrent() || searchSignal?.aborted) {
+      throw new Error("Literature search was cancelled because its request is no longer current.");
+    }
+    if (contextualCacheKey && results?.length) {
+      await writeContextualResultCache(contextualCacheKey, results);
+      if (!isCurrent() || searchSignal?.aborted) {
+        throw new Error("Literature search was cancelled because its request is no longer current.");
+      }
+    }
+    return results;
+  }
+
+  async function searchLiteratureWithinBudgetUncached(citationContext, settings, searchSignal) {
     const adsApiToken = settings.sourceApiTokens?.ads || settings.adsApiToken;
     const routing = buildSourceRouting(settings);
-    const primarySource = choosePrimarySourceForQuery(routing, citationContext);
-    const fallbackSources = availableSearchSources(routing).filter((sourceId) => sourceId !== primarySource);
+    const requestedArxivId = contextualBetaArxivId(citationContext, settings);
+    const primarySource = choosePrimarySourceForQuery(routing, citationContext, settings);
+    const fallbackSources = contextualBetaFallbackSources(citationContext, settings, routing, primarySource);
     const candidates = [];
     const errors = [];
 
-    const shouldSearchPrimary = isSourceSearchableAsPrimary(routing, primarySource);
-    const primaryCandidates = shouldSearchPrimary
-      ? await searchRoutedSource(primarySource, citationContext, settings, adsApiToken)
+    const shouldSearchPrimary = Boolean(requestedArxivId) || isSourceSearchableAsPrimary(routing, primarySource);
+    if (!requestedArxivId && shouldSearchContextualBetaSourcesInParallel(citationContext, settings, primarySource, shouldSearchPrimary, fallbackSources)) {
+      const parallelResult = await searchFallbackSources({
+        citationContext,
+        settings,
+        adsApiToken,
+        fallbackSources: [primarySource, ...fallbackSources],
+        candidates,
+        errors,
+        searchSignal
+      });
+      if (parallelResult) {
+        return maybeEnrichArxivCitationCounts(citationContext, settings, parallelResult, adsApiToken, searchSignal);
+      }
+      if (!candidates.length) {
+        if (errors.length) throw errors[0];
+        throw new Error("No literature matches found.");
+      }
+      for (const error of errors) {
+        console.warn("[OverCite background] literature provider failed after another provider returned results", error);
+      }
+      return maybeEnrichArxivCitationCounts(
+        citationContext,
+        settings,
+        finalizeCandidates(citationContext, settings, candidates),
+        adsApiToken,
+        searchSignal
+      );
+    }
+    const fetchedPrimaryCandidates = shouldSearchPrimary
+      ? await searchRoutedSource(primarySource, citationContext, settings, adsApiToken, searchSignal)
         .catch((error) => {
           errors.push(error);
           return [];
         })
       : [];
+    const primaryCandidates = requestedArxivId && primarySource === SOURCE_IDS.ARXIV
+      ? fetchedPrimaryCandidates.filter((candidate) => candidateMatchesContextualArxivId(candidate, requestedArxivId))
+      : fetchedPrimaryCandidates;
     candidates.push(...primaryCandidates);
 
+    if (requestedArxivId && primarySource === SOURCE_IDS.ARXIV && primaryCandidates.length) {
+      return maybeEnrichArxivCitationCounts(citationContext, settings, finalizeCandidates(citationContext, settings, primaryCandidates), adsApiToken, searchSignal);
+    }
+
     const primaryRanked = finalizeCandidates(citationContext, settings, primaryCandidates);
-    if (primaryRanked.length && isHighConfidenceResult(citationContext, primaryRanked[0], primarySource)) {
-      return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken);
+    if (primaryRanked.length && isHighConfidenceResult(citationContext, primaryRanked[0], primarySource, primaryRanked[1])) {
+      return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken, searchSignal);
     }
     if (shouldKeepSimplePrimaryResult(citationContext, primaryRanked[0], primarySource, fallbackSources)) {
-      return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken);
+      return maybeEnrichArxivCitationCounts(citationContext, settings, primaryRanked, adsApiToken, searchSignal);
+    }
+
+    if (primarySource === SOURCE_IDS.ADS &&
+        citationContext?.searchMode === "contextual" &&
+        hasDistinctiveContextIdentifier(citationContext)) {
+      const arxivCandidates = await searchRoutedSource(
+        SOURCE_IDS.ARXIV,
+        citationContext,
+        settings,
+        adsApiToken,
+        searchSignal
+      ).catch((error) => {
+        errors.push(error);
+        return [];
+      });
+      candidates.push(...arxivCandidates);
+      const entityRanked = finalizeCandidates(citationContext, settings, candidates);
+      if (arxivCandidates.length && entityRanked.length) {
+        return maybeEnrichArxivCitationCounts(citationContext, settings, entityRanked, adsApiToken, searchSignal);
+      }
     }
 
     if (fallbackSources.length) {
@@ -3992,10 +5730,14 @@ const __overciteSafariModules = Object.create(null);
         adsApiToken,
         fallbackSources,
         candidates,
-        errors
+        errors,
+        searchSignal,
+        candidateFilter: requestedArxivId
+          ? (candidate) => candidateMatchesContextualArxivId(candidate, requestedArxivId)
+          : null
       });
       if (fallbackResult) {
-        return maybeEnrichArxivCitationCounts(citationContext, settings, fallbackResult, adsApiToken);
+        return maybeEnrichArxivCitationCounts(citationContext, settings, fallbackResult, adsApiToken, searchSignal);
       }
     }
 
@@ -4009,10 +5751,185 @@ const __overciteSafariModules = Object.create(null);
       console.warn("[OverCite background] literature provider failed after another provider returned results", error);
     }
 
-    return maybeEnrichArxivCitationCounts(citationContext, settings, finalizeCandidates(citationContext, settings, candidates), adsApiToken);
+    return maybeEnrichArxivCitationCounts(citationContext, settings, finalizeCandidates(citationContext, settings, candidates), adsApiToken, searchSignal);
   }
 
-  async function maybeEnrichArxivCitationCounts(citationContext, settings, candidates, adsApiToken) {
+  async function buildContextualResultCacheKey(citationContext, settings) {
+    const routing = buildSourceRouting(settings);
+    const material = canonicalizeForCache({
+      version: CONTEXTUAL_RESULT_CACHE_VERSION,
+      model: "background-default",
+      citationContext,
+      settings,
+      routing,
+      credentialScope: {
+        ads: settings?.sourceApiTokens?.ads || settings?.adsApiToken || "",
+        ncbi: settings?.sourceApiTokens?.ncbi || ""
+      }
+    });
+    const digest = await sha256Hex(JSON.stringify(material));
+    return digest ? `contextual:${digest}` : null;
+  }
+
+  function canonicalizeForCache(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => canonicalizeForCache(item));
+    }
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalizeForCache(value[key])]));
+    }
+    return value;
+  }
+
+  async function sha256Hex(value) {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle || typeof TextEncoder !== "function") {
+      return null;
+    }
+    try {
+      const digest = await subtle.digest("SHA-256", new TextEncoder().encode(value));
+      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    } catch {
+      return null;
+    }
+  }
+
+  function cloneCacheValue(value) {
+    try {
+      return typeof structuredClone === "function"
+        ? structuredClone(value)
+        : JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  }
+
+  function cacheEntryIsFresh(entry, now = Date.now()) {
+    return Boolean(entry && Number.isFinite(entry.createdAt) &&
+      now - entry.createdAt >= 0 && now - entry.createdAt < CONTEXTUAL_RESULT_CACHE_TTL_MS &&
+      Array.isArray(entry.results) && entry.results.length);
+  }
+
+  function rememberContextualResult(key, entry) {
+    contextualResultMemoryCache.delete(key);
+    contextualResultMemoryCache.set(key, entry);
+    while (contextualResultMemoryCache.size > CONTEXTUAL_RESULT_CACHE_MAX_ENTRIES) {
+      contextualResultMemoryCache.delete(contextualResultMemoryCache.keys().next().value);
+    }
+  }
+
+  async function readContextualResultCache(key) {
+    const now = Date.now();
+    const memoryEntry = contextualResultMemoryCache.get(key);
+    if (cacheEntryIsFresh(memoryEntry, now)) {
+      rememberContextualResult(key, memoryEntry);
+      return cloneCacheValue(memoryEntry.results);
+    }
+    if (memoryEntry) {
+      contextualResultMemoryCache.delete(key);
+    }
+
+    const session = extensionApi.storage?.session;
+    if (!session?.get) {
+      return null;
+    }
+    try {
+      const stored = await withContextualCacheDeadline(() => session.get(CONTEXTUAL_RESULT_CACHE_STORAGE_KEY));
+      const entry = stored?.[CONTEXTUAL_RESULT_CACHE_STORAGE_KEY]?.[key];
+      if (!cacheEntryIsFresh(entry, now)) {
+        return null;
+      }
+      const results = cloneCacheValue(entry.results);
+      if (!results) {
+        return null;
+      }
+      rememberContextualResult(key, { createdAt: entry.createdAt, results });
+      return results;
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeContextualResultCache(key, results) {
+    const sanitized = results.map(({ typedToken, generatedKey, keyMode, ...candidate }) => candidate);
+    const entry = { createdAt: Date.now(), results: cloneCacheValue(sanitized) };
+    if (!entry.results?.length) {
+      return;
+    }
+    rememberContextualResult(key, entry);
+
+    const session = extensionApi.storage?.session;
+    if (!session?.get || !session?.set) {
+      return;
+    }
+    try {
+      const stored = await withContextualCacheDeadline(() => session.get(CONTEXTUAL_RESULT_CACHE_STORAGE_KEY));
+      const entries = stored?.[CONTEXTUAL_RESULT_CACHE_STORAGE_KEY] && typeof stored[CONTEXTUAL_RESULT_CACHE_STORAGE_KEY] === "object"
+        ? { ...stored[CONTEXTUAL_RESULT_CACHE_STORAGE_KEY] }
+        : {};
+      const now = Date.now();
+      for (const [entryKey, cached] of Object.entries(entries)) {
+        if (!cacheEntryIsFresh(cached, now)) {
+          delete entries[entryKey];
+        }
+      }
+      entries[key] = entry;
+      const orderedKeys = Object.keys(entries).sort((left, right) => entries[left].createdAt - entries[right].createdAt);
+      while (orderedKeys.length > CONTEXTUAL_RESULT_CACHE_MAX_ENTRIES) {
+        delete entries[orderedKeys.shift()];
+      }
+      await withContextualCacheDeadline(() => session.set({ [CONTEXTUAL_RESULT_CACHE_STORAGE_KEY]: entries }));
+    } catch {
+      // The memory cache remains valid when session storage is unavailable or
+      // quota-limited; never surface cache failures as search failures.
+    }
+  }
+
+  function withContextualCacheDeadline(task, timeoutMs = 150) {
+    return Promise.race([
+      Promise.resolve().then(task),
+      new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))
+    ]);
+  }
+
+  function restoreContextualCacheResults(results, citationContext, settings) {
+    const typedToken = citationContext?.typedToken ?? citationContext?.token ?? "";
+    return results.map((candidate) => ({
+      ...candidate,
+      keyMode: settings.citationKeyMode,
+      typedToken,
+      generatedKey: generatePreferredKey(candidate, [], {
+        keyMode: settings.citationKeyMode,
+        typedToken
+      })
+    }));
+  }
+
+  function shouldSearchContextualBetaSourcesInParallel(citationContext, settings, primarySource, shouldSearchPrimary, fallbackSources) {
+    return citationContext?.searchMode === "contextual" &&
+      settings?.contextualSearchEngine === "beta" &&
+      primarySource !== SOURCE_IDS.ADS &&
+      shouldSearchPrimary &&
+      fallbackSources.length > 0;
+  }
+
+  function contextualBetaFallbackSources(citationContext, settings, routing, primarySource) {
+    const sources = availableSearchSources(routing).filter((sourceId) => sourceId !== primarySource);
+    if (citationContext?.searchMode === "contextual" &&
+        settings?.contextualSearchEngine === "beta" &&
+        routing?.profile === "chemistry" &&
+        primarySource !== SOURCE_IDS.ARXIV &&
+        !sources.includes(SOURCE_IDS.ARXIV)) {
+      sources.push(SOURCE_IDS.ARXIV);
+    }
+    return sources;
+  }
+
+  async function maybeEnrichArxivCitationCounts(citationContext, settings, candidates, adsApiToken, searchSignal = null) {
+    // At this point source retrieval and ranking are complete. Publish this
+    // quality-ready list exactly once before optional display-only metadata work;
+    // callers can render it without making readiness depend on enrichment.
+    publishSearchReady(searchSignal, candidates);
     const arxivNeedingCounts = candidates
       .slice(0, 5)
       .filter((candidate) => isArxivIdentified(candidate) && !(Number(candidate?.citationCount ?? 0) > 0) && String(candidate?.eprint ?? "").trim());
@@ -4020,20 +5937,40 @@ const __overciteSafariModules = Object.create(null);
       return candidates;
     }
 
-    const enrichment = enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken)
-      .catch(() => candidates);
-    return Promise.race([
-      enrichment,
-      delay(ARXIV_CITATION_ENRICHMENT_TIMEOUT_MS).then(() => candidates)
-    ]);
+    return runWithAbortDeadline(
+      (signal) => enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken, signal),
+      ARXIV_CITATION_ENRICHMENT_TIMEOUT_MS,
+      "Citation counts",
+      searchSignal
+    ).catch(() => candidates);
   }
 
-  async function enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken) {
+  function publishSearchReady(signal, candidates) {
+    if (signal?.aborted || !Array.isArray(candidates) || !candidates.length) {
+      return;
+    }
+    const handler = searchReadyHandlers.get(signal);
+    if (!handler) {
+      return;
+    }
+    // A single stable result list is the event contract. Later completion may
+    // only add metadata (for example citation counts), never another ranking.
+    searchReadyHandlers.delete(signal);
+    try {
+      handler(candidates);
+    } catch (error) {
+      console.warn("[OverCite background] searchReady handler failed", error);
+    }
+  }
+
+  async function enrichArxivCitationCountsFromAds(candidates, arxivNeedingCounts, citationContext, adsApiToken, searchSignal = null) {
     const query = buildArxivAdsCitationQuery(arxivNeedingCounts);
     if (!query) {
       return candidates;
     }
-    const docs = await fetchSearchCandidates([query], { ...citationContext, searchMode: "direct" }, adsApiToken);
+    const docs = await fetchSearchCandidates([query], { ...citationContext, searchMode: "direct" }, adsApiToken, {
+      externalSignal: searchSignal
+    });
     const adsCandidates = docs.map((doc) => ({
       ...mapAdsDocToCandidate(doc),
       sourceId: SOURCE_IDS.ADS,
@@ -4081,11 +6018,10 @@ const __overciteSafariModules = Object.create(null);
     return String(value ?? "").replace(/"/g, '\\"');
   }
 
-  function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  function choosePrimarySourceForQuery(routing, citationContext) {
+  function choosePrimarySourceForQuery(routing, citationContext, settings) {
+    if (contextualBetaArxivId(citationContext, settings)) {
+      return SOURCE_IDS.ARXIV;
+    }
     if (directArxivToken(citationContext) && availableSearchSources(routing).includes(SOURCE_IDS.ARXIV)) {
       return SOURCE_IDS.ARXIV;
     }
@@ -4099,6 +6035,37 @@ const __overciteSafariModules = Object.create(null);
       return SOURCE_IDS.DATACITE;
     }
     return routing.primarySource;
+  }
+
+  function contextualBetaArxivId(citationContext, settings) {
+    return citationContext?.searchMode === "contextual" && settings?.contextualSearchEngine === "beta"
+      ? contextualArxivId(citationContext)
+      : "";
+  }
+
+  function candidateMatchesContextualArxivId(candidate, requestedArxivId) {
+    const expected = normalizeArxivIdentifier(requestedArxivId);
+    if (!expected) return false;
+    if (candidate?.sourceId === SOURCE_IDS.ARXIV) {
+      return [candidate?.eprint, candidate?.bibtexExportId, candidate?.id, candidate?.url, candidate?.doi]
+        .map((value) => normalizeArxivIdentifier(value) || extractArxivQualifiedIdentifier(value))
+        .some((identifier) => identifier === expected);
+    }
+    return [candidate?.doi, candidate?.id, candidate?.url]
+      .map(extractArxivQualifiedIdentifier)
+      .some((identifier) => identifier === expected);
+  }
+
+  function normalizeArxivIdentifier(value) {
+    return String(value ?? "").trim().match(/^(\d{4}\.\d{4,5})(?:v\d+)?$/i)?.[1]?.toLowerCase() ?? "";
+  }
+
+  function extractArxivQualifiedIdentifier(value) {
+    const text = String(value ?? "").trim();
+    const doiMatch = text.match(/^10\.48550\/arxiv\.(\d{4}\.\d{4,5})(?:v\d+)?$/i);
+    if (doiMatch) return doiMatch[1].toLowerCase();
+    const urlMatch = text.match(/^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/(\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?\/?$/i);
+    return urlMatch?.[1]?.toLowerCase() ?? "";
   }
 
   function shouldKeepSimplePrimaryResult(citationContext, candidate, primarySource, fallbackSources) {
@@ -4154,12 +6121,12 @@ const __overciteSafariModules = Object.create(null);
       : routing.availableFallbackSources.includes(sourceId);
   }
 
-  async function searchFallbackSources({ citationContext, settings, adsApiToken, fallbackSources, candidates, errors }) {
+  async function searchFallbackSources({ citationContext, settings, adsApiToken, fallbackSources, candidates, errors, searchSignal, candidateFilter = null }) {
     if (citationContext?.searchMode === "simple") {
       const pending = fallbackSources.map((sourceId, index) => {
         let promise;
         promise = Promise.resolve()
-          .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken))
+          .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken, searchSignal))
           .then(
             (value) => ({ status: "fulfilled", sourceId, index, value, promise }),
             (reason) => ({ status: "rejected", sourceId, index, reason, promise })
@@ -4173,13 +6140,13 @@ const __overciteSafariModules = Object.create(null);
         unsettled.delete(batch.promise);
         settledIndexes.add(batch.index);
         if (batch.status === "fulfilled") {
-          candidates.push(...batch.value);
+          candidates.push(...(candidateFilter ? batch.value.filter(candidateFilter) : batch.value));
         } else {
           errors.push(batch.reason);
         }
         const ranked = finalizeCandidates(citationContext, settings, candidates);
         if (ranked.length &&
-            isHighConfidenceResult(citationContext, ranked[0], ranked[0].sourceId) &&
+            isHighConfidenceResult(citationContext, ranked[0], ranked[0].sourceId, ranked[1]) &&
             canReturnSimpleFallback(ranked[0], fallbackSources, settledIndexes)) {
           return ranked;
         }
@@ -4190,7 +6157,7 @@ const __overciteSafariModules = Object.create(null);
     const pending = fallbackSources.map((sourceId) => {
       let promise;
       promise = Promise.resolve()
-        .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken))
+        .then(() => searchRoutedSource(sourceId, citationContext, settings, adsApiToken, searchSignal))
         .then(
           (value) => ({ status: "fulfilled", sourceId, value, promise }),
           (reason) => ({ status: "rejected", sourceId, reason, promise })
@@ -4203,9 +6170,9 @@ const __overciteSafariModules = Object.create(null);
       const batch = await Promise.race(unsettled);
       unsettled.delete(batch.promise);
       if (batch.status === "fulfilled") {
-        candidates.push(...batch.value);
+        candidates.push(...(candidateFilter ? batch.value.filter(candidateFilter) : batch.value));
         const ranked = finalizeCandidates(citationContext, settings, candidates);
-        if (ranked.length && isHighConfidenceResult(citationContext, ranked[0], batch.sourceId)) {
+        if (ranked.length && isHighConfidenceResult(citationContext, ranked[0], batch.sourceId, ranked[1])) {
           return ranked;
         }
       } else {
@@ -4229,36 +6196,83 @@ const __overciteSafariModules = Object.create(null);
     return true;
   }
 
-  async function searchRoutedSource(sourceId, citationContext, settings, adsApiToken) {
+  async function searchRoutedSource(sourceId, citationContext, settings, adsApiToken, searchSignal = null) {
     if (sourceId === SOURCE_IDS.ADS) {
       if (!adsApiToken) {
         throw new Error("No ADS/SciX API token is configured for ADS/SciX search.");
       }
       const queries = buildAdsQueries(citationContext);
-      const mergedDocs = await fetchSearchCandidates(queries, citationContext, adsApiToken);
-      return mergedDocs.map((doc) => ({
+      const mapDocs = (docs) => docs.map((doc) => ({
         ...mapAdsDocToCandidate(doc),
         sourceId: SOURCE_IDS.ADS,
         sourceLabel: "ADS/SciX"
       }));
+      const mergedDocs = await fetchSearchCandidates(queries, citationContext, adsApiToken, {
+        externalSignal: searchSignal,
+        onProgress(docs) {
+          publishSearchProgress(searchSignal, citationContext, settings, mapDocs(docs));
+        },
+        shouldStop(docs) {
+          const ranked = finalizeCandidates(citationContext, settings, mapDocs(docs));
+          return shouldStopAdsCandidateFetch(citationContext, settings, ranked);
+        }
+      });
+      return mapDocs(mergedDocs);
     }
-    return searchBroadCandidatesForSources(citationContext, settings, [sourceId]);
+    const results = await searchBroadCandidatesForSources(
+      citationContext,
+      settings,
+      [sourceId],
+      fetchWithParentSignal(globalThis.fetch, searchSignal)
+    );
+    publishSearchProgress(searchSignal, citationContext, settings, results);
+    return results;
+  }
+
+  function shouldStopAdsCandidateFetch(citationContext, settings, ranked) {
+    if (!ranked.length || !isHighConfidenceResult(citationContext, ranked[0], SOURCE_IDS.ADS, ranked[1])) {
+      return false;
+    }
+    // Context Beta may inspect a broad title/context hit before the complete
+    // author-year ladder has run. Only stop that beta path on an explicit
+    // author/year identity; entity-aware lookups already stop at the bounded
+    // opening pair below and retain their dedicated Yang-style path.
+    if (citationContext?.searchMode === "contextual" && settings?.contextualSearchEngine === "beta") {
+      return contextualAuthorYearIdentityMatches(citationContext, ranked[0]);
+    }
+    return true;
+  }
+
+  function contextualAuthorYearIdentityMatches(citationContext, candidate) {
+    const hint = citationContext?.parsedKeyHint;
+    if (!hint?.surname || !hint?.year || !contextualBetaAuthorFamilyMatches(hint.surname, candidate?.authors?.[0])) {
+      return false;
+    }
+    if (Number(candidate?.year) !== Number(hint.year)) {
+      return false;
+    }
+    return !hint.firstInitial || authorGivenInitialMatches(hint.firstInitial, candidate?.authors?.[0]);
   }
 
   function finalizeCandidates(citationContext, settings, candidates) {
-    const finalCandidates = rerankLiteratureCandidates(citationContext, mergeCandidates(candidates));
+    const typedToken = citationContext?.typedToken ?? citationContext?.token ?? "";
+    const finalCandidates = rerankLiteratureCandidates(
+      citationContext,
+      mergeCandidates(candidates),
+      settings.contextualSearchEngine
+    );
     return finalCandidates.map((candidate) => ({
       ...candidate,
       keyMode: settings.citationKeyMode,
-      typedToken: citationContext?.token ?? "",
+      typedToken,
       generatedKey: generatePreferredKey(candidate, [], {
         keyMode: settings.citationKeyMode,
-        typedToken: citationContext?.token ?? ""
+        typedToken
       })
     }));
   }
 
-  function isHighConfidenceResult(citationContext, candidate, sourceId) {
+  function isHighConfidenceResult(citationContext, candidate, sourceId, runnerUp = null) {
     if (!candidate) {
       return false;
     }
@@ -4274,22 +6288,40 @@ const __overciteSafariModules = Object.create(null);
       return true;
     }
     const hint = citationContext?.parsedKeyHint;
+    const hasClearMargin = !runnerUp || Number(candidate?.score ?? 0) - Number(runnerUp?.score ?? 0) >= 35;
+    if (candidate?.contextualBeta?.decisiveTitleMatch) {
+      if (Number(candidate.contextualBeta.identityTier ?? 0) >= 6) {
+        return true;
+      }
+      const unambiguousInitial = Boolean(
+        hint?.surname &&
+        hint?.firstInitial &&
+        firstAuthorMatches(hint.surname, candidate?.authors?.[0]) &&
+        authorGivenInitialMatches(hint.firstInitial, candidate?.authors?.[0])
+      );
+      return Boolean(
+        unambiguousInitial &&
+        (!hint?.year || yearsCompatible(candidate?.year, hint.year)) &&
+        hasClearMargin
+      );
+    }
     if (!hint?.surname) {
       return false;
     }
     const authorMatches = firstAuthorMatches(hint.surname, candidate?.authors?.[0]);
     const overlap = contextTitleOverlap(citationContext, candidate);
+    const contextualSupport = contextSupportScore(citationContext, candidate);
     if (!hint.year) {
-      return authorMatches && overlap >= 2;
+      return authorMatches && overlap >= 2 && hasClearMargin;
     }
     const yearMatches = Number(candidate?.year) === Number(hint.year);
-    if (yearMatches && strongTitleLeadYearMatch(citationContext, candidate)) {
+    if (authorMatches && yearMatches && strongTitleLeadYearMatch(citationContext, candidate) && hasClearMargin) {
       return true;
     }
     if (!matchesExplicitTitleLeadWhenPresent(citationContext, candidate)) {
       return false;
     }
-    return authorMatches && yearMatches && overlap >= 2;
+    return authorMatches && yearMatches && (overlap >= 2 || contextualSupport >= 20) && hasClearMargin;
   }
 
   function directIdentifierMatches(citationContext, candidate) {
@@ -4313,12 +6345,12 @@ const __overciteSafariModules = Object.create(null);
         String(candidate?.url ?? "").includes(`/pubmed.ncbi.nlm.nih.gov/${pubMedId}/`)
       );
     }
-    const arxivMatch = token.match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
-    if (!arxivMatch) {
+    const arxivId = parseDirectArxivId(token);
+    if (!arxivId) {
       return false;
     }
     const candidateEprint = String(candidate?.eprint ?? "").toLowerCase().replace(/v\d+$/, "");
-    return candidateEprint === arxivMatch[1] || String(candidate?.doi ?? "").toLowerCase().includes(arxivMatch[1]);
+    return candidateEprint === arxivId || String(candidate?.doi ?? "").toLowerCase().includes(arxivId);
   }
 
   function directArxivToken(citationContext) {
@@ -4326,7 +6358,14 @@ const __overciteSafariModules = Object.create(null);
       return "";
     }
     const token = String(citationContext?.token ?? "").trim();
-    return token.match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i)?.[1] ?? "";
+    return parseDirectArxivId(token);
+  }
+
+  function parseDirectArxivId(value) {
+    const match = String(value ?? "").trim().match(
+      /^(?:arxiv:\s*|https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?(?:\.pdf)?\/?$/i
+    );
+    return String(match?.[1] ?? "").toLowerCase();
   }
 
   function directPubMedToken(citationContext) {
@@ -4362,7 +6401,8 @@ const __overciteSafariModules = Object.create(null);
     return terms.filter((term) => title.includes(term)).length;
   }
 
-  function rerankLiteratureCandidates(citationContext, candidates) {
+  function rerankLiteratureCandidates(citationContext, candidates, contextualSearchEngine = "classic") {
+    const beta = citationContext?.searchMode === "contextual" && contextualSearchEngine === "beta";
     const ranked = rerankAdsCandidates(citationContext, candidates).map((candidate) => {
       if (candidate.sourceId === SOURCE_IDS.ADS) {
         return candidate;
@@ -4371,29 +6411,34 @@ const __overciteSafariModules = Object.create(null);
         ...candidate,
         score: candidate.score +
           computeBroadTokenBoost(citationContext, candidate) +
-          computeBroadTitleLeadBoost(citationContext, candidate) +
-          computeBroadAuthorBoost(citationContext, candidate) +
-          computeBroadYearBoost(citationContext, candidate) +
+          computeBroadTitleLeadBoost(citationContext, candidate, contextualSearchEngine) +
+          computeBroadAuthorBoost(citationContext, candidate, contextualSearchEngine) +
+          computeBroadYearBoost(citationContext, candidate, contextualSearchEngine) +
           computeBroadContextBoost(citationContext, candidate) +
           computeCanonicalTitleBoost(citationContext, candidate) +
-          computeCrossSourceBoost(candidate) +
-          computePublicationTypeBoost(candidate)
+          computeCrossSourceBoost(candidate, beta) +
+          (beta ? Math.min(0, computePublicationTypeBoost(candidate)) : computePublicationTypeBoost(candidate))
       };
     });
-    return rerankSimpleSearchCandidates(
+    const constrained = filterContextualAuthorHintMismatches(
       citationContext,
-      filterContextualAuthorHintMismatches(citationContext, ranked.sort((left, right) => right.score - left.score))
+      ranked.sort((left, right) => right.score - left.score),
+      contextualSearchEngine
     );
+    const contextualRanked = contextualSearchEngine === "beta"
+      ? applyContextualBetaReranking(citationContext, constrained)
+      : constrained;
+    return rerankSimpleSearchCandidates(citationContext, contextualRanked);
   }
 
-  function filterContextualAuthorHintMismatches(citationContext, candidates) {
+  function filterContextualAuthorHintMismatches(citationContext, candidates, contextualSearchEngine = "classic") {
     return filterSurnameOnlyAuthorMismatches(
       citationContext,
-      filterContextualAuthorYearMismatches(citationContext, candidates)
+      filterContextualAuthorYearMismatches(citationContext, candidates, contextualSearchEngine)
     );
   }
 
-  function filterContextualAuthorYearMismatches(citationContext, candidates) {
+  function filterContextualAuthorYearMismatches(citationContext, candidates, contextualSearchEngine = "classic") {
     const hint = citationContext?.parsedKeyHint;
     if (citationContext?.searchMode === "direct" || !hint?.surname || !hint?.year) {
       return candidates;
@@ -4402,13 +6447,15 @@ const __overciteSafariModules = Object.create(null);
       const matches = candidates.filter((candidate) => simpleAuthorYearCandidateMatches(citationContext, candidate));
       return matches.length ? matches : candidates;
     }
-    return candidates.filter((candidate) =>
-      candidate.sourceId === SOURCE_IDS.ADS ||
+    const useContextualBetaIdentity = citationContext?.searchMode === "contextual" && contextualSearchEngine === "beta";
+    const identityMatches = candidates.filter((candidate) =>
       directIdentifierMatches(citationContext, candidate) ||
-      firstAuthorMatches(hint.surname, candidate?.authors?.[0]) ||
-      strongTitleLeadYearMatch(citationContext, candidate) ||
-      strongCoauthorContextMatch(citationContext, candidate)
+      (useContextualBetaIdentity
+        ? contextualBetaAuthorFamilyMatches(hint.surname, candidate?.authors?.[0])
+        : firstAuthorMatches(hint.surname, candidate?.authors?.[0])) ||
+      strongCoauthorContextMatch(citationContext, candidate, contextualSearchEngine)
     );
+    return identityMatches.length ? identityMatches : candidates;
   }
 
   function rerankSimpleSearchCandidates(citationContext, candidates) {
@@ -4594,8 +6641,11 @@ const __overciteSafariModules = Object.create(null);
     return title.split(" ").length >= 3 ? { title, year: Number(match[2]) } : { title: "", year: null };
   }
 
-  function computeBroadTitleLeadBoost(citationContext, candidate) {
+  function computeBroadTitleLeadBoost(citationContext, candidate, contextualSearchEngine = "classic") {
     const { normalizedLead, title } = titleLeadParts(citationContext, candidate);
+    if (citationContext?.searchMode === "contextual" && contextualSearchEngine === "beta" && (!normalizedLead || !title)) {
+      return 0;
+    }
     if (title === normalizedLead) {
       return 12000;
     }
@@ -4653,14 +6703,19 @@ const __overciteSafariModules = Object.create(null);
     return { normalizedLead, title };
   }
 
-  function computeBroadAuthorBoost(citationContext, candidate) {
+  function computeBroadAuthorBoost(citationContext, candidate, contextualSearchEngine = "classic") {
     const hint = citationContext?.parsedKeyHint;
     if (!hint?.surname) {
       return 0;
     }
     const firstAuthor = candidate?.authors?.[0] ?? "";
-    const firstAuthorMatchesHint = firstAuthorMatches(hint.surname, firstAuthor);
-    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
+    const beta = citationContext?.searchMode === "contextual" && contextualSearchEngine === "beta";
+    // Keep the broad score consistent with beta's exact collaboration identity
+    // tier: a group name must not receive the loose-surname mismatch penalty.
+    const firstAuthorMatchesHint = firstAuthorMatches(hint.surname, firstAuthor) ||
+      (beta && contextualBetaAuthorFamilyMatches(hint.surname, firstAuthor));
+    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) =>
+      beta ? contextualBetaAuthorFamilyMatches(hint.surname, author) : authorFamilyStrictlyMatches(hint.surname, author));
     let boost = 0;
 
     if (firstAuthorMatchesHint) {
@@ -4687,18 +6742,20 @@ const __overciteSafariModules = Object.create(null);
       boost -= 1600;
     }
 
-    if (strongFirstAuthorContextMatch(citationContext, candidate)) {
+    // Beta already scores topical support in its feature model. Legacy binary
+    // bonuses otherwise swamp that evidence after a single shared title word.
+    if (!beta && strongFirstAuthorContextMatch(citationContext, candidate, contextualSearchEngine)) {
       boost += 5600;
     }
 
-    if (strongCoauthorContextMatch(citationContext, candidate)) {
+    if (!beta && strongCoauthorContextMatch(citationContext, candidate, contextualSearchEngine)) {
       boost += 5200;
     }
 
     return boost;
   }
 
-  function computeBroadYearBoost(citationContext, candidate) {
+  function computeBroadYearBoost(citationContext, candidate, contextualSearchEngine = "classic") {
     const hint = citationContext?.parsedKeyHint;
     if (!hint?.year) {
       return 0;
@@ -4710,6 +6767,11 @@ const __overciteSafariModules = Object.create(null);
     }
     const firstAuthorMatchesHint = firstAuthorMatches(hint.surname, candidate?.authors?.[0]);
     const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
+    if (citationContext?.searchMode === "contextual" && contextualSearchEngine === "beta") {
+      // Publication and preprint years can differ. Retain a modest exact-year
+      // preference; author identity remains enforced by the beta tier/filter.
+      return candidateYear === hintYear ? 60 : Math.abs(candidateYear - hintYear) === 1 ? 0 : -120;
+    }
     if (candidateYear === hintYear) {
       return anyAuthorMatchesHint ? 7000 : 1200;
     }
@@ -4760,7 +6822,7 @@ const __overciteSafariModules = Object.create(null);
     return boost;
   }
 
-  function strongCoauthorContextMatch(citationContext, candidate) {
+  function strongCoauthorContextMatch(citationContext, candidate, contextualSearchEngine = "classic") {
     const hint = citationContext?.parsedKeyHint;
     if (!hint?.surname || !hint?.year || Number(candidate?.year) !== Number(hint.year)) {
       return false;
@@ -4768,14 +6830,18 @@ const __overciteSafariModules = Object.create(null);
     if (!matchesExplicitTitleLeadWhenPresent(citationContext, candidate)) {
       return false;
     }
-    if (firstAuthorMatches(hint.surname, candidate?.authors?.[0])) {
+    const useContextualBetaIdentity = citationContext?.searchMode === "contextual" && contextualSearchEngine === "beta";
+    const authorMatches = useContextualBetaIdentity
+      ? (author) => contextualBetaAuthorFamilyMatches(hint.surname, author)
+      : (author) => authorFamilyStrictlyMatches(hint.surname, author);
+    if (authorMatches(candidate?.authors?.[0])) {
       return false;
     }
-    const anyAuthorMatchesHint = (candidate?.authors ?? []).some((author) => authorFamilyStrictlyMatches(hint.surname, author));
-    return anyAuthorMatchesHint && contextSupportScore(citationContext, candidate) >= 12;
+    const anyAuthorMatchesHint = (candidate?.authors ?? []).some(authorMatches);
+    return anyAuthorMatchesHint && strongContextSupportScore(citationContext, candidate, contextualSearchEngine) >= 12;
   }
 
-  function strongFirstAuthorContextMatch(citationContext, candidate) {
+  function strongFirstAuthorContextMatch(citationContext, candidate, contextualSearchEngine = "classic") {
     const hint = citationContext?.parsedKeyHint;
     if (!hint?.surname || !hint?.year || Number(candidate?.year) !== Number(hint.year)) {
       return false;
@@ -4783,7 +6849,18 @@ const __overciteSafariModules = Object.create(null);
     if (!matchesExplicitTitleLeadWhenPresent(citationContext, candidate)) {
       return false;
     }
-    return firstAuthorMatches(hint.surname, candidate?.authors?.[0]) && contextSupportScore(citationContext, candidate) >= 12;
+    return firstAuthorMatches(hint.surname, candidate?.authors?.[0]) && strongContextSupportScore(citationContext, candidate, contextualSearchEngine) >= 12;
+  }
+
+  function strongContextSupportScore(citationContext, candidate, contextualSearchEngine) {
+    if (citationContext?.searchMode !== "contextual" || contextualSearchEngine !== "beta") {
+      return contextSupportScore(citationContext, candidate);
+    }
+    const title = normalizeSearchText(candidate?.title);
+    return contextTerms(citationContext)
+      .filter((term) => !BETA_GENERIC_CONTEXT_TERMS.has(term))
+      .filter((term) => title.includes(term))
+      .length * 12;
   }
 
   function matchesExplicitTitleLeadWhenPresent(citationContext, candidate) {
@@ -4794,9 +6871,13 @@ const __overciteSafariModules = Object.create(null);
     return Boolean(title && (title === normalizedLead || title.startsWith(normalizedLead) || isSubstantialTitleLeadPrefix(normalizedLead, title)));
   }
 
-  function computeCrossSourceBoost(candidate) {
+  function computeCrossSourceBoost(candidate, contextualBeta = false) {
     const sourceCount = candidateSourceCount(candidate);
     let boost = Math.min(Math.max(0, sourceCount - 1) * 90, 240);
+    // Cross-provider agreement remains useful, but publication format alone
+    // must not outweigh topical evidence. Version preference is handled when
+    // merging duplicate identities, not between unrelated scientific works.
+    if (contextualBeta) return boost;
     if (isArxivOnlyCandidate(candidate)) {
       boost -= 120;
     } else if (candidate?.doi && !isArxivIdentified(candidate)) {
@@ -4833,8 +6914,29 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function contextTerms(citationContext) {
-    const text = normalizeSearchText(`${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`);
-    return [...new Set(text.split(" ").filter((term) => term.length >= 4 && !BROAD_CONTEXT_STOPWORDS.has(term)))].slice(0, 14);
+    const fallbackText = normalizeSearchText(`${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`);
+    if (citationContext?.searchMode === "simple" || citationContext?.searchMode === "direct") {
+      return [...new Set(fallbackText.split(" ").filter((term) => term.length >= 4 && !BROAD_CONTEXT_STOPWORDS.has(term)))].slice(0, 14);
+    }
+    const beforeTerms = normalizeContextSearchText(citationContext?.citationPrefixText ?? "")
+      .split(" ")
+      .filter((term) => term.length >= 4 && !BROAD_CONTEXT_STOPWORDS.has(term))
+      .slice(-10);
+    const afterTerms = normalizeContextSearchText(citationContext?.citationSuffixText ?? "")
+      .split(" ")
+      .filter((term) => term.length >= 4 && !BROAD_CONTEXT_STOPWORDS.has(term))
+      .slice(0, 4);
+    const fallbackTerms = fallbackText.split(" ").filter((term) => term.length >= 4 && !BROAD_CONTEXT_STOPWORDS.has(term));
+    return [...new Set([...beforeTerms, ...afterTerms, ...fallbackTerms])].slice(0, 14);
+  }
+
+  function normalizeContextSearchText(value) {
+    return normalizeSearchText(String(value ?? "")
+      .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+      .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+      .replace(/\\(?:ref|eqref|pageref|label)\s*\{[^{}]*\}/g, " ")
+      .replace(/\$[^$]*\$/g, " ")
+      .replace(/\\\([^]*?\\\)|\\\[[^]*?\\\]/g, " "));
   }
 
   function normalizeSearchText(value) {
@@ -4881,6 +6983,20 @@ const __overciteSafariModules = Object.create(null);
     const compactExpected = expected.replace(/\s+/g, "");
     const compactFamily = family.replace(/\s+/g, "");
     return Boolean(compactExpected && compactFamily === compactExpected);
+  }
+
+  function contextualBetaAuthorFamilyMatches(expectedSurname, author) {
+    if (authorFamilyStrictlyMatches(expectedSurname, author)) {
+      return true;
+    }
+    const expected = normalizeSearchText(expectedSurname).replace(/\s+/g, "");
+    const full = normalizeSearchText(author).replace(/^the\s+/, "").replace(/\s+/g, "");
+    return Boolean(
+      expected && full && (
+        full === `${expected}collaboration` ||
+        full === `${expected}scientificcollaboration`
+      )
+    );
   }
 
   function authorGivenInitialMatches(expectedInitial, author) {
@@ -4953,6 +7069,36 @@ const __overciteSafariModules = Object.create(null);
     "raw"
   ]);
 
+  // Context Beta only: generic title words such as "processes" are not
+  // sufficient evidence for the large author-context boost. Keep the classic,
+  // Simple, and Raw paths on their existing score semantics.
+  const BETA_GENERIC_CONTEXT_TERMS = new Set([
+    "analysis",
+    "analyses",
+    "approach",
+    "approaches",
+    "article",
+    "articles",
+    "effect",
+    "effects",
+    "method",
+    "methods",
+    "model",
+    "models",
+    "paper",
+    "papers",
+    "process",
+    "processes",
+    "result",
+    "results",
+    "study",
+    "studies",
+    "system",
+    "systems",
+    "work",
+    "works"
+  ]);
+
   function mergeCandidates(candidates) {
     const merged = [];
     const seen = new Map();
@@ -4973,6 +7119,10 @@ const __overciteSafariModules = Object.create(null);
       merged[existingIndex] = {
         ...primary,
         abstract: primary.abstract || secondary.abstract,
+        volume: primary.volume || secondary.volume,
+        issue: primary.issue || secondary.issue,
+        pages: primary.pages || secondary.pages,
+        articleNumber: primary.articleNumber || secondary.articleNumber,
         doi: preferredDoi(primary, secondary),
         eprint: primary.eprint || secondary.eprint,
         archivePrefix: primary.archivePrefix || secondary.archivePrefix,
@@ -5100,10 +7250,14 @@ const __overciteSafariModules = Object.create(null);
       keys.push(arxivKey);
     }
     const title = String(candidate?.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const firstAuthor = parseAuthorName(candidate?.authors?.[0]).family ||
+    const parsedFirstAuthor = parseAuthorName(candidate?.authors?.[0]);
+    const firstAuthor = parsedFirstAuthor.family ||
       String(candidate?.authors?.[0] ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    if (title && firstAuthor && candidate?.year) {
-      keys.push(`title:${title}:${firstAuthor}:${candidate.year}`);
+    const firstInitial = String(parsedFirstAuthor.given ?? "").slice(0, 1) || "_";
+    const workYear = Number(candidate?.year);
+    if (title && firstAuthor && Number.isInteger(workYear)) {
+      keys.push(`title:${title}:${firstAuthor}:${firstInitial}:${workYear}`);
+      keys.push(`title:${title}:${firstAuthor}:${firstInitial}:${workYear - 1}`);
     }
     if (candidate?.doi) {
       keys.push(`doi:${String(candidate.doi).toLowerCase()}`);
@@ -5127,33 +7281,157 @@ const __overciteSafariModules = Object.create(null);
     return [...new Set(String(`${left ?? ""},${right ?? ""}`).split(",").map((value) => value.trim()).filter(Boolean))].join(", ");
   }
 
-  async function fetchSearchCandidates(queries, citationContext, adsApiToken) {
+  async function fetchSearchCandidates(queries, citationContext, adsApiToken, options = {}) {
     const mergedDocs = [];
     const seenBibcodes = new Set();
+    const errors = [];
+    const startedAt = Date.now();
+    const requestTimeoutMs = positiveNumber(options.requestTimeoutMs, ADS_SEARCH_REQUEST_TIMEOUT_MS);
+    const totalTimeoutMs = positiveNumber(options.totalTimeoutMs, ADS_SEARCH_BUDGET_MS);
+    const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    const shouldStop = typeof options.shouldStop === "function" ? options.shouldStop : () => false;
+    const lookupController = new AbortController();
+    const externalSignal = options.externalSignal ?? null;
+    const abortFromExternal = () => lookupController.abort();
+    if (externalSignal?.aborted) {
+      lookupController.abort();
+    } else {
+      externalSignal?.addEventListener?.("abort", abortFromExternal, { once: true });
+    }
     const initialQueries = citationContext?.searchMode === "simple" ? queries.slice(0, 1) : queries.slice(0, 2);
+    const followUpBatchSize = citationContext?.searchMode === "simple" || citationContext?.searchMode === "direct" ? 1 : 4;
 
-    if (initialQueries.length) {
-      const initialBatches = await Promise.all(initialQueries.map((query) => fetchAdsDocs(query, adsApiToken)));
-      for (const [index, docs] of initialBatches.entries()) {
-        mergeDocs(mergedDocs, seenBibcodes, docs, index);
-      }
+    function remainingBudgetMs() {
+      return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
     }
 
-    const initialIndex = initialQueries.length - 1;
-    if (initialQueries.length && shouldStopAfterQuery(initialIndex, mergedDocs.length, citationContext)) {
+    function fetchQuery(query) {
+      const remainingMs = remainingBudgetMs();
+      if (remainingMs <= 0) {
+        return Promise.reject(createAdsSearchTimeoutError(totalTimeoutMs));
+      }
+      return fetchAdsDocs(
+        query,
+        adsApiToken,
+        Math.min(requestTimeoutMs, remainingMs),
+        fetchImpl,
+        lookupController.signal
+      );
+    }
+
+    try {
+      if (initialQueries.length) {
+        const pending = new Set(initialQueries.map((query, index) => {
+          let promise;
+          promise = fetchQuery(query).then(
+            (docs) => ({ ok: true, docs, index, promise }),
+            (error) => ({ ok: false, error, index, promise })
+          );
+          return promise;
+        }));
+
+        while (pending.size) {
+          const batch = await Promise.race(pending);
+          pending.delete(batch.promise);
+          if (batch.ok) {
+            mergeDocs(mergedDocs, seenBibcodes, batch.docs, batch.index);
+            options.onProgress?.(mergedDocs);
+            if ((citationContext?.searchMode === "simple" || citationContext?.searchMode === "direct") && shouldStop(mergedDocs)) {
+              return mergedDocs;
+            }
+          } else {
+            errors.push(batch.error);
+          }
+        }
+      }
+
+      if (shouldStop(mergedDocs)) {
+        return mergedDocs;
+      }
+
+      if (citationContext?.searchMode === "contextual" && hasDistinctiveContextIdentifier(citationContext)) {
+        return mergedDocs;
+      }
+
+      const initialIndex = initialQueries.length - 1;
+      if (initialQueries.length && shouldStopAfterQuery(initialIndex, mergedDocs.length, citationContext)) {
+        return mergedDocs;
+      }
+
+      const followUpQueries = queries.slice(initialQueries.length);
+      if (citationContext?.searchMode === "contextual") {
+        let progressiveDocs = [...mergedDocs];
+        let progressiveBibcodes = new Set(seenBibcodes);
+        await runOrderedQueryQueue(followUpQueries, {
+          fetchQuery,
+          onProgress(docs, index) {
+            mergeDocs(progressiveDocs, progressiveBibcodes, docs, initialQueries.length + index);
+            options.onProgress?.(progressiveDocs);
+          },
+          onBatch(batches, offset) {
+            for (const [batchOffset, batch] of batches.entries()) {
+              if (batch.status === "fulfilled") {
+                mergeDocs(mergedDocs, seenBibcodes, batch.value, initialQueries.length + offset + batchOffset);
+              } else {
+                errors.push(batch.reason);
+              }
+            }
+            options.onProgress?.(mergedDocs);
+            progressiveDocs = [...mergedDocs];
+            progressiveBibcodes = new Set(seenBibcodes);
+            return shouldStop(mergedDocs) || remainingBudgetMs() <= 0 || lookupController.signal.aborted;
+          }
+        });
+        if (!mergedDocs.length && errors.length) throw errors[0];
+        return mergedDocs;
+      }
+      for (let offset = 0; offset < followUpQueries.length; offset += followUpBatchSize) {
+        if (remainingBudgetMs() <= 0) {
+          errors.push(createAdsSearchTimeoutError(totalTimeoutMs));
+          break;
+        }
+        const batchQueries = followUpQueries.slice(offset, offset + followUpBatchSize);
+        const progressiveDocs = [...mergedDocs];
+        const progressiveBibcodes = new Set(seenBibcodes);
+        const batches = await Promise.allSettled(batchQueries.map((query, batchOffset) => fetchQuery(query).then((docs) => {
+          mergeDocs(progressiveDocs, progressiveBibcodes, docs, initialQueries.length + offset + batchOffset);
+          options.onProgress?.(progressiveDocs);
+          return docs;
+        })));
+        for (const [batchOffset, batch] of batches.entries()) {
+          const index = initialQueries.length + offset + batchOffset;
+          if (batch.status === "fulfilled") {
+            mergeDocs(mergedDocs, seenBibcodes, batch.value, index);
+            options.onProgress?.(mergedDocs);
+          } else {
+            errors.push(batch.reason);
+          }
+        }
+        const finalBatchIndex = initialQueries.length + offset + batches.length - 1;
+        if (shouldStop(mergedDocs) || shouldStopAfterQuery(finalBatchIndex, mergedDocs.length, citationContext)) {
+          break;
+        }
+      }
+
+      if (!mergedDocs.length && errors.length) {
+        throw errors[0];
+      }
       return mergedDocs;
+    } finally {
+      // Abort any slower initial request after a progressive result wins, and
+      // guarantee that a caller retry does not overlap abandoned ADS work.
+      lookupController.abort();
+      externalSignal?.removeEventListener?.("abort", abortFromExternal);
     }
+  }
 
-    for (const [offset, query] of queries.slice(initialQueries.length).entries()) {
-      const index = offset + initialQueries.length;
-      const docs = await fetchAdsDocs(query, adsApiToken);
-      mergeDocs(mergedDocs, seenBibcodes, docs, index);
-      if (shouldStopAfterQuery(index, mergedDocs.length, citationContext)) {
-        break;
-      }
-    }
+  function positiveNumber(value, fallback) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+  }
 
-    return mergedDocs;
+  function createAdsSearchTimeoutError(timeoutMs) {
+    return new Error(`ADS/SciX search took longer than ${(timeoutMs / 1000).toFixed(1)} seconds.`);
   }
 
   function mergeDocs(target, seenBibcodes, docs, queryIndex) {
@@ -5168,12 +7446,15 @@ const __overciteSafariModules = Object.create(null);
   }
 
   function shouldStopAfterQuery(index, mergedCount, citationContext) {
+    if (citationContext?.searchMode !== "simple" && citationContext?.searchMode !== "direct") {
+      return false;
+    }
     const isEmptyTokenLookup = !String(citationContext?.token ?? "").trim();
     if (isEmptyTokenLookup && index < 4) {
       return false;
     }
     const hasExplicitYear = Boolean(citationContext?.parsedKeyHint?.year);
-    if (hasExplicitYear && index === 0 && mergedCount >= 6) {
+    if (hasExplicitYear && index <= 1 && mergedCount >= 6) {
       return true;
     }
     if (hasExplicitYear && index >= 3 && mergedCount >= 6) {
@@ -5198,41 +7479,142 @@ const __overciteSafariModules = Object.create(null);
       return exportCandidateBibtex(candidate);
     }
 
-    const response = await fetch("https://api.adsabs.harvard.edu/v1/export/bibtex", {
+    const { response, payload } = await fetchJsonWithDeadline(globalThis.fetch, "https://api.adsabs.harvard.edu/v1/export/bibtex", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${adsApiToken}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ bibcode: [bibcode] })
-    });
+    }, ADS_EXPORT_TIMEOUT_MS, "ADS BibTeX export");
 
     if (!response.ok) {
       throw new Error(`ADS BibTeX export failed with status ${response.status}`);
     }
 
-    const payload = await response.json();
     return payload.export?.trim?.() ?? "";
   }
 
-  async function fetchAdsDocs(query, adsApiToken) {
+  async function fetchAdsDocs(
+    query,
+    adsApiToken,
+    timeoutMs = ADS_SEARCH_REQUEST_TIMEOUT_MS,
+    fetchImpl = globalThis.fetch,
+    signal = null
+  ) {
+    if (signal?.aborted) throw new Error("ADS/SciX search was cancelled.");
+    const cacheKey = JSON.stringify([adsApiToken, query]);
+    const useCache = fetchImpl === globalThis.fetch;
+    const cached = useCache ? adsResponseCache.get(cacheKey) : null;
+    if (cached && Date.now() - cached.createdAt < ADS_CACHE_TTL_MS) {
+      return structuredClone(cached.docs);
+    }
+    if (cached) adsResponseCache.delete(cacheKey);
     const url = new URL("https://api.adsabs.harvard.edu/v1/search/query");
     url.searchParams.set("q", query);
     url.searchParams.set("rows", "12");
     url.searchParams.set("fl", "bibcode,title,author,year,abstract,doi,identifier,citation_count,property,doctype,pub,bibstem,database");
 
-    const response = await fetch(url, {
+    const { response, payload } = await fetchJsonWithDeadline(fetchImpl, url, {
       headers: {
         Authorization: `Bearer ${adsApiToken}`
       }
-    });
+    }, timeoutMs, "ADS/SciX search", signal);
 
     if (!response.ok) {
       throw new Error(`ADS search failed with status ${response.status}`);
     }
 
-    const payload = await response.json();
-    return payload?.response?.docs ?? [];
+    const docs = payload?.response?.docs ?? [];
+    if (useCache && docs.length && !signal?.aborted) {
+      adsResponseCache.delete(cacheKey);
+      adsResponseCache.set(cacheKey, { createdAt: Date.now(), docs: structuredClone(docs) });
+      while (adsResponseCache.size > ADS_CACHE_MAX_ENTRIES) {
+        adsResponseCache.delete(adsResponseCache.keys().next().value);
+      }
+    }
+    return docs;
+  }
+
+  async function fetchJsonWithDeadline(fetchImpl, url, options, timeoutMs, label, externalSignal = null) {
+    if (typeof fetchImpl !== "function") {
+      throw new Error(`No fetch implementation is available for ${label}.`);
+    }
+    return runWithAbortDeadline(async (signal) => {
+      const response = await fetchImpl(url, {
+        ...options,
+        signal
+      });
+      if (!response.ok) {
+        return { response, payload: null };
+      }
+      const payload = await response.json();
+      return { response, payload };
+    }, timeoutMs, label, externalSignal);
+  }
+
+  async function runWithAbortDeadline(task, timeoutMs, label, externalSignal = null) {
+    const controller = new AbortController();
+    let timedOut = false;
+    let rejectCancellation = null;
+    const cancellation = new Promise((_, reject) => {
+      rejectCancellation = reject;
+    });
+    const abortFromExternal = () => {
+      controller.abort();
+      rejectCancellation?.(new Error(`${label} was cancelled.`));
+    };
+    if (externalSignal?.aborted) {
+      abortFromExternal();
+    } else {
+      externalSignal?.addEventListener?.("abort", abortFromExternal, { once: true });
+    }
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      rejectCancellation?.(new Error(`${label} timed out.`));
+    }, positiveNumber(timeoutMs, ADS_SEARCH_REQUEST_TIMEOUT_MS));
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => task(controller.signal)),
+        cancellation
+      ]);
+    } catch (error) {
+      if (timedOut) {
+        throw new Error(`${label} timed out.`);
+      }
+      if (externalSignal?.aborted) {
+        throw new Error(`${label} was cancelled.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+      controller.abort();
+      externalSignal?.removeEventListener?.("abort", abortFromExternal);
+    }
+  }
+
+  function fetchWithParentSignal(fetchImpl, parentSignal) {
+    if (!parentSignal) {
+      return fetchImpl;
+    }
+    const wrappedFetch = (url, options = {}) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (parentSignal.aborted || options.signal?.aborted) {
+        controller.abort();
+      } else {
+        // Keep these listeners through response-body parsing. The outer search
+        // controller always aborts in its deadline wrapper's finally block.
+        parentSignal.addEventListener("abort", abort, { once: true });
+        options.signal?.addEventListener?.("abort", abort, { once: true });
+      }
+      return fetchImpl(url, { ...options, signal: controller.signal });
+    };
+    if (fetchImpl === globalThis.fetch || fetchImpl?.[RUNTIME_FETCH_MARKER] === true) {
+      Object.defineProperty(wrappedFetch, RUNTIME_FETCH_MARKER, { value: true });
+    }
+    return wrappedFetch;
   }
 
   async function openOverlayForActiveTab() {
@@ -5269,6 +7651,30 @@ const __overciteSafariModules = Object.create(null);
       throw error;
     }
     return true;
+  }
+
+  if (globalThis.__OVERCITE_BACKGROUND_TEST__) {
+    globalThis.__OVERCITE_BACKGROUND_TEST_HOOKS__ = {
+      fetchSearchCandidates,
+      fetchAdsDocs,
+      fetchJsonWithDeadline,
+      exportBibtex,
+      searchRoutedSource,
+      searchLiterature,
+      handleMessage,
+      clearAdsCache: () => adsResponseCache.clear(),
+      clearContextualCache: async () => {
+        contextualResultMemoryCache.clear();
+        await extensionApi.storage?.session?.clear?.();
+      },
+      clearCaches: async () => {
+        adsResponseCache.clear();
+        contextualResultMemoryCache.clear();
+        await extensionApi.storage?.session?.clear?.();
+      },
+      clearContextualMemoryCache: () => contextualResultMemoryCache.clear(),
+      inspectContextualSessionCache: () => extensionApi.storage?.session?.get?.(CONTEXTUAL_RESULT_CACHE_STORAGE_KEY)
+    };
   }
   __overciteSafariModules["src/background.js"] = { exports: {  } };
 })();

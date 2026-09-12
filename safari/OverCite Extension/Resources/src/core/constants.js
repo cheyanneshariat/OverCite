@@ -4,11 +4,16 @@ export const MESSAGE_TYPES = Object.freeze({
   SEARCH_ADS: "searchAds",
   EXPORT_BIBTEX: "exportBibtex",
   RESOLVE_BIB_TARGET: "resolveBibTarget",
-  APPLY_INSERTION: "applyInsertion"
+  APPLY_INSERTION: "applyInsertion",
+  REQUEST_SOURCE_PERMISSIONS: "requestSourcePermissions",
+  OPEN_OPTIONS: "openOptions",
+  CLAIM_ACKNOWLEDGMENT_REMINDER: "claimAcknowledgmentReminder",
+  DISABLE_ACKNOWLEDGMENT_REMINDER: "disableAcknowledgmentReminder"
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({
   adsApiToken: "",
+  subjectAreaConfigured: false,
   sourceProfile: "astrophysics",
   primarySource: "ads",
   fallbackSources: [],
@@ -17,10 +22,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   contextWindowChars: 500,
   shortcutHelpText: "Alt+Shift+E",
   themeMode: "auto",
-  returnToSourceAfterInsert: false,
+  returnToSourceAfterInsert: true,
   citationKeyMode: "authoryear",
-  bibliographyInsertMode: "append",
-  defaultSearchMode: "contextual"
+  bibliographyInsertMode: "alphabetical",
+  defaultSearchMode: "simple",
+  contextualSearchEngine: "classic"
 });
 
 export const TITLE_STOPWORDS = new Set([
@@ -74,6 +80,7 @@ export const CONTEXT_STOPWORDS = new Set([
   "paper",
   "people",
   "recent",
+  "recently",
   "result",
   "results",
   "show",

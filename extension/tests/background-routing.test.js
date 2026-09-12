@@ -59,3 +59,34 @@ test("background merged duplicates preserve the best available citation count", 
   assert.match(preferredCitationCountBody, /primary\?\.citationCount/);
   assert.match(preferredCitationCountBody, /secondary\?\.citationCount/);
 });
+
+test("background finalization applies Context Beta only through the contextual engine setting", async () => {
+  const source = await readBackgroundSource();
+  const body = extractFunctionBody(source, "rerankLiteratureCandidates");
+
+  assert.match(source, /import \{ applyContextualBetaReranking \} from "\.\/core\/contextual-beta\.js"/);
+  assert.match(body, /contextualSearchEngine === "beta"/);
+  assert.match(body, /applyContextualBetaReranking\(citationContext, constrained\)/);
+  assert.match(body, /rerankSimpleSearchCandidates\(citationContext, contextualRanked\)/);
+});
+
+test("background direct arXiv parsing is anchored and cannot capture DOI substrings", async () => {
+  const source = await readBackgroundSource();
+  const directBody = extractFunctionBody(source, "directArxivToken");
+  const parserBody = extractFunctionBody(source, "parseDirectArxivId");
+
+  assert.match(directBody, /parseDirectArxivId\(token\)/);
+  assert.match(parserBody, /\^\(\?:arxiv:/);
+  assert.match(parserBody, /\$\/i/);
+});
+
+test("background Context Beta requires unambiguous identity before an exact-title early return", async () => {
+  const source = await readBackgroundSource();
+  const body = extractFunctionBody(source, "isHighConfidenceResult");
+  const mergeBody = extractFunctionBody(source, "candidateMergeKeys");
+
+  assert.match(body, /contextualBeta\?\.decisiveTitleMatch/);
+  assert.match(body, /unambiguousInitial/);
+  assert.match(body, /authorGivenInitialMatches/);
+  assert.match(mergeBody, /firstInitial/);
+});

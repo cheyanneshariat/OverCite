@@ -1,8 +1,8 @@
 {
   "name": "overcite-vscode",
   "displayName": "OverCite",
-  "description": "Search literature sources from LaTeX citation commands and insert BibTeX into local projects.",
-  "version": "0.3.3",
+  "description": "Search literature sources from LaTeX citation commands and insert BibTeX into VS Code workspaces.",
+  "version": "0.4.6",
   "publisher": "CheyanneShariat",
   "icon": "icon.png",
   "homepage": "https://github.com/cheyanneshariat/OverCite",
@@ -16,6 +16,12 @@
   "license": "CC-BY-NC-ND-4.0",
   "engines": {
     "vscode": "^1.90.0"
+  },
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": true,
+      "description": "OverCite supports virtual LaTeX workspaces, including projects opened through Overleaf Workshop."
+    }
   },
   "categories": [
     "Other"
@@ -65,29 +71,31 @@
         "overcite.adsApiToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "ADS/SciX API token used for search and BibTeX export."
+          "markdownDescription": "ADS/SciX API token used for search and BibTeX export. Required by the Astronomy / Astrophysics preset and optional for Physics, which can fall back to Crossref and arXiv. Get a token from [NASA ADS](https://ui.adsabs.harvard.edu/user/settings/token) or [SciX](https://scixplorer.org/user/settings/token)."
         },
         "overcite.sourceProfile": {
           "type": "string",
-          "default": "astrophysics",
+          "default": "",
           "enum": [
-            "astrophysics",
+            "",
+            "general",
             "physics",
-            "math",
             "computer-science",
+            "math",
             "life-sciences",
             "chemistry",
-            "general",
+            "astrophysics",
             "custom"
           ],
           "enumDescriptions": [
-            "Astrophysics preset using ADS/SciX only.",
+            "Choose on first use.",
+            "General preset using Crossref, with DataCite for dataset DOIs.",
             "Physics preset using ADS/SciX first when configured, then Crossref and arXiv if needed.",
-            "Math preset using Crossref first, then arXiv if needed.",
             "Computer science preset using Crossref first, then arXiv if needed.",
+            "Math preset using Crossref first, then arXiv if needed.",
             "Biology / medicine preset using Crossref first, then PubMed if needed.",
             "Chemistry preset using Crossref / DOI only.",
-            "General preset using Crossref / DOI only.",
+            "Astronomy / astrophysics preset using ADS/SciX only.",
             "Use overcite.primarySource and overcite.fallbackSources."
           ],
           "markdownDescription": "Choose a subject-area preset. Each preset uses one fast default source; add fallbacks only for cross-field work."
@@ -124,14 +132,7 @@
         "overcite.ncbiApiKey": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional NCBI API key for higher-rate PubMed requests."
-        },
-        "overcite.contextWindowChars": {
-          "type": "number",
-          "default": 500,
-          "minimum": 200,
-          "maximum": 1200,
-          "markdownDescription": "Number of nearby characters to include as backup context around the current citation."
+          "markdownDescription": "Optional NCBI API key for higher-rate PubMed requests in Biology / Medicine. PubMed still works without one. See the [official NCBI API-key instructions](https://www.ncbi.nlm.nih.gov/books/NBK53593/)."
         },
         "overcite.citationKeyMode": {
           "type": "string",
@@ -148,16 +149,16 @@
         },
         "overcite.bibliographyInsertMode": {
           "type": "string",
-          "default": "append",
+          "default": "alphabetical",
           "enum": [
             "append",
             "alphabetical"
           ],
-          "markdownDescription": "Append new BibTeX entries at the end of the target `.bib` file or insert them alphabetically by final citation key."
+          "markdownDescription": "Insert new BibTeX entries alphabetically by final citation key (default), or append them at the end of the target `.bib` file."
         },
         "overcite.defaultSearchMode": {
           "type": "string",
-          "default": "contextual",
+          "default": "simple",
           "enum": [
             "contextual",
             "simple",
@@ -165,17 +166,27 @@
           ],
           "markdownDescription": "Choose whether `OverCite: Resolve Citation` starts in contextual mode, simple search mode, or raw query mode. The separate simple-search and raw-query commands are still always available."
         },
+        "overcite.contextualSearchEngine": {
+          "type": "string",
+          "default": "classic",
+          "enum": [
+            "beta",
+            "classic"
+          ],
+          "markdownDescription": "Context Beta is experimental: common author-year names and ambiguous prose can return incorrect or missing papers. Review suggestions before insertion. Simple search and raw query are unchanged."
+        },
         "overcite.projectBibFileOverrides": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Optional object keyed by workspace folder path. Values should be `.bib` filenames to force OverCite to use in that workspace."
+          "markdownDescription": "Optional object keyed by workspace folder path (or folder URI for a virtual workspace). Values should be `.bib` filenames to force OverCite to use in that workspace."
         }
       }
     }
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
+    "test:contextual": "node --test tests/contextual-benchmark.test.js tests/citation.test.js tests/ads.test.js tests/service.test.js",
+    "check": "node --check src/extension.js && node --check src/service.js && node --check src/config.js && node --check src/workspace.js && node --check src/acknowledgment.js && node --check src/subject-area.js && node --check src/extension.cjs && node --check tests/integration/run_integration.mjs && node --check tests/integration/suite.cjs",
     "test:integration": "node tests/integration/run_integration.mjs"
   },
   "devDependencies": {

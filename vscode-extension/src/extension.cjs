@@ -2,31 +2,49 @@ const vscode = require("vscode");
 
 let moduleCachePromise;
 let outputChannel;
+let notifyCompletionPromise;
+let ensureSubjectAreaSelectedPromise;
 
 module.exports.activate = function activate(context) {
   outputChannel = vscode.window.createOutputChannel("OverCite");
+  notifyCompletionPromise = import("./acknowledgment.js").then(({ createCompletionNotifier }) => (
+    createCompletionNotifier({
+      globalState: context.globalState,
+      showInformationMessage: (...args) => vscode.window.showInformationMessage(...args),
+      writeClipboard: (text) => vscode.env.clipboard.writeText(text)
+    })
+  ));
+  ensureSubjectAreaSelectedPromise = import("./subject-area.js").then(({ createSubjectAreaOnboarding }) => (
+    createSubjectAreaOnboarding({
+      globalState: context.globalState,
+      inspectSourceProfile: () => vscode.workspace.getConfiguration("overcite").inspect("sourceProfile"),
+      showQuickPick: (...args) => vscode.window.showQuickPick(...args),
+      updateSourceProfile: (profile) => vscode.workspace.getConfiguration("overcite").update(
+        "sourceProfile",
+        profile,
+        vscode.ConfigurationTarget.Global
+      )
+    })
+  ));
   const disposable = vscode.commands.registerCommand("overcite.resolveCitation", async () => {
     try {
       await runResolveCitation();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      void vscode.window.showErrorMessage(message);
+      await handleCommandError(error);
     }
   });
   const simpleDisposable = vscode.commands.registerCommand("overcite.resolveCitationSimple", async () => {
     try {
       await runResolveCitation("simple");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      void vscode.window.showErrorMessage(message);
+      await handleCommandError(error);
     }
   });
   const directDisposable = vscode.commands.registerCommand("overcite.resolveCitationDirect", async () => {
     try {
       await runResolveCitation("direct");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      void vscode.window.showErrorMessage(message);
+      await handleCommandError(error);
     }
   });
   const showDiagnosticsDisposable = vscode.commands.registerCommand("overcite.showDiagnostics", () => {
@@ -40,16 +58,26 @@ module.exports.deactivate = function deactivate() {};
 
 async function runResolveCitation(searchModeOverride) {
   const { normalizeVsCodeSettings } = await loadModules();
+  const { needsAdsTokenSetup } = await import("./subject-area.js");
   const { buildAdsQueries } = await import("./core/ads.js");
   const { findCitationAtCursor } = await import("./core/citation.js");
   const { applyInsertion, buildQuickPickItems, exportBibtex, resolveBibTarget, searchLiterature } = await import("./service.js");
+  const { startCandidateSearch, showCandidatePicker } = await import("./candidate-picker.js");
 
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     throw new Error("Open a LaTeX document and place the cursor inside a \\cite{...} token.");
   }
+  const ensureSubjectAreaSelected = await ensureSubjectAreaSelectedPromise;
+  if (!await ensureSubjectAreaSelected()) {
+    return;
+  }
 
   const settings = normalizeVsCodeSettings(readRawSettings());
+  if (needsAdsTokenSetup(settings)) {
+    await openAdsTokenSettings();
+    return;
+  }
   const sourceText = editor.document.getText();
   const cursorOffset = editor.document.offsetAt(editor.selection.active);
   const citationContext = findCitationAtCursor(sourceText, cursorOffset, settings.contextWindowChars);
@@ -57,7 +85,7 @@ async function runResolveCitation(searchModeOverride) {
     throw new Error("Place the cursor inside a \\cite{...} command before running OverCite.");
   }
   let resolvedSearchMode = normalizeSearchMode(searchModeOverride, settings.defaultSearchMode);
-  if (resolvedSearchMode === "direct" && !citationContext.token.trim()) {
+  if (!citationContext.token.trim()) {
     if (normalizeSearchMode(searchModeOverride) === "direct") {
       throw new Error("Raw query mode requires a non-empty citation token.");
     }
@@ -90,7 +118,12 @@ async function runResolveCitation(searchModeOverride) {
             : "Searching literature..."
       });
 
-      const projectState = await collectProjectState(editor.document, settings);
+      progress.report({ message: "Searching literature and scanning workspace..." });
+      const candidateSearch = startCandidateSearch((onReady) => searchLiterature(citationContext, settings, globalThis.fetch, onReady));
+      const [projectState, candidates] = await Promise.all([
+        collectProjectState(editor.document, settings),
+        candidateSearch.ready
+      ]);
       let bibResolution = resolveBibTarget(projectState, settings);
       if (bibResolution.status === "not-found") {
         throw new Error("OverCite could not find any .bib files in this workspace.");
@@ -105,7 +138,6 @@ async function runResolveCitation(searchModeOverride) {
         bibResolution = { status: "resolved", target: chosen, candidates: bibResolution.candidates };
       }
 
-      const candidates = await searchLiterature(citationContext, settings);
       channel.appendLine("Top candidates:");
       for (const candidate of candidates.slice(0, 10)) {
         channel.appendLine(
@@ -126,18 +158,19 @@ async function runResolveCitation(searchModeOverride) {
       const quickPickItems = buildQuickPickItems(candidates, settings, citationContext.token);
       const picked = shouldAutoPickForTests()
         ? quickPickItems[0]
-        : await vscode.window.showQuickPick(quickPickItems, {
-            placeHolder: `${citationContext.command}{${citationContext.token || "..."}}`,
-            matchOnDescription: true,
-            matchOnDetail: true
-          });
+        : await showCandidatePicker(
+            vscode.window,
+            quickPickItems,
+            candidateSearch.final.then((results) => buildQuickPickItems(results, settings, citationContext.token)),
+            `${citationContext.command}{${citationContext.token || "..."}}`
+          );
       if (!picked) {
         return;
       }
 
       progress.report({ message: "Exporting BibTeX and updating files..." });
       const bibtex = await exportBibtex(picked.candidate, settings);
-      const bibDoc = await openWorkspaceFile(projectState.workspaceFolder, bibResolution.target);
+      const bibDoc = await openWorkspaceFile(projectState, bibResolution.target);
       const insertion = applyInsertion({
         bibText: bibDoc.getText(),
         bibtex,
@@ -176,9 +209,29 @@ async function runResolveCitation(searchModeOverride) {
       updatedEditor.revealRange(new vscode.Range(finalPosition, finalPosition));
 
       const action = insertion.match ? "Reused" : "Inserted";
-      void vscode.window.showInformationMessage(`${action} ${insertion.finalKey} in ${bibResolution.target}`);
+      void notifyCompletionPromise.then((notify) => (
+        notify(`${action} ${insertion.finalKey} in ${bibResolution.target}`)
+      ));
     }
   );
+}
+
+async function handleCommandError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  getOutputChannel().appendLine(`Error: ${message}`);
+  if (!/No ADS\/SciX API token is configured/i.test(message)) {
+    await vscode.window.showErrorMessage(message);
+    return;
+  }
+  const action = await vscode.window.showErrorMessage(message, "Open settings");
+  if (action === "Open settings") {
+    await openAdsTokenSettings();
+  }
+}
+
+async function openAdsTokenSettings() {
+  await vscode.commands.executeCommand("workbench.action.openSettings", "overcite.adsApiToken");
+  await vscode.window.showInformationMessage("Add your NASA ADS or SciX API token, then run OverCite again.");
 }
 
 function readRawSettings() {
@@ -196,6 +249,7 @@ function readRawSettings() {
     citationKeyMode: config.get("citationKeyMode"),
     bibliographyInsertMode: config.get("bibliographyInsertMode"),
     defaultSearchMode: config.get("defaultSearchMode"),
+    contextualSearchEngine: config.get("contextualSearchEngine"),
     projectBibFileOverrides: config.get("projectBibFileOverrides")
   };
 }
@@ -211,43 +265,38 @@ function normalizeSearchMode() {
 }
 
 async function collectProjectState(document, settings) {
-  const { workspaceKeyFromFolder } = await loadModules();
+  const { discoverBibliographyFiles, uriFileName, workspaceKeyFromUri } = await loadModules();
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
   if (!workspaceFolder) {
     throw new Error("Open the file from a VS Code workspace folder before running OverCite.");
   }
 
-  const bibUris = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(workspaceFolder, "**/*.bib"),
-    "**/{node_modules,.git}/**"
-  );
+  const bibFiles = await discoverBibliographyFiles({
+    workspace: vscode.workspace,
+    workspaceFolder,
+    createRelativePattern: (folder, pattern) => new vscode.RelativePattern(folder, pattern),
+    createCancellationTokenSource: () => new vscode.CancellationTokenSource(),
+    joinPath: (uri, ...pieces) => vscode.Uri.joinPath(uri, ...pieces)
+  });
+  getOutputChannel().appendLine(`workspace: ${workspaceFolder.uri.scheme} (${bibFiles.length} bibliography file${bibFiles.length === 1 ? "" : "s"})`);
 
   return {
     mainText: document.getText(),
-    activeFileName: basename(document.uri.fsPath),
-    projectFiles: bibUris.map((uri) => basename(uri.fsPath)),
-    projectId: workspaceKeyFromFolder(workspaceFolder.uri.fsPath),
+    activeFileName: uriFileName(document.uri),
+    projectFiles: bibFiles.map((file) => file.name),
+    projectId: workspaceKeyFromUri(workspaceFolder.uri),
+    bibliographyFiles: new Map(bibFiles.map((file) => [file.name, file.uri])),
     workspaceFolder,
     overrides: settings.projectBibFileOverrides
   };
 }
 
-async function openWorkspaceFile(workspaceFolder, fileName) {
-  const matches = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(workspaceFolder, `**/${fileName}`),
-    "**/{node_modules,.git}/**",
-    2
-  );
-  if (!matches.length) {
+async function openWorkspaceFile(projectState, fileName) {
+  const uri = projectState.bibliographyFiles.get(fileName);
+  if (!uri) {
     throw new Error(`Could not open ${fileName} in the current workspace.`);
   }
-  return vscode.workspace.openTextDocument(matches[0]);
-}
-
-function basename(filePath) {
-  const normalized = String(filePath ?? "").replace(/\\/g, "/");
-  const pieces = normalized.split("/");
-  return pieces[pieces.length - 1] ?? normalized;
+  return vscode.workspace.openTextDocument(uri);
 }
 
 function shouldAutoPickForTests() {
@@ -272,9 +321,12 @@ async function loadModules() {
   if (!moduleCachePromise) {
     moduleCachePromise = (async () => {
       const config = await import("./config.js");
+      const workspace = await import("./workspace.js");
       return {
         normalizeVsCodeSettings: config.normalizeVsCodeSettings,
-        workspaceKeyFromFolder: config.workspaceKeyFromFolder
+        discoverBibliographyFiles: workspace.discoverBibliographyFiles,
+        uriFileName: workspace.uriFileName,
+        workspaceKeyFromUri: workspace.workspaceKeyFromUri
       };
     })();
   }

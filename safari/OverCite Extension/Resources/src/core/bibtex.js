@@ -185,50 +185,145 @@ function extractBibcodeFromAdsUrl(adsUrl) {
   return match ? match[1] : null;
 }
 
+function isEscapedCharacter(text, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function findNextBibEntryHeader(bibText, startIndex) {
+  let inLineComment = false;
+  for (let index = startIndex; index < bibText.length; index += 1) {
+    const char = bibText[index];
+    if (inLineComment) {
+      if (char === "\n" || char === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+    if (char === "%" && !isEscapedCharacter(bibText, index)) {
+      inLineComment = true;
+      continue;
+    }
+    if (char !== "@") {
+      continue;
+    }
+
+    let cursor = index + 1;
+    while (cursor < bibText.length && /[A-Za-z]/.test(bibText[cursor])) {
+      cursor += 1;
+    }
+    if (cursor === index + 1) {
+      continue;
+    }
+    const type = bibText.slice(index + 1, cursor).trim();
+    while (cursor < bibText.length && /\s/.test(bibText[cursor])) {
+      cursor += 1;
+    }
+    if (bibText[cursor] === "{" || bibText[cursor] === "(") {
+      return { entryStart: index, openIndex: cursor, type };
+    }
+  }
+  return null;
+}
+
+function scanBibEntryBlock(bibText, header) {
+  const openDelimiter = bibText[header.openIndex];
+  const closeDelimiter = openDelimiter === "{" ? "}" : ")";
+  let delimiterDepth = 1;
+  let braceDepth = openDelimiter === "{" ? 1 : 0;
+  let commaIndex = -1;
+  let inQuote = false;
+  let inLineComment = false;
+
+  for (let cursor = header.openIndex + 1; cursor < bibText.length; cursor += 1) {
+    const char = bibText[cursor];
+    if (inLineComment) {
+      if (char === "\n" || char === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+    if (char === "%" && !isEscapedCharacter(bibText, cursor)) {
+      inLineComment = true;
+      continue;
+    }
+    if (char === "\"" && !isEscapedCharacter(bibText, cursor) && (openDelimiter === "(" ? braceDepth === 0 : delimiterDepth === 1)) {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (inQuote || isEscapedCharacter(bibText, cursor)) {
+      continue;
+    }
+
+    if (openDelimiter === "{") {
+      if (char === "{") {
+        delimiterDepth += 1;
+      } else if (char === "}") {
+        delimiterDepth -= 1;
+        if (delimiterDepth === 0) {
+          return { ...header, commaIndex, end: cursor + 1 };
+        }
+      } else if (char === "," && delimiterDepth === 1 && commaIndex < 0) {
+        commaIndex = cursor;
+      }
+      continue;
+    }
+
+    if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (braceDepth === 0 && char === "(") {
+      delimiterDepth += 1;
+    } else if (braceDepth === 0 && char === closeDelimiter) {
+      delimiterDepth -= 1;
+      if (delimiterDepth === 0) {
+        return { ...header, commaIndex, end: cursor + 1 };
+      }
+    } else if (braceDepth === 0 && char === "," && delimiterDepth === 1 && commaIndex < 0) {
+      commaIndex = cursor;
+    }
+  }
+  return null;
+}
+
 export function parseBibEntries(bibText) {
   const entries = [];
   let index = 0;
   while (index < bibText.length) {
-    const entryStart = bibText.indexOf("@", index);
-    if (entryStart < 0) {
+    const header = findNextBibEntryHeader(bibText, index);
+    if (!header) {
       break;
     }
-    const openBrace = bibText.indexOf("{", entryStart);
-    if (openBrace < 0) {
+    const block = scanBibEntryBlock(bibText, header);
+    if (!block) {
       break;
     }
-    const header = bibText.slice(entryStart + 1, openBrace).trim();
-    const type = header.split(/\s+/)[0];
-    const commaIndex = bibText.indexOf(",", openBrace);
-    if (commaIndex < 0) {
-      break;
+    index = block.end;
+    const normalizedType = header.type.toLowerCase();
+    if (normalizedType === "comment" || normalizedType === "preamble" || normalizedType === "string" || block.commaIndex < 0) {
+      continue;
     }
-    const key = bibText.slice(openBrace + 1, commaIndex).trim();
-    let depth = 1;
-    let cursor = openBrace + 1;
-    while (cursor < bibText.length && depth > 0) {
-      const char = bibText[cursor];
-      if (char === "{") {
-        depth += 1;
-      } else if (char === "}") {
-        depth -= 1;
-      }
-      cursor += 1;
+    const key = bibText.slice(header.openIndex + 1, block.commaIndex).trim();
+    if (!key) {
+      continue;
     }
-    const raw = bibText.slice(entryStart, cursor).trim();
+    const raw = bibText.slice(header.entryStart, block.end).trim();
     entries.push({
-      type,
+      type: header.type,
       key,
       raw,
-      start: entryStart,
-      end: cursor,
+      start: header.entryStart,
+      end: block.end,
       doi: normalizeLooseText(parseFieldValue(raw, "doi")),
       title: normalizeLooseText(parseFieldValue(raw, "title")),
       adsurl: parseFieldValue(raw, "adsurl"),
       bibcode: normalizeLooseText(extractBibcodeFromAdsUrl(parseFieldValue(raw, "adsurl"))),
       year: parseFieldValue(raw, "year")
     });
-    index = cursor;
   }
   return entries;
 }
@@ -267,11 +362,12 @@ export function findBibMatch(entries, candidate) {
 
 export function appendBibtexEntry(bibText, entryText) {
   const trimmedText = bibText.trimEnd();
-  const trimmedEntry = entryText.trim();
+  const lineEnding = bibText.includes("\r\n") ? "\r\n" : "\n";
+  const trimmedEntry = entryText.trim().replace(/\r\n|\r|\n/g, lineEnding);
   if (!trimmedText) {
-    return `${trimmedEntry}\n`;
+    return `${trimmedEntry}${lineEnding}`;
   }
-  return `${trimmedText}\n\n${trimmedEntry}\n`;
+  return `${trimmedText}${lineEnding}${lineEnding}${trimmedEntry}${lineEnding}`;
 }
 
 function compareKeys(left, right) {
@@ -279,7 +375,10 @@ function compareKeys(left, right) {
 }
 
 export function insertBibtexEntryAlphabetically(bibText, entryText, finalKey) {
-  const entries = parseBibEntries(bibText);
+  return insertAlphabetically(bibText, entryText, finalKey, parseBibEntries(bibText));
+}
+
+function insertAlphabetically(bibText, entryText, finalKey, entries) {
   if (!entries.length) {
     return appendBibtexEntry(bibText, entryText);
   }
@@ -289,14 +388,15 @@ export function insertBibtexEntryAlphabetically(bibText, entryText, finalKey) {
     return appendBibtexEntry(bibText, entryText);
   }
 
-  const trimmedEntry = entryText.trim();
+  const lineEnding = bibText.includes("\r\n") ? "\r\n" : "\n";
+  const trimmedEntry = entryText.trim().replace(/\r\n|\r|\n/g, lineEnding);
   const before = bibText.slice(0, insertBefore.start).trimEnd();
   const after = bibText.slice(insertBefore.start).trimStart();
 
   if (!before) {
-    return `${trimmedEntry}\n\n${after}\n`;
+    return `${trimmedEntry}${lineEnding}${lineEnding}${after}${lineEnding}`;
   }
-  return `${before}\n\n${trimmedEntry}\n\n${after}\n`;
+  return `${before}${lineEnding}${lineEnding}${trimmedEntry}${lineEnding}${lineEnding}${after}${lineEnding}`;
 }
 
 function computeInsertionResult(updatedBibText, rewrittenBibtex) {
@@ -332,10 +432,11 @@ export function applyBibInsertion({ bibText, bibtex, candidate }) {
     keyMode: candidate?.keyMode,
     typedToken: candidate?.typedToken
   });
-  const rewrittenBibtex = rewriteBibtexKey(bibtex, finalKey);
-  const insertMode = String(candidate?.bibliographyInsertMode ?? "append").toLowerCase();
+  const rewrittenBibtex = rewriteBibtexKey(bibtex, finalKey)
+    .replace(/\r\n|\r|\n/g, bibText.includes("\r\n") ? "\r\n" : "\n");
+  const insertMode = String(candidate?.bibliographyInsertMode ?? "alphabetical").toLowerCase();
   const updatedBibText = insertMode === "alphabetical"
-    ? insertBibtexEntryAlphabetically(bibText, rewrittenBibtex, finalKey)
+    ? insertAlphabetically(bibText, rewrittenBibtex, finalKey, entries)
     : appendBibtexEntry(bibText, rewrittenBibtex);
   const insertionResult = computeInsertionResult(updatedBibText, rewrittenBibtex);
   return {

@@ -241,7 +241,70 @@ test("searchAds contextual mode starts the first two ADS queries in parallel", a
   assert.equal(results.length, 12);
 });
 
-test("searchAds stops explicit-year contextual lookups after first-author year results are sufficient", async () => {
+test("contextual ADS keeps an author-year opening result when its context sibling errors", async () => {
+  const calls = [];
+  const results = await searchAds({
+    token: "Example2026",
+    searchMode: "contextual",
+    sentenceText: "Example target title is stable.",
+    contextText: "Example target title is stable.",
+    parsedKeyHint: { surname: "Example", year: 2026, firstInitial: "E", suffix: "" }
+  }, {
+    adsApiToken: "token",
+    citationKeyMode: "author-year",
+    contextualSearchEngine: "beta"
+  }, async (input) => {
+    const query = new URL(String(input)).searchParams.get("q") ?? "";
+    calls.push(query);
+    if (query.includes('first_author:"Example"') && !query.includes(" AND ")) {
+      return okResponse([makeDoc("opening-target", {
+        title: "Example target title",
+        author: ["Example, E."],
+        year: "2026",
+        abstract: "Example target title is stable."
+      })]);
+    }
+    throw new Error("context sibling failed");
+  });
+
+  assert.equal(results[0].bibcode, "opening-target");
+  assert.ok(calls.length >= 2, "the bounded opening pair should be attempted before contextual fallback");
+});
+
+test("VS Code contextual ADS does not invoke a ready callback after an outer timeout", async () => {
+  const previousBudget = process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS;
+  process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS = "30";
+  let readyCalls = 0;
+  try {
+    await assert.rejects(() => searchLiterature({
+      token: "Late2026",
+      searchMode: "contextual",
+      sentenceText: "A late provider response should not publish.",
+      contextText: "A late provider response should not publish.",
+      parsedKeyHint: { surname: "Late", year: 2026, suffix: "" }
+    }, {
+      adsApiToken: "token",
+      sourceProfile: "astrophysics",
+      citationKeyMode: "author-year",
+      contextualSearchEngine: "beta"
+    }, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return okResponse([makeDoc("late-arxiv", {
+        title: "A late provider response should not publish",
+        author: ["Late, Example"],
+        year: "2026",
+        identifier: ["arXiv:2601.12345"]
+      })]);
+    }, () => { readyCalls += 1; }), /Literature search timed out/);
+    await new Promise((resolve) => setTimeout(resolve, 130));
+    assert.equal(readyCalls, 0);
+  } finally {
+    if (previousBudget === undefined) delete process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS;
+    else process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS = previousBudget;
+  }
+});
+
+test("searchAds lets ambiguous contextual lookups exhaust the bounded-time query ladder", async () => {
   const calls = [];
 
   await searchAds(
@@ -292,8 +355,126 @@ test("searchAds stops explicit-year contextual lookups after first-author year r
     }
   );
 
-  assert.equal(calls.length, 4);
-  assert.match(calls[3], /\(\(first_author:"Shariat"\) OR \(author:"Shariat Collaboration"\) OR \(author:"Shariat Scientific Collaboration"\)\) year:2025|first_author:"Shariat" year:2025/);
+  assert.ok(calls.length > 8);
+  assert.match(calls[0], /\(\(first_author:"Shariat"\) OR \(author:"Shariat Collaboration"\) OR \(author:"Shariat Scientific Collaboration"\)\) year:2025|first_author:"Shariat" year:2025/);
+});
+
+test("searchAds does not stop before a later exact-author contextual result", async () => {
+  const calls = [];
+  let activeRequests = 0;
+  let maxActiveRequests = 0;
+  const results = await searchAds(
+    {
+      token: "Strader2019",
+      searchMode: "contextual",
+      sentenceText: "09 solar masses",
+      citationPrefixText: "Redback pulsars appear systematically massive with a median inferred neutron star mass",
+      citationSuffixText: ".",
+      contextText: "Redback pulsars appear systematically massive with a median inferred neutron star mass.",
+      parsedKeyHint: { surname: "Strader", year: 2019, firstInitial: null, suffix: "" }
+    },
+    { adsApiToken: "token", citationKeyMode: "author-year" },
+    async () => {
+      calls.push(calls.length + 1);
+      const callNumber = calls.length;
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      activeRequests -= 1;
+      if (callNumber !== 9) {
+        return okResponse(Array.from({ length: 6 }, (_, index) => makeDoc(`distractor-${index}`, {
+          title: `Redback pulsar population study ${index}`,
+          author: ["Other, Author"],
+          year: "2019",
+          abstract: "Redback pulsar demographics."
+        })));
+      }
+      return okResponse([makeDoc("target", {
+        title: "Optical Spectroscopy and Demographics of Redback Millisecond Pulsar Binaries",
+        author: ["Strader, Jay"],
+        year: "2019",
+        abstract: "Redback pulsars and their neutron star mass distribution."
+      })]);
+    }
+  );
+
+  assert.ok(calls.length >= 10 && calls.length <= 14, "at most one extra checkpoint may be prefetched");
+  assert.equal(maxActiveRequests, 4, "contextual fallback queries should run in bounded groups of four");
+  assert.equal(results[0].bibcode, "target");
+});
+
+test("searchAds returns Yang2026 from the entity-aware opening pair", async () => {
+  const calls = [];
+  const results = await searchAds({
+    token: "Yang2026",
+    searchMode: "contextual",
+    sentenceText: "6$ .",
+    citationPrefixText: "Finding NSs in hierarchical triples can test the kick model. Recently, PSR J0435+3233 is a pulsar--white-dwarf binary with a stellar tertiary",
+    citationSuffixText: ".",
+    contextText: "PSR J0435+3233 is a hierarchical triple with a white dwarf and stellar tertiary.",
+    parsedKeyHint: { surname: "Yang", year: 2026, firstInitial: null, suffix: "" }
+  }, { adsApiToken: "token", citationKeyMode: "author-year" }, async (input) => {
+    const query = new URL(String(input)).searchParams.get("q");
+    calls.push(query);
+    if (query.includes('full:"PSR J0435+3233"')) {
+      return okResponse([makeDoc("yang-triple", {
+        title: "The PSR J0435+3233 Triple System",
+        author: ["Yang, Z. L.", "Han, J. L."],
+        year: "2026",
+        abstract: "A hierarchical triple with a white-dwarf inner binary and a distant stellar tertiary."
+      })]);
+    }
+    return okResponse(Array.from({ length: 12 }, (_, index) => makeDoc(`yang-distractor-${index}`, {
+      title: `Unrelated 2026 astronomy result ${index}`,
+      author: ["Yang, Other"],
+      year: "2026",
+      abstract: "An unrelated astronomy result."
+    })));
+  });
+
+  assert.equal(results[0].bibcode, "yang-triple");
+  assert.equal(calls.length, 2);
+});
+
+test("searchAds uses a precise Yang2026 arXiv fallback when ADS has not indexed it", async () => {
+  const adsQueries = [];
+  const arxivQueries = [];
+  const results = await searchAds({
+    token: "Yang2026",
+    searchMode: "contextual",
+    sentenceText: "6$ .",
+    citationPrefixText: "Finding NSs in hierarchical triples can test the kick model. Recently, PSR J0435+3233 is a pulsar--white-dwarf binary with a stellar tertiary",
+    citationSuffixText: ".",
+    contextText: "PSR J0435+3233 is a hierarchical triple with a white dwarf and stellar tertiary.",
+    parsedKeyHint: { surname: "Yang", year: 2026, firstInitial: null, suffix: "" }
+  }, { adsApiToken: "token", citationKeyMode: "author-year", sourceProfile: "astrophysics" }, async (input) => {
+    const url = new URL(String(input));
+    if (url.host === "export.arxiv.org") {
+      arxivQueries.push(url.searchParams.get("search_query"));
+      return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>http://arxiv.org/abs/2608.01227v1</id>
+            <published>2026-08-02T13:19:44Z</published>
+            <title>The PSR J0435+3233 Triple System</title>
+            <summary>A hierarchical triple with a white-dwarf inner binary and a distant stellar tertiary.</summary>
+            <author><name>Z. L. Yang</name></author>
+            <category term="astro-ph.HE"/>
+          </entry>
+        </feed>`);
+    }
+    const query = url.searchParams.get("q");
+    if (!query.startsWith("identifier:")) {
+      adsQueries.push(query);
+    }
+    return okResponse([]);
+  });
+
+  assert.equal(results[0].eprint, "2608.01227");
+  assert.equal(adsQueries.length, 2);
+  assert.equal(arxivQueries.length, 1);
+  assert.match(arxivQueries[0], /au:"Yang"/);
+  assert.match(arxivQueries[0], /PSR J0435\+3233/);
 });
 
 test("searchAds duplicate merge keeps the refereed ADS paper over software records", async () => {
@@ -376,6 +557,660 @@ test("searchLiterature can use a broad VS Code source without ADS", async () => 
   assert.equal(calls.length, 1);
   assert.equal(results[0].sourceId, "crossref");
   assert.equal(results[0].generatedKey, "Jumper2021");
+});
+
+test("searchLiterature applies Context Beta in the production finalization path", async () => {
+  const citationContext = {
+    token: "Jumper2021",
+    searchMode: "contextual",
+    sentenceText: "AlphaFold predicts protein structure with high accuracy.",
+    citationPrefixText: "AlphaFold predicts protein structure with high accuracy ",
+    citationSuffixText: ".",
+    contextText: "AlphaFold predicts protein structure with high accuracy.",
+    parsedKeyHint: { surname: "Jumper", year: 2021, firstInitial: "", suffix: "" }
+  };
+  const baseSettings = {
+    sourceProfile: "custom",
+    primarySource: "crossref",
+    fallbackSources: [],
+    sourceApiTokens: {},
+    citationKeyMode: "authoryear"
+  };
+  const fetchImpl = async () => jsonResponse({
+    message: {
+      items: [
+        {
+          DOI: "10.1038/s41586-021-03819-2",
+          title: ["Highly accurate protein structure prediction with AlphaFold"],
+          author: [{ family: "Jumper", given: "John" }],
+          issued: { "date-parts": [[2021]] },
+          "container-title": ["Nature"],
+          type: "journal-article",
+          URL: "https://doi.org/10.1038/s41586-021-03819-2"
+        },
+        {
+          DOI: "10.5555/unrelated-jumper-2021",
+          title: ["A separate benchmark by the same author"],
+          author: [{ family: "Jumper", given: "John" }],
+          issued: { "date-parts": [[2021]] },
+          "container-title": ["Test Journal"],
+          type: "journal-article",
+          URL: "https://doi.org/10.5555/unrelated-jumper-2021"
+        }
+      ]
+    }
+  });
+
+  const beta = await searchLiterature(citationContext, {
+    ...baseSettings,
+    contextualSearchEngine: "beta"
+  }, fetchImpl);
+  const classic = await searchLiterature(citationContext, {
+    ...baseSettings,
+    contextualSearchEngine: "classic"
+  }, fetchImpl);
+
+  assert.equal(beta[0].contextualBeta.modelVersion, "context-hybrid-4");
+  assert.equal(beta[0].doi, "10.1038/s41586-021-03819-2");
+  assert.equal(classic[0].contextualBeta, undefined);
+});
+
+test("Context Beta keeps generic collaboration identities while classic and Simple stay strict", async () => {
+  const citationContext = {
+    token: "Planck2020",
+    searchMode: "contextual",
+    sentenceText: "The Planck 2018 results. VI. Cosmological parameters paper constrains cosmology.",
+    contextText: "The Planck 2018 results. VI. Cosmological parameters paper constrains cosmology.",
+    parsedKeyHint: { surname: "Planck", year: 2020, firstInitial: "", suffix: "" }
+  };
+  const baseSettings = {
+    sourceProfile: "custom",
+    primarySource: "crossref",
+    fallbackSources: [],
+    sourceApiTokens: {},
+    citationKeyMode: "authoryear"
+  };
+  const fetchImpl = async () => jsonResponse({
+    message: {
+      items: [
+        namedCrossrefWork({
+          doi: "10.5555/planck-collaboration-2020",
+          title: "Planck 2018 results. VI. Cosmological parameters",
+          author: "Planck Collaboration",
+          year: 2020,
+          abstract: "Planck cosmological parameters."
+        }),
+        namedCrossrefWork({
+          doi: "10.5555/planckman-collaboration-2020",
+          title: "Planckman stellar results",
+          author: "Planckman Collaboration",
+          year: 2020,
+          abstract: "An unrelated result."
+        }),
+        {
+          DOI: "10.5555/max-planck-2020",
+          title: ["Max Planck annual report"],
+          author: [{ family: "Planck", given: "Max" }],
+          issued: { "date-parts": [[2020]] },
+          abstract: "An unrelated report.",
+          "container-title": ["Test Journal"],
+          type: "journal-article",
+          URL: "https://doi.org/10.5555/max-planck-2020"
+        }
+      ]
+    }
+  });
+
+  const beta = await searchLiterature(citationContext, {
+    ...baseSettings,
+    contextualSearchEngine: "beta"
+  }, fetchImpl);
+  assert.ok(beta.some((candidate) => candidate.title === "Planck 2018 results. VI. Cosmological parameters"));
+  assert.ok(beta.every((candidate) => candidate.title !== "Planckman stellar results"));
+
+  const classic = await searchLiterature(citationContext, {
+    ...baseSettings,
+    contextualSearchEngine: "classic"
+  }, fetchImpl);
+  assert.ok(classic.every((candidate) => candidate.title !== "Planck 2018 results. VI. Cosmological parameters"));
+
+  const simple = await searchLiterature({
+    ...citationContext,
+    searchMode: "simple"
+  }, {
+    ...baseSettings,
+    contextualSearchEngine: "beta"
+  }, fetchImpl);
+  assert.ok(simple.every((candidate) => candidate.title !== "Planck 2018 results. VI. Cosmological parameters"));
+});
+
+test("Context Beta accepts Scientific Collaboration as an exact generic identity", async () => {
+  const results = await searchLiterature(
+    {
+      token: "KATRIN2025",
+      searchMode: "contextual",
+      sentenceText: "The KATRIN neutrino-mass limit is used as the benchmark.",
+      contextText: "The KATRIN neutrino-mass limit is used as the benchmark.",
+      parsedKeyHint: { surname: "KATRIN", year: 2025, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          namedCrossrefWork({
+            doi: "10.5555/katrin-scientific-2025",
+            title: "KATRIN neutrino-mass limit",
+            author: "KATRIN Scientific Collaboration",
+            year: 2025,
+            abstract: "A neutrino-mass limit."
+          }),
+          namedCrossrefWork({
+            doi: "10.5555/katrinman-scientific-2025",
+            title: "Katrinman detector study",
+            author: "Katrinman Scientific Collaboration",
+            year: 2025,
+            abstract: "An unrelated detector study."
+          })
+        ]
+      }
+    })
+  );
+  assert.equal(results[0].title, "KATRIN neutrino-mass limit");
+  assert.ok(results.every((candidate) => candidate.title !== "Katrinman detector study"));
+});
+
+test("Context Beta does not let generic process wording overpower a matching QCD title", async () => {
+  const results = await searchLiterature(
+    {
+      token: "Collins:1981uk",
+      searchMode: "contextual",
+      sentenceText: "With the help of factorization in quantum chromodynamics (QCD), the latter are used to empirically extract TMDs through global fitting.",
+      citationPrefixText: "With the help of factorization in quantum chromodynamics (QCD), the latter are used to empirically extract TMDs through global fitting ",
+      citationSuffixText: ".",
+      contextText: "With the help of factorization in quantum chromodynamics (QCD), the latter are used to empirically extract TMDs through global fitting.",
+      parsedKeyHint: { surname: "Collins", year: 1981, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: [],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async () => jsonResponse({
+      message: {
+        items: [
+          crossrefWork({
+            doi: "10.5555/collins-magnetization",
+            title: "An investigation of the magnetization distribution and magnetization processes in symmetrical 90 degree NiFe chevron elements",
+            authors: ["A. Collins", "M. Husni"],
+            year: 1981,
+            abstract: "An investigation of magnetization processes."
+          }),
+          crossrefWork({
+            doi: "10.5555/collins-back-to-back",
+            title: "Back-to-back jets in QCD",
+            authors: ["John C. Collins", "Davison E. Soper"],
+            year: 1981,
+            abstract: "Back-to-back jets in quantum chromodynamics."
+          })
+        ]
+      }
+    })
+  );
+
+  assert.equal(results[0].title, "Back-to-back jets in QCD");
+  assert.equal(results[0].authors[0], "Collins, John C.");
+});
+
+test("production VS Code beta search removes opaque RN identity filters and preserves typed insertion", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "RN3825",
+      searchMode: "contextual",
+      sentenceText: "Brain magnetic resonance imaging with contrast dependent on blood oxygenation is widely used.",
+      citationPrefixText: "Brain magnetic resonance imaging with contrast dependent on blood oxygenation",
+      citationSuffixText: ".",
+      contextText: "Brain magnetic resonance imaging with contrast dependent on blood oxygenation is widely used.",
+      parsedKeyHint: { surname: "R", firstInitial: "N", year: 3825, suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "ads",
+      fallbackSources: [],
+      adsApiToken: "opaque-key-test",
+      sourceApiTokens: { ads: "opaque-key-test" },
+      contextualSearchEngine: "beta",
+      citationKeyMode: "typed"
+    },
+    async (input) => {
+      const query = new URL(String(input)).searchParams.get("q") ?? "";
+      calls.push(query);
+      return jsonResponse({ response: { docs: [
+        {
+          bibcode: "target-paper",
+          title: ["Brain magnetic resonance imaging with contrast dependent on blood oxygenation"],
+          author: ["Ogawa, Seiji"],
+          year: "1990",
+          abstract: "Brain magnetic resonance imaging with contrast dependent on blood oxygenation."
+        },
+        {
+          bibcode: "distractor-paper",
+          title: ["A General Survey"],
+          author: ["R, Nora"],
+          year: "3825",
+          abstract: "A general survey."
+        }
+      ] } });
+    }
+  );
+
+  assert.ok(calls.length >= 1);
+  assert.ok(calls.every((query) => !/RN3825|3825|first_author|author:/.test(query)), calls.join("\n"));
+  assert.equal(results[0].bibcode, "target-paper");
+  assert.equal(results[0].typedToken, "RN3825");
+  assert.equal(results[0].generatedKey, "RN3825");
+});
+
+test("Context Beta searches broad primary and fallback sources concurrently and returns the first exact match", async () => {
+  const calls = [];
+  const started = Date.now();
+  const results = await searchLiterature(
+    {
+      token: "Vaswani2017",
+      searchMode: "contextual",
+      sentenceText: "Attention Is All You Need is the target publication.",
+      citationPrefixText: "Attention Is All You Need",
+      citationSuffixText: ".",
+      contextText: "Attention Is All You Need is the target publication.",
+      parsedKeyHint: { surname: "Vaswani", year: 2017, firstInitial: "A", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [{
+          DOI: "10.5555/attention",
+          title: ["Attention Is All You Need"],
+          author: [{ family: "Vaswani", given: "Ashish" }],
+          issued: { "date-parts": [[2017]] },
+          type: "proceedings-article"
+        }] } });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return textResponse("<?xml version=\"1.0\"?><feed></feed>");
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].title, "Attention Is All You Need");
+  assert.ok(calls.some((url) => url.startsWith("https://api.crossref.org/works")));
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
+  assert.ok(Date.now() - started < 120);
+});
+
+test("Context Beta supplements chemistry with arXiv without changing the chemistry preset", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Schutt2017",
+      searchMode: "contextual",
+      sentenceText: "SchNet A continuous-filter convolutional neural network for modeling quantum interactions is the target publication.",
+      citationPrefixText: "SchNet A continuous-filter convolutional neural network for modeling quantum interactions",
+      citationSuffixText: ".",
+      contextText: "SchNet models quantum interactions.",
+      parsedKeyHint: { surname: "Schutt", year: 2017, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "chemistry",
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [] } });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        assert.equal(new URL(url).searchParams.get("search_query"), 'ti:"SchNet A continuous-filter convolutional neural network for modeling quantum interactions"');
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/1706.08566v5</id>
+              <published>2017-06-26T00:00:00Z</published>
+              <title>SchNet: A continuous-filter convolutional neural network for modeling quantum interactions</title>
+              <summary>A neural network for quantum interactions.</summary>
+              <author><name>Kristof T. Schütt</name></author>
+              <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="stat.ML"/>
+            </entry>
+          </feed>`);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(calls.some((url) => url.startsWith("https://api.crossref.org/works")));
+  assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
+  assert.equal(results[0].sourceId, "arxiv");
+  assert.equal(results[0].title, "SchNet: A continuous-filter convolutional neural network for modeling quantum interactions");
+});
+
+test("Context Beta does not return an unrelated chemistry record when arXiv is rate limited", async () => {
+  await assert.rejects(() => searchLiterature(
+    {
+      token: "Schutt2017",
+      searchMode: "contextual",
+      sentenceText: "SchNet: A continuous-filter convolutional neural network for modeling quantum interactions is the target publication.",
+      citationPrefixText: "SchNet: A continuous-filter convolutional neural network for modeling quantum interactions",
+      citationSuffixText: ".",
+      contextText: "SchNet models quantum interactions.",
+      parsedKeyHint: { surname: "Schutt", year: 2017, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "chemistry",
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [{
+          DOI: "10.23919/epe17ecceeurope.2017.8099183",
+          title: ["Design and analysis of complex vector current regulators for modular multilevel converters"],
+          author: [{ family: "Schutt", given: "Michael" }],
+          issued: { "date-parts": [[2017]] },
+          type: "proceedings-article"
+        }] } });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return statusResponse(429);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  ), /arXiv is rate limiting searches/);
+});
+
+test("direct DOI tokens containing arXiv-shaped numbers stay on the DOI route", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "doi:10.1234/2401.01234",
+      searchMode: "direct",
+      sentenceText: "A DOI containing an arXiv-shaped suffix.",
+      contextText: "A DOI containing an arXiv-shaped suffix."
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "https://api.crossref.org/works/10.1234%2F2401.01234") {
+        return jsonResponse({ message: {
+          DOI: "10.1234/2401.01234",
+          title: ["A DOI With a Numeric Suffix"],
+          author: [{ family: "Example", given: "A." }],
+          issued: { "date-parts": [[2024]] },
+          type: "journal-article"
+        } });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].doi, "10.1234/2401.01234");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].startsWith("https://api.crossref.org/works/"));
+});
+
+test("Context Beta routes embedded arXiv identifiers to arXiv outside the configured profile", async () => {
+  const calls = [];
+  const results = await searchLiterature(
+    {
+      token: "Smith:2401.01234",
+      searchMode: "contextual",
+      sentenceText: "A contextual citation with an embedded arXiv identifier.",
+      contextText: "A contextual citation with an embedded arXiv identifier.",
+      parsedKeyHint: { surname: "Smith", year: 2024, suffix: "" }
+    },
+    {
+      sourceProfile: "general",
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      calls.push(url);
+      assert.ok(url.startsWith("https://export.arxiv.org/api/query"));
+      return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>http://arxiv.org/abs/2401.01234v2</id>
+            <published>2024-01-03T00:00:00Z</published>
+            <title>Embedded identifier target</title>
+            <summary>The exact identifier target.</summary>
+            <author><name>Jane Smith</name></author>
+          </entry>
+        </feed>`);
+    }
+  );
+
+  assert.equal(results[0].sourceId, "arxiv");
+  assert.equal(results[0].eprint, "2401.01234");
+  assert.equal(calls.length, 1);
+});
+
+test("Context Beta rejects an arXiv candidate whose embedded identifier is wrong", async () => {
+  await assert.rejects(() => searchLiterature(
+    {
+      token: "abs-2410-05229",
+      searchMode: "contextual",
+      sentenceText: "A citation with an explicit arXiv identifier.",
+      contextText: "A citation with an explicit arXiv identifier.",
+      parsedKeyHint: { surname: "Smith", year: 2024, suffix: "" }
+    },
+    {
+      sourceProfile: "general",
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/2410.09999v1</id>
+              <published>2024-10-03T00:00:00Z</published>
+              <title>Wrong identifier result</title>
+              <summary>Not the requested work.</summary>
+              <author><name>Smith, Example</name></author>
+            </entry>
+          </feed>`);
+      }
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [crossrefWork({
+          doi: "10.5555/2410.05229",
+          title: "Wrong identifier result",
+          authors: ["Smith Example"],
+          year: 2024,
+          abstract: "Not the requested work."
+        })] } });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  ), /No literature matches|failed/i);
+});
+
+test("Context Beta waits for ambiguous exact-title providers and keeps distinct given names visible", async () => {
+  const started = Date.now();
+  const results = await searchLiterature(
+    {
+      token: "Vaswani2024",
+      searchMode: "contextual",
+      sentenceText: "Shared Exact Title for a Provider Race is the target publication.",
+      contextText: "Shared Exact Title for a Provider Race is the target publication.",
+      parsedKeyHint: { surname: "Vaswani", year: 2024, firstInitial: "", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [{
+          DOI: "10.5555/wrong-vaswani",
+          title: ["Shared Exact Title for a Provider Race"],
+          author: [{ family: "Vaswani", given: "Namrata" }],
+          issued: { "date-parts": [[2024]] },
+          type: "journal-article"
+        }] } });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        await new Promise((resolve) => setTimeout(resolve, 140));
+        return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+              <id>http://arxiv.org/abs/2401.01234v1</id>
+              <published>2024-01-03T00:00:00Z</published>
+              <title>Shared Exact Title for a Provider Race</title>
+              <summary>The intended record.</summary>
+              <author><name>Ashish Vaswani</name></author>
+            </entry>
+          </feed>`);
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.ok(Date.now() - started >= 120);
+  assert.equal(results.length, 2);
+  assert.deepEqual(new Set(results.map((candidate) => candidate.authors[0])), new Set(["Vaswani, Namrata", "Ashish Vaswani"]));
+});
+
+test("Context Beta aborts a slower provider after an unambiguous exact-title result", async () => {
+  let slowerProviderAborted = false;
+  const started = Date.now();
+  const results = await searchLiterature(
+    {
+      token: "AVaswani2024",
+      searchMode: "contextual",
+      sentenceText: "An Unambiguous Exact Provider Title is the target publication.",
+      contextText: "An Unambiguous Exact Provider Title is the target publication.",
+      parsedKeyHint: { surname: "Vaswani", year: 2024, firstInitial: "A", suffix: "" }
+    },
+    {
+      sourceProfile: "custom",
+      primarySource: "crossref",
+      fallbackSources: ["arxiv"],
+      sourceApiTokens: {},
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
+    },
+    async (input, options = {}) => {
+      const url = String(input);
+      if (url.startsWith("https://api.crossref.org/works")) {
+        return jsonResponse({ message: { items: [{
+          DOI: "10.5555/right-vaswani",
+          title: ["An Unambiguous Exact Provider Title"],
+          author: [{ family: "Vaswani", given: "Ashish" }],
+          issued: { "date-parts": [[2024]] },
+          type: "journal-article"
+        }] } });
+      }
+      if (url.startsWith("https://export.arxiv.org/api/query")) {
+        return new Promise((resolve, reject) => {
+          const abort = () => {
+            slowerProviderAborted = true;
+            const error = new Error("aborted");
+            error.name = "AbortError";
+            reject(error);
+          };
+          if (options.signal?.aborted) abort();
+          else options.signal?.addEventListener("abort", abort, { once: true });
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }
+  );
+
+  assert.equal(results[0].doi, "10.5555/right-vaswani");
+  assert.ok(Date.now() - started < 120);
+  assert.equal(slowerProviderAborted, true);
+});
+
+test("VS Code bounds stalled provider response bodies with the overall literature deadline", async () => {
+  const previousBudget = process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS;
+  process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS = "50";
+  let aborted = false;
+  try {
+    await assert.rejects(() => searchLiterature(
+      {
+        token: "BodyHang2024",
+        searchMode: "contextual",
+        sentenceText: "A stalled provider response body should time out.",
+        contextText: "A stalled provider response body should time out.",
+        parsedKeyHint: { surname: "BodyHang", year: 2024, firstInitial: "", suffix: "" }
+      },
+      {
+        sourceProfile: "custom",
+        primarySource: "crossref",
+        fallbackSources: [],
+        sourceApiTokens: {},
+        citationKeyMode: "authoryear",
+        contextualSearchEngine: "beta"
+      },
+      async (_input, options = {}) => {
+        options.signal?.addEventListener("abort", () => {
+          aborted = true;
+        }, { once: true });
+        return {
+          ok: true,
+          status: 200,
+          headers: { get() { return null; } },
+          json() { return new Promise(() => {}); }
+        };
+      }
+    ), /Literature search timed out/);
+    assert.equal(aborted, true);
+  } finally {
+    if (previousBudget === undefined) delete process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS;
+    else process.env.OVERCITE_LITERATURE_SEARCH_BUDGET_MS = previousBudget;
+  }
 });
 
 test("searchLiterature returns fast when a broad fallback has a high-confidence match", async () => {
@@ -1791,6 +2626,7 @@ test("broad ranking boosts records confirmed by multiple sources and preserves j
 
 test("arXiv simple results can be enriched with ADS citation counts", async () => {
   const calls = [];
+  let readyCandidates;
   const results = await searchLiterature(
     {
       token: "Vaswani2017",
@@ -1831,6 +2667,9 @@ test("arXiv simple results can be enriched with ADS citation counts", async () =
           </feed>`);
       }
       if (url.startsWith("https://api.adsabs.harvard.edu/v1/search/query")) {
+        assert.ok(readyCandidates?.length, "publish final ranking before requesting optional counts");
+        assert.equal(readyCandidates[0].eprint, "1706.03762");
+        await new Promise((resolve) => setTimeout(resolve, 25));
         const query = new URL(url).searchParams.get("q") ?? "";
         assert.match(query, /identifier:"1706\.03762"/);
         return okResponse([
@@ -1845,7 +2684,8 @@ test("arXiv simple results can be enriched with ADS citation counts", async () =
         ]);
       }
       throw new Error(`Unexpected URL ${url}`);
-    }
+    },
+    (candidates) => { readyCandidates = candidates; }
   );
 
   assert.ok(calls.some((url) => url.startsWith("https://export.arxiv.org/api/query")));
@@ -1853,6 +2693,7 @@ test("arXiv simple results can be enriched with ADS citation counts", async () =
   assert.equal(results[0].sourceLabel, "arXiv");
   assert.equal(results[0].eprint, "1706.03762");
   assert.equal(results[0].citationCount, 98765);
+  assert.deepEqual(results.map(({ citationCount, ...candidate }) => candidate), readyCandidates.map(({ citationCount, ...candidate }) => candidate));
 });
 
 test("arXiv-primary presets try Crossref first for pre-arXiv papers", async () => {
@@ -1925,7 +2766,8 @@ test("contextual broad search keeps exact title-year matches for collaboration k
     {
       sourceProfile: "physics",
       sourceApiTokens: {},
-      citationKeyMode: "authoryear"
+      citationKeyMode: "authoryear",
+      contextualSearchEngine: "beta"
     },
     async (input) => {
       const url = String(input);
@@ -2191,11 +3033,86 @@ function makeDoc(bibcode, overrides = {}) {
   };
 }
 
+test("beta broad ranking gives exact collaboration identities the same author score as personal names", async () => {
+  const context = {
+    token: "Aurora2020", searchMode: "contextual",
+    parsedKeyHint: { surname: "Aurora", year: 2020, suffix: "" },
+    sentenceText: "The Aurora cosmology paper constrains cosmological parameters.",
+    contextText: "The Aurora cosmology paper constrains cosmological parameters."
+  };
+  const items = [
+    namedCrossrefWork({ doi: "10.5555/personal", title: "Sea Ice Mass Balance", author: "Aurora, Cameron", year: 2020 }),
+    namedCrossrefWork({ doi: "10.5555/group", title: "Aurora 2018 results", author: "Aurora Collaboration", year: 2020, abstract: "We present cosmological parameters from cosmic microwave background observations." })
+  ];
+  const result = await searchLiterature(context, {
+    sourceProfile: "custom", primarySource: "crossref", fallbackSources: [],
+    contextualSearchEngine: "beta", sourceApiTokens: {}, citationKeyMode: "authoryear"
+  }, async () => jsonResponse({ message: { items } }));
+  assert.equal(result[0].doi, "10.5555/group");
+});
+
+test("beta broad ranking does not demote a more topical preprint solely for publication format", async () => {
+  const context = {
+    token: "Smith2024", searchMode: "contextual",
+    parsedKeyHint: { surname: "Smith", year: 2024, suffix: "" },
+    sentenceText: "Quantum sensors detect dark matter signals.",
+    contextText: "Quantum sensors detect dark matter signals."
+  };
+  const result = await searchLiterature(context, {
+    sourceProfile: "custom", primarySource: "crossref", fallbackSources: ["arxiv"],
+    contextualSearchEngine: "beta", sourceApiTokens: {}, citationKeyMode: "authoryear"
+  }, async input => {
+    if (String(input).startsWith("https://export.arxiv.org/")) return textResponse(`<?xml version="1.0"?>
+      <feed xmlns="http://www.w3.org/2005/Atom"><entry>
+      <id>http://arxiv.org/abs/2401.00001v1</id><published>2024-01-01T00:00:00Z</published>
+      <title>Quantum Sensors for Dark Matter Detection</title>
+      <summary>Quantum sensors detect dark matter signals.</summary>
+      <author><name>Alice Smith</name></author></entry></feed>`);
+    return jsonResponse({ message: { items: [crossrefWork({
+      doi: "10.5555/sensors", title: "Quantum Sensors", authors: ["Smith, Alice"], year: 2024
+    })] } });
+  });
+  assert.equal(result[0].eprint, "2401.00001");
+});
+
+test("beta broad ranking lets topical adjacent-year papers beat unrelated exact-year namesakes", async () => {
+  const context = {
+    token: "Smith2023quantum", searchMode: "contextual",
+    parsedKeyHint: { surname: "Smith", year: 2023, suffix: "quantum" },
+    sentenceText: "Quantum entanglement spectra characterize topological phases.",
+    contextText: "Quantum entanglement spectra characterize topological phases."
+  };
+  const items = [
+    crossrefWork({ doi: "10.5555/unrelated", title: "Clinical Phases of Medical Treatment", authors: ["Smith, Alice"], year: 2023 }),
+    crossrefWork({ doi: "10.5555/topical", title: "Quantum Entanglement Spectra in Topological Phases", authors: ["Smith, Bob"], year: 2024 })
+  ];
+  for (const engine of ["beta", "classic"]) {
+    const result = await searchLiterature(context, {
+      sourceProfile: "general", contextualSearchEngine: engine, sourceApiTokens: {}, citationKeyMode: "authoryear"
+    }, async () => jsonResponse({ message: { items } }));
+    assert.equal(result[0].doi, engine === "beta" ? "10.5555/topical" : "10.5555/unrelated");
+  }
+});
+
 function crossrefWork({ doi, title, authors, year, abstract, type = "journal-article", journal = "Test Journal" }) {
   return {
     DOI: doi,
     title: [title],
     author: authors.map(crossrefAuthor),
+    issued: { "date-parts": [[year]] },
+    abstract,
+    "is-referenced-by-count": 0,
+    "container-title": [journal],
+    type,
+    URL: `https://doi.org/${doi}`
+  };
+}
+
+function namedCrossrefWork({ doi, title, author, year, abstract, type = "journal-article", journal = "Test Journal" }) {
+  return {
+    DOI: doi,
+    title: [title],
+    author: [{ name: author }],
     issued: { "date-parts": [[year]] },
     abstract,
     "is-referenced-by-count": 0,

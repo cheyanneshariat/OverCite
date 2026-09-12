@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OverCite current Overleaf UI regression fixture</title>
+  <style>
+    body { margin: 0; font: 14px system-ui, sans-serif; }
+    #app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+    #sidebar { padding: 12px; border-right: 1px solid #ccc; }
+    #editor-area { padding: 12px; }
+    [role="tab"] { display: inline-block; padding: 8px; cursor: pointer; }
+    [role="treeitem"] { padding: 6px; cursor: pointer; }
+    [role="tabpanel"] { min-height: 360px; }
+    .cm-editor { min-height: 320px; padding: 12px; border: 1px solid #aaa; white-space: pre-wrap; }
+    #unrelated-interaction-zone { margin-top: 12px; padding: 8px; border: 1px solid #ddd; }
+    #old-panel { position: fixed; left: -10000px; top: 0; width: 600px; height: 400px; }
+    #test-result { display: none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div role="tab" aria-selected="true">File tree</div>
+      <div role="tree">
+        <div role="treeitem" data-testid="file-tree-item">main.tex</div>
+        <div role="treeitem" data-testid="file-tree-item">old_text.tex</div>
+        <div role="treeitem" data-testid="file-tree-item">notes.txt</div>
+        <div role="treeitem" data-testid="file-tree-item">references.bib</div>
+      </div>
+    </aside>
+    <main id="editor-area">
+      <div role="tablist" aria-label="Open files">
+        <div id="main-tab" role="tab" aria-selected="true" aria-controls="main-panel">main.tex <button>Close</button></div>
+        <div id="bib-tab" role="tab" aria-selected="false" aria-controls="bib-panel">references.bib <button>Close</button></div>
+        <div id="old-tab" role="tab" aria-selected="false" aria-controls="old-panel">old_text.tex <button>Close</button></div>
+        <div id="notes-tab" role="tab" aria-selected="false" aria-controls="notes-panel">notes.txt <button>Close</button></div>
+      </div>
+      <div class="ol-cm-breadcrumbs">old_text.tex</div>
+      <section id="main-panel" role="tabpanel">
+        <div id="main-editor" class="cm-editor" tabindex="0"></div>
+      </section>
+      <section id="bib-panel" role="tabpanel" hidden>
+        <div id="bib-editor" class="cm-editor" tabindex="0"></div>
+      </section>
+      <section id="old-panel" role="tabpanel">
+        <div id="old-editor" class="cm-editor cm-focused" tabindex="0"></div>
+      </section>
+      <section id="notes-panel" role="tabpanel" hidden>
+        <div id="notes-editor" class="cm-editor" tabindex="0"></div>
+      </section>
+      <section id="unrelated-interaction-zone" aria-label="Synthetic PDF and grammar tools">
+        <button id="unrelated-control" type="button">Search the compiled PDF</button>
+        <div id="synthetic-pdf-text"></div>
+      </section>
+    </main>
+  </div>
+  <pre id="test-result"></pre>
+  <script>
+    (() => {
+      const fixtureQuery = new URLSearchParams(location.search);
+      const delayedTransition = fixtureQuery.get("transition") === "delayed";
+      const stuckTransition = fixtureQuery.get("transition") === "stuck";
+      const staleBlankTransition = fixtureQuery.get("transition") === "wrongblank";
+      const namelessTabs = fixtureQuery.get("nameless") === "1";
+      const uncontrolledTabs = fixtureQuery.get("uncontrolled") === "1";
+      const persistentEditor = fixtureQuery.get("persistent") === "1";
+      const treeOnlyTarget = fixtureQuery.get("treeonly") === "1";
+      const wrongBlankEditor = fixtureQuery.get("wrongblank") === "1";
+      const manualEditorRace = fixtureQuery.get("manualrace") === "1";
+      const manualBibSwitch = fixtureQuery.get("manualbib") === "1" || wrongBlankEditor || manualEditorRace || stuckTransition || staleBlankTransition;
+      const emptyCitation = fixtureQuery.get("empty") === "1";
+      const lateWriteAcknowledgments = fixtureQuery.get("lateack") === "1";
+      const keyCollision = fixtureQuery.get("collision") === "1";
+      const firefoxPointerStress = fixtureQuery.get("firefoxstress") === "1";
+      const subjectOnboarding = fixtureQuery.get("onboarding") === "1";
+      const settingsRedirect = fixtureQuery.get("settingsredirect") === "1";
+      const automaticSettingsRedirect = fixtureQuery.get("onboardastro") === "1";
+      const retryLookup = fixtureQuery.get("retry") === "1";
+      const orderingFixture = fixtureQuery.get("ordering") === "1";
+      let allowManualBibSwitch = false;
+      let bibActivationClicks = 0;
+      window.__OVERCITE_START_REGRESSION__ = fixtureQuery.get("autorun") === "1";
+      window.__OVERCITE_UNRELATED_TEXT_READS__ = 0;
+      const textContentDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+      Object.defineProperty(Node.prototype, "textContent", {
+        configurable: true,
+        get() {
+          if (this instanceof Element && this.closest("#unrelated-interaction-zone")) {
+            window.__OVERCITE_UNRELATED_TEXT_READS__ += 1;
+          }
+          return textContentDescriptor.get.call(this);
+        },
+        set(value) {
+          textContentDescriptor.set.call(this, value);
+        }
+      });
+      document.getElementById("synthetic-pdf-text").replaceChildren(
+        ...Array.from({ length: 1500 }, (_, index) => {
+          const span = document.createElement("span");
+          span.textContent = `Rendered PDF word ${index} with grammar annotation. `;
+          return span;
+        })
+      );
+      const documents = {
+        "main.tex": String.raw`\documentclass{article}
+\begin{document}
+This source confusion is also found in previous M51 studies. \citet{Rice2021} found at least one HST source within 0.5 arcsec.
+\bibliography{references}
+\end{document}`,
+        "references.bib": keyCollision
+          ? String.raw`@article{Rice2021,
+  author = {Different, Alice},
+  title = {An unrelated existing paper},
+  year = {2020}
+}
+`
+          : (orderingFixture
+              ? String.raw`@article{Aaa20_demo,
+  title = {Alpha Demo},
+  year = {2020}
+}
+
+@article{Zzz30_demo,
+  title = {Zulu Demo},
+  year = {2030}
+}
+`
+              : (persistentEditor && fixtureQuery.get("emptybib") !== "1"
+                  ? String.raw`@comment{Existing bibliography file}
+`
+                  : "")),
+        "old_text.tex": String.raw`\documentclass{article}
+\begin{document}
+This is unrelated archival text with \citet{Wrong1999}.
+\end{document}`,
+        "notes.txt": ""
+      };
+      if (emptyCitation) {
+        documents["main.tex"] = documents["main.tex"].replace("Rice2021", "");
+      }
+      const initialOldText = documents["old_text.tex"];
+      if (fixtureQuery.has("soak")) {
+        documents["references.bib"] = Array.from({ length: 2000 }, (_, i) => `@article{Seed${String(i).padStart(4, "0")},\n title={Preserved bibliography entry ${i}},\n author={Seed, Author},\n year={2000}\n}\n`).join("\n");
+      }
+      const editorByFile = {
+        "main.tex": document.getElementById("main-editor"),
+        "references.bib": document.getElementById("bib-editor"),
+        "old_text.tex": document.getElementById("old-editor")
+        ,"notes.txt": document.getElementById("notes-editor")
+      };
+      const tabByFile = {
+        "main.tex": document.getElementById("main-tab"),
+        "references.bib": document.getElementById("bib-tab"),
+        "old_text.tex": document.getElementById("old-tab")
+        ,"notes.txt": document.getElementById("notes-tab")
+      };
+      const panelByFile = {
+        "main.tex": document.getElementById("main-panel"),
+        "references.bib": document.getElementById("bib-panel"),
+        "old_text.tex": document.getElementById("old-panel")
+        ,"notes.txt": document.getElementById("notes-panel")
+      };
+      const citationTokenStart = documents["main.tex"].indexOf("{", documents["main.tex"].indexOf("\\citet")) + 1;
+      const cursor = citationTokenStart + (emptyCitation ? 0 : 4);
+      let persistentActiveFile = "main.tex";
+
+      function makeDoc(fileName) {
+        return {
+          toString: () => documents[fileName],
+          get length() { return documents[fileName].length; }
+        };
+      }
+
+      function makeView(fileName, selectionAnchor) {
+        const editor = editorByFile[fileName];
+        const state = {
+          doc: makeDoc(fileName),
+          selection: { main: { from: selectionAnchor, to: selectionAnchor } }
+        };
+        const view = {
+          state,
+          dispatch(transaction) {
+            if (transaction.changes) {
+              const from = transaction.changes.from;
+              const to = transaction.changes.to;
+              const insert = String(transaction.changes.insert ?? "");
+              documents[fileName] = documents[fileName].slice(0, from) + insert + documents[fileName].slice(to);
+              state.doc = makeDoc(fileName);
+            }
+            if (transaction.selection) {
+              const anchor = Number(transaction.selection.anchor ?? transaction.selection.from ?? 0);
+              state.selection = { main: { from: anchor, to: anchor } };
+            }
+            editor.textContent = documents[fileName];
+          },
+          focus() {
+            for (const candidate of Object.values(editorByFile)) {
+              candidate.classList.remove("cm-focused");
+            }
+            editor.classList.add("cm-focused");
+            editor.focus();
+          }
+        };
+        editor.cmView = { rootView: { view } };
+        editor.textContent = documents[fileName];
+      }
+
+      function makePersistentView() {
+        const editor = editorByFile["main.tex"];
+        const selections = {
+          "main.tex": cursor,
+          "references.bib": 0,
+          "old_text.tex": 0,
+          "notes.txt": 0
+        };
+        const state = {
+          get doc() { return makeDoc(persistentActiveFile); },
+          get selection() {
+            const anchor = selections[persistentActiveFile] || 0;
+            return { main: { from: anchor, to: anchor } };
+          }
+        };
+        const view = {
+          state,
+          dispatch(transaction) {
+            if (transaction.changes) {
+              const from = transaction.changes.from;
+              const to = transaction.changes.to;
+              const insert = String(transaction.changes.insert ?? "");
+              documents[persistentActiveFile] = documents[persistentActiveFile].slice(0, from) + insert + documents[persistentActiveFile].slice(to);
+            }
+            if (transaction.selection) {
+              selections[persistentActiveFile] = Number(transaction.selection.anchor ?? transaction.selection.from ?? 0);
+            }
+            editor.textContent = documents[persistentActiveFile];
+          },
+          focus() {
+            editor.classList.add("cm-focused");
+            editor.focus();
+          }
+        };
+        editor.cmView = { rootView: { view } };
+        editor.textContent = documents[persistentActiveFile];
+      }
+
+      function applyVisiblePanel(fileName) {
+        if (persistentEditor) {
+          persistentActiveFile = fileName;
+          for (const panel of Object.values(panelByFile)) {
+            panel.hidden = panel !== panelByFile["main.tex"];
+          }
+          editorByFile["main.tex"].textContent = documents[fileName];
+          return;
+        }
+        for (const candidate of Object.keys(panelByFile)) {
+          if (candidate !== "old_text.tex") {
+            panelByFile[candidate].hidden = candidate !== fileName;
+          }
+        }
+      }
+
+      function selectFileTab(fileName) {
+        if (treeOnlyTarget && fileName === "references.bib") {
+          tabByFile["references.bib"].textContent = "references.bib Close";
+        }
+        for (const [candidate, tab] of Object.entries(tabByFile)) {
+          const active = candidate === fileName;
+          if (namelessTabs) {
+            tab.removeAttribute("aria-selected");
+          } else {
+            tab.setAttribute("aria-selected", String(active));
+          }
+        }
+      }
+
+      function activateFile(fileName) {
+        selectFileTab(fileName);
+        if (delayedTransition && fileName === "references.bib") {
+          setTimeout(() => applyVisiblePanel(fileName), 900);
+        } else {
+          applyVisiblePanel(fileName);
+        }
+      }
+
+      function requestFileActivation(fileName) {
+        if (fileName === "references.bib") {
+          bibActivationClicks += 1;
+          if (stuckTransition && !allowManualBibSwitch) {
+            selectFileTab(fileName);
+            return;
+          }
+          if (staleBlankTransition && !allowManualBibSwitch) {
+            selectFileTab(fileName);
+            persistentActiveFile = "notes.txt";
+            editorByFile["main.tex"].textContent = documents["notes.txt"];
+            return;
+          }
+          if (wrongBlankEditor && !allowManualBibSwitch) {
+            activateFile("notes.txt");
+            return;
+          }
+          if (manualBibSwitch && !allowManualBibSwitch) {
+            return;
+          }
+        }
+        activateFile(fileName);
+      }
+
+      makeView("main.tex", cursor);
+      makeView("references.bib", 0);
+      makeView("old_text.tex", 0);
+      makeView("notes.txt", 0);
+      if (persistentEditor) {
+        makePersistentView();
+        applyVisiblePanel("main.tex");
+      }
+      if (namelessTabs) {
+        for (const tab of Object.values(tabByFile)) {
+          tab.removeAttribute("aria-controls");
+          tab.removeAttribute("aria-selected");
+        }
+        document.querySelector(".ol-cm-breadcrumbs").textContent = "";
+      } else if (uncontrolledTabs) {
+        for (const tab of Object.values(tabByFile)) {
+          tab.removeAttribute("aria-controls");
+        }
+      }
+      if (treeOnlyTarget) {
+        tabByFile["references.bib"].textContent = "Closed file";
+      }
+      for (const [fileName, tab] of Object.entries(tabByFile)) {
+        tab.addEventListener("click", () => requestFileActivation(fileName));
+      }
+      for (const row of document.querySelectorAll("[role='treeitem']")) {
+        row.addEventListener("click", () => requestFileActivation(row.textContent.trim()));
+      }
+
+      const observedErrors = [];
+      new MutationObserver(() => {
+        for (const node of document.querySelectorAll("#ezcite-toast.error, .ezcite-status.error")) {
+          const message = node.textContent.trim();
+          if (message && !observedErrors.includes(message)) {
+            observedErrors.push(message);
+          }
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+      function activeEditorFile() {
+        for (const tab of document.querySelectorAll("#editor-area [role='tab'][aria-selected='true']")) {
+          const match = tab.textContent.match(/[A-Za-z0-9_.-]+\.(?:tex|bib)/);
+          if (match) return match[0];
+        }
+        if (!panelByFile["main.tex"].hidden) return "main.tex";
+        if (!panelByFile["references.bib"].hidden) return "references.bib";
+        if (!panelByFile["notes.txt"].hidden) return "notes.txt";
+        return "";
+      }
+
+      function publishResult(payload) {
+        payload.soakPhase = document.documentElement.dataset.overciteSoakPhase || null;
+        payload.soakTrace = JSON.parse(document.documentElement.dataset.overciteSoakTrace || "[]");
+        const node = document.getElementById("test-result");
+        node.dataset.payload = btoa(JSON.stringify(payload));
+        node.textContent = JSON.stringify(payload);
+        if (fixtureQuery.get("autorun") === "1") {
+          fetch("/test-result", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }).catch(() => {});
+        }
+      }
+
+      async function waitFor(predicate, timeoutMs, label) {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error(`Timed out waiting for ${label}`);
+      }
+
+      async function run() {
+        const query = fixtureQuery;
+        const shouldReturn = query.get("return") === "1";
+        const manualNavigation = query.get("manual") === "1";
+        const expectedFinalFile = manualNavigation
+          ? "old_text.tex"
+          : (shouldReturn ? "main.tex" : "references.bib");
+        const expectedFinalKey = keyCollision ? "Rice2021a" : "Rice2021";
+        await waitFor(() => window.__OVERCITE_PAGE_BRIDGE_READY__, 5000, "the page bridge");
+        const startSignalTimeoutMs = query.get("stress") === "1" ? 15000 : 5000;
+        await waitFor(() => window.__OVERCITE_START_REGRESSION__, startSignalTimeoutMs, "the regression start signal");
+        if (query.has("soak")) {
+          const cycles = Number(query.get("soak"));
+          const elapsed = [];
+          let cancellations = 0, invalidations = 0;
+          const start = performance.now();
+          const fire = () => window.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, altKey:true, shiftKey:true, code:"KeyE" }));
+          for (let i = 0; i < cycles; i++) {
+            const phase = (name) => { document.documentElement.dataset.overciteSoakPhase = `${i}:${name}`; };
+            phase("lookup");
+            activateFile("main.tex");
+            const editor = editorByFile["main.tex"];
+            editor.cmView.rootView.view.dispatch({ selection: { anchor: cursor } });
+            const tick = performance.now();
+            fire();
+            await waitFor(() => document.querySelector(".ezcite-close"), 5000, "soak popup");
+            if (i % 4 === 0) {
+              phase("cancel-retry");
+              document.querySelector(".ezcite-close").click();
+              await new Promise(resolve => setTimeout(resolve, 250));
+              if (document.querySelector(".ezcite-result")) throw new Error("Cancelled lookup restored results");
+              cancellations++;
+              fire();
+            }
+            let result = await waitFor(() => document.querySelector(".ezcite-result"), 5000, "soak result");
+            if (i % 5 === 0) {
+              phase("invalidate-retry");
+              documents["main.tex"] += `\n% Soak edit ${i}`;
+              editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data:" " }));
+              await waitFor(() => !document.querySelector(".ezcite-result"), 2000, "source invalidation");
+              invalidations++;
+              fire();
+              result = await waitFor(() => document.querySelector(".ezcite-result"), 5000, "fresh soak result");
+            }
+            phase("insert");
+            result.click();
+            await waitFor(() => !document.getElementById("ezcite-root"), 12000, "soak insertion completion");
+            phase("return");
+            await waitFor(() => activeEditorFile() === expectedFinalFile, 5000, "soak return preference");
+            if ((documents["references.bib"].match(/@article\{Rice2021,/g) || []).length !== 1) throw new Error("Soak duplicated or lost target entry");
+            if ((documents["references.bib"].match(/@article\{Seed\d{4},/g) || []).length !== 2000) throw new Error("Soak damaged existing bibliography entries");
+            if (documents["main.tex"].includes("@article{") || documents["old_text.tex"] !== initialOldText || documents["notes.txt"] !== "") throw new Error("Soak wrote into an unintended file");
+            elapsed.push(Math.round(performance.now() - tick));
+          }
+          publishResult({ ok:true, soak:true, cycles, cancellations, invalidations, bibliographyEntries:2001, elapsedMs:Math.round(performance.now()-start), cycleMs:elapsed, unrelatedTextReads:window.__OVERCITE_UNRELATED_TEXT_READS__, activeFile:activeEditorFile(), unexpectedErrors:observedErrors });
+          return;
+        }
+        async function runFirefoxPointerStress() {
+          const priorSerial = document.documentElement.dataset.overcitePointerStressSerial || "0";
+          window.dispatchEvent(new CustomEvent("EZCITE_TEST_POINTER_STRESS"));
+          await waitFor(
+            () => document.documentElement.dataset.overcitePointerStressSerial !== priorSerial,
+            3000,
+            "the Firefox pointer stress hook"
+          );
+          return Number(document.documentElement.dataset.overcitePointerStressMs);
+        }
+        const idlePointerStressMs = firefoxPointerStress ? await runFirefoxPointerStress() : 0;
+        const lookupStartedAt = performance.now();
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          bubbles: true,
+          altKey: true,
+          shiftKey: true,
+          code: "KeyE"
+        }));
+        let subjectPromptVisible = false;
+        let lookupBlockedBeforeSubject = false;
+        if (subjectOnboarding) {
+          const subjectButton = await waitFor(
+            () => [...document.querySelectorAll(".ezcite-action")].find((button) => button.textContent.includes(
+              automaticSettingsRedirect ? "Astronomy / Astrophysics" : "Computer Science"
+            )),
+            5000,
+            "the required subject-area prompt"
+          );
+          subjectPromptVisible = Boolean(document.getElementById("ezcite-root")?.textContent.includes("OverCite will ask only once"));
+          lookupBlockedBeforeSubject = !document.querySelector(".ezcite-result");
+          subjectButton.click();
+        }
+        if (automaticSettingsRedirect) {
+          await waitFor(() => !document.getElementById("ezcite-root"), 5000, "the popup to close after automatic settings redirect");
+          publishResult({
+            ok: subjectPromptVisible && lookupBlockedBeforeSubject,
+            settingsRedirect: true,
+            automaticSettingsRedirect: true,
+            subjectPromptVisible,
+            lookupBlockedBeforeSubject,
+            retryActionAbsent: true,
+            activeFile: activeEditorFile(),
+            sourceHasRice: false,
+            bibliographyHasRice: false,
+            unexpectedErrors: []
+          });
+          return;
+        }
+        if (settingsRedirect) {
+          const settingsButton = await waitFor(
+            () => [...document.querySelectorAll(".ezcite-action")].find((button) => button.textContent.trim() === "Open settings"),
+            5000,
+            "the Open settings action"
+          );
+          const retryActionAbsent = ![...document.querySelectorAll(".ezcite-action")]
+            .some((button) => button.textContent.includes("Try again"));
+          settingsButton.click();
+          await waitFor(() => !document.getElementById("ezcite-root"), 5000, "the popup to close after opening settings");
+          publishResult({
+            ok: retryActionAbsent,
+            settingsRedirect: true,
+            retryActionAbsent,
+            activeFile: activeEditorFile(),
+            sourceHasRice: false,
+            bibliographyHasRice: false,
+            unexpectedErrors: []
+          });
+          return;
+        }
+        let retryWorked = false;
+        let retryActionLabels = [];
+        if (retryLookup) {
+          await waitFor(
+            () => document.querySelector(".ezcite-status.error")?.textContent.includes("Synthetic first lookup failure"),
+            5000,
+            "the first lookup failure"
+          );
+          retryActionLabels = [...document.querySelectorAll(".ezcite-action")]
+            .map((button) => button.textContent.trim());
+          const retryButton = [...document.querySelectorAll(".ezcite-action")]
+            .find((button) => button.textContent.trim() === "Try again");
+          if (!retryButton) {
+            throw new Error("The retryable lookup error did not expose Try again.");
+          }
+          retryButton.click();
+          retryWorked = true;
+        }
+        let resultButton = await waitFor(() => document.querySelector(".ezcite-result"), 5000, "a search result");
+        if (query.has("manyresults")) {
+          const body = document.querySelector(".ezcite-body");
+          body.style.maxHeight = "320px";
+          const cards = [...body.querySelectorAll(".ezcite-card")];
+          if (cards.length !== 10) throw new Error("Expected ten rendered result cards");
+          for (const card of cards) {
+            const cardRect = card.getBoundingClientRect();
+            const title = card.querySelector(".ezcite-paper-title");
+            const titleRect = title.getBoundingClientRect();
+            if (titleRect.height < 10 || titleRect.top < cardRect.top || titleRect.bottom > cardRect.bottom + 1) {
+              throw new Error("Result title clipped by a compressed card: " + JSON.stringify({cardHeight:cardRect.height,titleBottom:titleRect.bottom-cardRect.top}));
+            }
+          }
+          if (body.scrollHeight <= body.clientHeight + 10) throw new Error("Long result list must scroll, not compress");
+          body.scrollTop = body.scrollHeight;
+          const lastTitle = cards.at(-1).querySelector(".ezcite-paper-title").getBoundingClientRect();
+          const viewport = body.getBoundingClientRect();
+          if (lastTitle.top < viewport.top || lastTitle.bottom > viewport.bottom) throw new Error("Last result title cannot be scrolled into view");
+          body.scrollTop = 0;
+        }
+        if (query.has("stale")) {
+          if (query.get("stale") === "context") {
+            editorByFile["main.tex"].dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          await waitFor(() => document.querySelector(".ezcite-status")?.textContent.includes("Search again"), 2000, "stale search invalidation");
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (document.querySelector(".ezcite-result")) throw new Error("Old results remained selectable or returned late");
+          [...document.querySelectorAll(".ezcite-action")].find((button) => button.textContent === "Search again").click();
+          resultButton = await waitFor(() => document.querySelector(".ezcite-result"), 5000, "fresh results after invalidation");
+          if (resultButton.textContent.includes("STALE")) throw new Error("Retry displayed old results");
+        }
+        if (query.has("popupsettings")) {
+          document.querySelector(".ezcite-settings").click();
+          await waitFor(() => !document.getElementById("ezcite-root"), 5000, "header settings closes popup");
+          publishResult({ ok: true, settingsRedirect: true, retryActionAbsent: true, activeFile: activeEditorFile(), sourceHasRice: false, bibliographyHasRice: false, unexpectedErrors: [] });
+          return;
+        }
+        if (query.has("abstract")) {
+          const card = resultButton.closest(".ezcite-card");
+          const details = card.querySelector("details");
+          const summary = details?.querySelector("summary");
+          if (!summary || resultButton.contains(summary)) throw new Error("Abstract disclosure must be outside insertion button");
+          summary.click();
+          await waitFor(() => details.open && summary.textContent === "Show less", 1000, "expanded abstract");
+          if (!details.textContent.includes("<img src=x onerror=alert(1)>") || details.querySelector("img")) throw new Error("Abstract must be rendered as plain text");
+          if (documents["references.bib"].includes("Rice2021") || activeEditorFile() !== "main.tex") throw new Error("Expanding abstract inserted a citation");
+          if (query.has("capture")) {
+            await waitFor(() => window.__OVERCITE_CAPTURE_DONE__, 10000, "visual capture");
+          }
+          summary.click();
+          await waitFor(() => !details.open && summary.textContent === "Show full abstract", 1000, "collapsed abstract");
+        }
+        if (query.has("narrow")) document.querySelector("#ezcite-root").style.width = "320px";
+        const rect = (element) => {
+          const r = element.getBoundingClientRect();
+          return [r.x, r.y, r.width, r.height];
+        };
+        const firstRect = rect(resultButton);
+        const popupRect = rect(document.querySelector("#ezcite-root"));
+        const checkStationary = (element, expected, label) => {
+          if (rect(element).some((value, index) => Math.abs(value - expected[index]) > 0.5)) {
+            throw new Error(`${label} moved: ${expected} -> ${rect(element)}`);
+          }
+        };
+        const checkPreviewPosition = () => {
+          checkStationary(resultButton, firstRect, "Preview click target");
+          checkStationary(document.querySelector("#ezcite-root"), popupRect, "Popup");
+          const [x,y,w,h] = firstRect;
+          if (document.elementFromPoint(x+w/2, y+Math.min(h/2, 40))?.closest(".ezcite-result") !== resultButton) {
+            throw new Error("The original pointer position no longer hits the same paper");
+          }
+        };
+        if (query.has("counts")) {
+          if (performance.now() - lookupStartedAt >= 1200) throw new Error("Results waited for citation counts");
+          if (resultButton.textContent.includes("STALE")) throw new Error("Accepted stale ready results");
+          if (query.get("counts") === "refine") {
+            if (!resultButton.textContent.includes("Refined alternative")) throw new Error("Preliminary list was published instead of ready order");
+            resultButton = [...document.querySelectorAll(".ezcite-result")].find((button) => button.textContent.includes("The Chandra Survey of M51"));
+          }
+          if (query.get("counts") !== "select") {
+            const beforeCounts = resultButton;
+            const beforeCountsRect = rect(resultButton);
+            await waitFor(() => resultButton.querySelector(".ezcite-citation-count")?.textContent.includes("987"), 5000, "citation count enrichment");
+            if (!beforeCounts.isConnected || beforeCounts !== resultButton) throw new Error("Metadata update replaced a click target");
+            checkStationary(resultButton, beforeCountsRect, "Citation count click target");
+          }
+        }
+        if (query.has("preview")) {
+          if (performance.now() - lookupStartedAt < 1400) throw new Error("Weak preview was published before ranking completed");
+          if (performance.now() - lookupStartedAt > 4000) throw new Error("Ranked results exceeded the fixture latency budget");
+          if (resultButton.textContent.includes("STALE")) throw new Error("Accepted stale progress");
+          const originalButton = resultButton;
+          if (query.get("preview") !== "fail") {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            if (document.querySelector(".ezcite-result") !== originalButton) throw new Error("Published results replaced a click target");
+            checkPreviewPosition();
+            if (!document.querySelector(".ezcite-result").textContent.includes("Refined alternative")) throw new Error("Ranked order was not applied");
+            resultButton = [...document.querySelectorAll(".ezcite-result")].find((button) => button.textContent.includes("The Chandra Survey of M51"));
+          } else if (query.get("preview") === "fail") {
+            await waitFor(() => document.querySelector(".ezcite-status")?.textContent.includes("partial matches"), 5000, "partial-result failure status");
+            if (document.querySelector(".ezcite-result") !== originalButton) throw new Error("Refinement failure discarded useful results");
+            checkPreviewPosition();
+          }
+        }
+        if (document.querySelector(".ezcite-refinement-action")) throw new Error("Refinement control must not exist");
+        if (!document.querySelector('button[aria-label="Open OverCite settings"]')) throw new Error("Missing popup settings shortcut");
+        const searchModeActions = [...document.querySelectorAll(".ezcite-action")]
+          .filter((button) => !button.disabled && getComputedStyle(button).visibility !== "hidden")
+          .map((button) => button.textContent.trim());
+        const expectedSearchModeActions = emptyCitation
+          ? []
+          : ["Contextual search", "Raw query"];
+        if (searchModeActions.join("|") !== expectedSearchModeActions.join("|")) {
+          throw new Error(`Unexpected search-mode actions: ${searchModeActions.join(", ")}`);
+        }
+        const insertionStartedAt = performance.now();
+        resultButton.click();
+        window.__OVERCITE_INSERTION_STARTED__ = true;
+        const insertionPointerStressMs = firefoxPointerStress ? await runFirefoxPointerStress() : 0;
+        let invalidManualRejected = false;
+        if (manualBibSwitch) {
+          const continueButton = await waitFor(
+            () => [...document.querySelectorAll(".ezcite-action")].find((button) => button.textContent.includes("Use current editor")),
+            10000,
+            "the manual bibliography prompt"
+          );
+          if (wrongBlankEditor || staleBlankTransition) {
+            invalidManualRejected = !documents["references.bib"].includes("@article{Rice2021") && documents["notes.txt"] === "";
+            const expectedVisibleFile = wrongBlankEditor ? "notes.txt" : "references.bib";
+            if (!invalidManualRejected || activeEditorFile() !== expectedVisibleFile) {
+              throw new Error("An unidentified blank editor was accepted automatically as the bibliography.");
+            }
+          } else {
+            continueButton.click();
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            invalidManualRejected = Boolean(document.getElementById("ezcite-root")?.textContent.includes("could not switch files automatically"));
+            if (!invalidManualRejected || documents["main.tex"].includes("@article{")) {
+              throw new Error("Manual bibliography confirmation accepted the source editor.");
+            }
+          }
+          allowManualBibSwitch = true;
+          activateFile("references.bib");
+          await waitFor(() => activeEditorFile() === "references.bib", 3000, "the manually opened bibliography");
+          continueButton.click();
+          if (manualEditorRace) {
+            await waitFor(
+              () => document.getElementById("ezcite-root")?.textContent.includes("Computing bibliography update"),
+              3000,
+              "the delayed bibliography computation"
+            );
+            activateFile("notes.txt");
+            const reconfirmButton = await waitFor(
+              () => [...document.querySelectorAll(".ezcite-action")]
+                .find((button) => button !== continueButton && button.textContent.includes("Use current editor")),
+              5000,
+              "bibliography reconfirmation after editor navigation"
+            );
+            if (documents["notes.txt"] !== "") {
+              throw new Error("A different nameless editor was overwritten after manual confirmation.");
+            }
+            activateFile("references.bib");
+            reconfirmButton.click();
+          }
+        }
+        await waitFor(() => documents["references.bib"].includes(`@article{${expectedFinalKey}`), 20000, "bibliography insertion");
+        await waitFor(() => !document.getElementById("ezcite-root"), 20000, "the popup to close");
+        await waitFor(() => activeEditorFile() === expectedFinalFile, 20000, "the expected final editor");
+        const acknowledgmentExpectation = query.get("ackexpect");
+        let acknowledgmentReminderVisible = false;
+        let acknowledgmentActionLabel = "";
+        let acknowledgmentActionLabels = [];
+        let acknowledgmentPromptText = "";
+        let acknowledgmentDismissed = false;
+        let acknowledgmentOptedOut = false;
+        if (acknowledgmentExpectation === "show") {
+          const acknowledgmentAction = await waitFor(
+            () => [...document.querySelectorAll(".ezcite-toast-action")]
+              .find((button) => button.textContent.trim() === "Copy acknowledgment"),
+            3000,
+            "the one-time acknowledgment reminder"
+          );
+          acknowledgmentReminderVisible = true;
+          acknowledgmentActionLabel = acknowledgmentAction.textContent.trim();
+          acknowledgmentActionLabels = [...document.querySelectorAll(".ezcite-toast-action")]
+            .map((button) => button.textContent.trim());
+          acknowledgmentPromptText = document.querySelector(".ezcite-toast-message")?.textContent.trim() || "";
+          if (query.get("acknever") === "1") {
+            const neverButton = [...document.querySelectorAll(".ezcite-toast-action")]
+              .find((button) => button.textContent.trim() === "Never remind me");
+            if (!neverButton) {
+              throw new Error("The acknowledgment reminder did not expose permanent opt-out.");
+            }
+            neverButton.click();
+            await waitFor(
+              () => !document.querySelector(".ezcite-toast-action"),
+              1000,
+              "the acknowledgment reminder to close after opt-out"
+            );
+            acknowledgmentOptedOut = true;
+          } else if (query.get("ackdismiss") === "1") {
+            const dismiss = [...document.querySelectorAll(".ezcite-toast-action")]
+              .find((button) => button.textContent.trim() === "Remind me later");
+            if (!dismiss) {
+              throw new Error("The acknowledgment reminder did not expose its snooze action.");
+            }
+            dismiss.click();
+            await waitFor(
+              () => !document.querySelector(".ezcite-toast-action"),
+              1000,
+              "the acknowledgment reminder to snooze"
+            );
+            acknowledgmentDismissed = true;
+          }
+        } else if (acknowledgmentExpectation === "hide") {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          acknowledgmentReminderVisible = Boolean(document.querySelector(".ezcite-toast-action"));
+          if (acknowledgmentReminderVisible) {
+            throw new Error("The acknowledgment reminder repeated after it was already recorded.");
+          }
+        }
+        const unexpectedErrors = observedErrors.filter((message) => !(
+          manualBibSwitch && message.includes("does not appear to be references.bib")
+        ) && !(
+          retryLookup && message.includes("Synthetic first lookup failure")
+        ));
+        const bibliographyText = documents["references.bib"];
+        const aaaIndex = bibliographyText.indexOf("Aaa20_demo");
+        const riceIndex = bibliographyText.indexOf(expectedFinalKey);
+        const zzzIndex = bibliographyText.indexOf("Zzz30_demo");
+        const expectedAppendOrder = query.get("insertmode") === "append";
+        const bibliographyOrderCorrect = !orderingFixture || (expectedAppendOrder
+          ? aaaIndex < zzzIndex && zzzIndex < riceIndex
+          : aaaIndex < riceIndex && riceIndex < zzzIndex);
+        publishResult({
+          ok: documents["main.tex"].includes(`\\citet{${expectedFinalKey}}`)
+            && documents["references.bib"].includes(`@article{${expectedFinalKey}`)
+            && documents["old_text.tex"] === initialOldText
+            && bibliographyOrderCorrect
+            && unexpectedErrors.length === 0,
+          returnToSourceAfterInsert: shouldReturn,
+          manualNavigation,
+          manualBibSwitch,
+          manualEditorRace,
+          invalidManualRejected,
+          delayedTransition,
+          stuckTransition,
+          staleBlankTransition,
+          namelessTabs,
+          uncontrolledTabs,
+          persistentEditor,
+          treeOnlyTarget,
+          wrongBlankEditor,
+          emptyCitation,
+          searchModeActions,
+          lateWriteAcknowledgments,
+          keyCollision,
+          firefoxPointerStress,
+          subjectOnboarding,
+          subjectPromptVisible,
+          lookupBlockedBeforeSubject,
+          retryLookup,
+          retryWorked,
+          retryActionLabels,
+          orderingFixture,
+          expectedAppendOrder,
+          bibliographyOrderCorrect,
+          idlePointerStressMs,
+          insertionPointerStressMs,
+          delayedRangeCount: Number(document.documentElement.dataset.overciteDelayedRangeCount || 0),
+          bibActivationClicks,
+          insertionElapsedMs: Math.round(performance.now() - insertionStartedAt),
+          acknowledgmentReminderVisible,
+          acknowledgmentActionLabel,
+          acknowledgmentActionLabels,
+          acknowledgmentPromptText,
+          acknowledgmentDismissed,
+          acknowledgmentOptedOut,
+          expectedFinalFile,
+          activeFile: activeEditorFile(),
+          sourceHasRice: documents["main.tex"].includes(`\\citet{${expectedFinalKey}}`),
+          bibliographyHasRice: documents["references.bib"].includes(`@article{${expectedFinalKey}`),
+          oldTextUnchanged: documents["old_text.tex"] === initialOldText,
+          notesTextUnchanged: documents["notes.txt"] === "",
+          observedErrors,
+          unexpectedErrors
+        });
+      }
+
+      run().catch((error) => publishResult({
+        ok: false,
+        error: error.message,
+        overlayText: document.getElementById("ezcite-root")?.textContent?.trim() || "",
+        toastText: document.getElementById("ezcite-toast")?.textContent?.trim() || "",
+        activeFile: activeEditorFile(),
+        mainText: documents["main.tex"],
+        bibText: documents["references.bib"],
+        oldText: documents["old_text.tex"],
+        observedErrors
+      }));
+    })();
+  </script>
+</body>
+</html>

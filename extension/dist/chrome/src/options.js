@@ -1,5 +1,5 @@
 import { MESSAGE_TYPES } from "./core/constants.js";
-import { normalizeSettings } from "./core/settings.js";
+import { normalizeSettings, optionalOriginsForSettings } from "./core/settings.js";
 
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 const form = document.querySelector("#settings-form");
@@ -17,8 +17,12 @@ const citationKeyExample = document.querySelector("#citation-key-example");
 const bibliographyInsertModeInput = document.querySelector("#bibliography-insert-mode");
 const returnToSourceAfterInsertInput = document.querySelector("#return-to-source-after-insert");
 const defaultSearchModeInput = document.querySelector("#default-search-mode");
-const contextInput = document.querySelector("#context-window-chars");
+const contextualSearchEngineInput = document.querySelector("#contextual-search-engine");
 const overridesInput = document.querySelector("#project-overrides");
+
+// Keep the legacy value in storage when saving unrelated settings. The field
+// is intentionally no longer exposed because context extraction is automatic.
+let savedSettings = normalizeSettings({});
 
 const SOURCE_PRESETS = Object.freeze({
   "ads-only": {
@@ -91,14 +95,6 @@ const SOURCE_SUMMARIES = Object.freeze({
   custom: "Custom. Use the advanced source order below."
 });
 
-const SOURCE_OPTIONAL_ORIGINS = Object.freeze({
-  arxiv: ["https://export.arxiv.org/*"],
-  crossref: ["https://api.crossref.org/*"],
-  datacite: ["https://api.datacite.org/*"],
-  inspire: ["https://inspirehep.net/*"],
-  pubmed: ["https://eutils.ncbi.nlm.nih.gov/*"]
-});
-
 const CITATION_KEY_EXAMPLES = Object.freeze({
   authoryear: "Example: Shariat2025",
   "authoryear-underscore": "Example: Shariat_2025",
@@ -125,27 +121,35 @@ async function loadSettings() {
 }
 
 function applySettings(settings) {
+  savedSettings = normalizeSettings(settings);
   tokenInput.value = settings.adsApiToken ?? "";
-  sourceProfileInput.value = settings.sourceProfile ?? "astrophysics";
+  sourceProfileInput.value = settings.subjectAreaConfigured ? settings.sourceProfile : "";
   primarySourceInput.value = settings.primarySource ?? "ads";
   setFallbackSources(settings.fallbackSources ?? []);
   ncbiTokenInput.value = settings.sourceApiTokens?.ncbi ?? "";
   themeInput.value = settings.themeMode ?? "auto";
   citationKeyModeInput.value = settings.citationKeyMode ?? "authoryear";
-  bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "append";
+  bibliographyInsertModeInput.value = settings.bibliographyInsertMode ?? "alphabetical";
   returnToSourceAfterInsertInput.checked = Boolean(settings.returnToSourceAfterInsert);
-  defaultSearchModeInput.value = settings.defaultSearchMode ?? "contextual";
-  contextInput.value = String(settings.contextWindowChars ?? 500);
+  defaultSearchModeInput.value = settings.defaultSearchMode ?? "simple";
+  contextualSearchEngineInput.value = settings.contextualSearchEngine ?? "beta";
   overridesInput.value = stringifyOverridesForField(settings.defaultProjectBibFileOverride);
   applyTheme(settings.themeMode ?? "auto");
   updateSourceProfileSummary();
   updateCitationKeyExample();
+  if (settings.subjectAreaConfigured && settings.sourceProfile === "astrophysics" && !tokenInput.value.trim()) {
+    status.textContent = "Add your NASA ADS or SciX API token to use Astronomy / Astrophysics search.";
+    tokenInput.focus();
+  }
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   status.textContent = "";
   try {
+    if (!sourceProfileInput.value) {
+      throw new Error("Choose your subject area before saving.");
+    }
     let overrides = {};
     const overridesText = overridesInput.value.trim();
     if (overridesText) {
@@ -154,6 +158,7 @@ form.addEventListener("submit", async (event) => {
 
     const settings = normalizeSettings({
       adsApiToken: tokenInput.value,
+      subjectAreaConfigured: true,
       sourceProfile: sourceProfileInput.value,
       primarySource: primarySourceInput.value,
       fallbackSources: fallbackSourceInputs.filter((input) => input.checked).map((input) => input.value),
@@ -166,7 +171,8 @@ form.addEventListener("submit", async (event) => {
       bibliographyInsertMode: bibliographyInsertModeInput.value,
       returnToSourceAfterInsert: returnToSourceAfterInsertInput.checked,
       defaultSearchMode: defaultSearchModeInput.value,
-      contextWindowChars: contextInput.value,
+      contextualSearchEngine: contextualSearchEngineInput.value,
+      contextWindowChars: savedSettings.contextWindowChars,
       defaultProjectBibFileOverride: overrides
     });
 
@@ -239,7 +245,9 @@ function clearPrimaryFromFallbacks() {
 
 function updateSourceProfileSummary() {
   if (sourceProfileSummary) {
-    sourceProfileSummary.textContent = SOURCE_SUMMARIES[sourceProfileInput.value] ?? SOURCE_SUMMARIES.custom;
+    sourceProfileSummary.textContent = sourceProfileInput.value
+      ? (SOURCE_SUMMARIES[sourceProfileInput.value] ?? SOURCE_SUMMARIES.custom)
+      : "Choose a subject area before searching. Nothing is selected by default.";
   }
 }
 
@@ -258,18 +266,6 @@ async function ensureOptionalSourcePermissions(settings) {
   if (!granted) {
     throw new Error("Browser permission was not granted for the selected databases.");
   }
-}
-
-function optionalOriginsForSettings(settings) {
-  const sourceIds = [
-    settings.primarySource,
-    ...(Array.isArray(settings.fallbackSources) ? settings.fallbackSources : [])
-  ];
-  const origins = [];
-  for (const sourceId of sourceIds) {
-    origins.push(...(SOURCE_OPTIONAL_ORIGINS[sourceId] ?? []));
-  }
-  return [...new Set(origins)];
 }
 
 async function requestPermissions(details) {

@@ -5,8 +5,21 @@
     SEARCH_ADS: "searchAds",
     EXPORT_BIBTEX: "exportBibtex",
     RESOLVE_BIB_TARGET: "resolveBibTarget",
-    APPLY_INSERTION: "applyInsertion"
+    APPLY_INSERTION: "applyInsertion",
+    REQUEST_SOURCE_PERMISSIONS: "requestSourcePermissions",
+    OPEN_OPTIONS: "openOptions",
+    CLAIM_ACKNOWLEDGMENT_REMINDER: "claimAcknowledgmentReminder",
+    DISABLE_ACKNOWLEDGMENT_REMINDER: "disableAcknowledgmentReminder"
   });
+  const SUBJECT_AREA_CHOICES = Object.freeze([
+    { profile: "general", label: "General / Multidisciplinary", description: "Crossref, with DataCite for datasets", primarySource: "crossref", fallbackSources: ["datacite"] },
+    { profile: "physics", label: "Physics", description: "ADS/SciX, Crossref, and arXiv", primarySource: "ads", fallbackSources: ["crossref", "arxiv"] },
+    { profile: "computer-science", label: "Computer Science", description: "Crossref, then arXiv", primarySource: "crossref", fallbackSources: ["arxiv"] },
+    { profile: "math", label: "Mathematics", description: "Crossref, then arXiv", primarySource: "crossref", fallbackSources: ["arxiv"] },
+    { profile: "life-sciences", label: "Biology / Medicine", description: "Crossref, then PubMed", primarySource: "crossref", fallbackSources: ["pubmed"] },
+    { profile: "chemistry", label: "Chemistry", description: "Crossref / DOI", primarySource: "crossref", fallbackSources: [] },
+    { profile: "astrophysics", label: "Astronomy / Astrophysics", description: "ADS/SciX", primarySource: "ads", fallbackSources: [] }
+  ]);
   const THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
   const DEFAULT_TOAST_DURATION_MS = 2600;
   const MIN_TOAST_DURATION_MS = 900;
@@ -127,12 +140,9 @@
   }
 
   function extractSentenceAroundCursor(source, cursorIndex) {
-    const left = source.slice(0, cursorIndex);
-    const right = source.slice(cursorIndex);
-    const leftBoundary = Math.max(left.lastIndexOf("."), left.lastIndexOf("!"), left.lastIndexOf("?"), left.lastIndexOf("\n\n"));
-    const nearestRightBoundaryCandidates = [right.indexOf("."), right.indexOf("!"), right.indexOf("?"), right.indexOf("\n\n")].filter((value) => value >= 0);
-    const rightBoundary = nearestRightBoundaryCandidates.length ? Math.min(...nearestRightBoundaryCandidates) : right.length;
-    return source.slice(Math.max(0, leftBoundary + 1), cursorIndex + rightBoundary + 1).replace(/\s+/g, " ").trim();
+    const prepared = prepareContextSource(source);
+    const sentence = sentenceAtCursor(prepared, cursorIndex);
+    return sentence?.text ?? "";
   }
 
   function extractContextWindow(source, cursorIndex, windowChars = 500) {
@@ -140,6 +150,271 @@
     const start = Math.max(0, cursorIndex - safeWindow);
     const end = Math.min(source.length, cursorIndex + Math.round(safeWindow / 3));
     return source.slice(start, end).replace(/\s+/g, " ").trim();
+  }
+
+  // Contextual retrieval uses sentence structure rather than the user-facing
+  // character window. This keeps the high-value local evidence stable when a
+  // user changes the legacy context-window setting for Simple/Direct searches.
+  const MAX_CONTEXTUAL_CONTEXT_CHARS = 4_000;
+  const MAX_CONTEXTUAL_SENTENCES = 2;
+  const CONTEXT_SCAN_RADIUS = 8_000;
+
+  const METADATA_COMMAND_RE = /\\(?:title|subtitle|author|affiliation|altaffiliation|institute|address|thanks|date|keywords|subject|email|shorttitle|shortauthor|dedication|maketitle)\*?/gi;
+  const SECTION_COMMAND_RE = /\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph|subsubparagraph)\*?/gi;
+  const PREAMBLE_LINE_RE = /^\s*\\(?:documentclass|usepackage|RequirePackage|newcommand|renewcommand|providecommand|Declare[A-Za-z]+|set[A-Za-z]+|addbibresource|bibliography|bibliographystyle|graphicspath|hypersetup|geometry|newenvironment|renewenvironment|AtBeginDocument)\b/i;
+
+  function maskRange(source, start, end, boundary = false) {
+    const safeStart = Math.max(0, Math.min(source.length, start));
+    const safeEnd = Math.max(safeStart, Math.min(source.length, end));
+    if (safeStart >= safeEnd) return source;
+    return maskRanges(source, [{ start: safeStart, end: safeEnd }], boundary);
+  }
+
+  function maskRanges(source, ranges, boundary = false) {
+    if (!ranges.length) return source;
+    const chars = source.split("");
+    for (const range of ranges) {
+      const start = Math.max(0, Math.min(chars.length, range.start));
+      const end = Math.max(start, Math.min(chars.length, range.end));
+      let markers = 0;
+      for (let index = start; index < end; index += 1) {
+        if (chars[index] === "\r" || chars[index] === "\n") continue;
+        if (boundary && markers < 2) {
+          chars[index] = "\n";
+          markers += 1;
+        } else {
+          chars[index] = " ";
+        }
+      }
+    }
+    return chars.join("");
+  }
+
+  function maskComments(source) {
+    const ranges = [];
+    for (let index = 0; index < source.length; index += 1) {
+      if (source[index] !== "%") continue;
+      let backslashes = 0;
+      for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) backslashes += 1;
+      if (backslashes % 2) continue;
+      const lineEnd = source.indexOf("\n", index);
+      ranges.push({ start: index, end: lineEnd < 0 ? source.length : lineEnd });
+      if (lineEnd < 0) break;
+      index = lineEnd;
+    }
+    return maskRanges(source, ranges);
+  }
+
+  function skipLatexOptionalArgument(source, start) {
+    let cursor = start;
+    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+    if (source[cursor] !== "[") return cursor;
+    let depth = 0;
+    for (; cursor < source.length; cursor += 1) {
+      if (source[cursor] === "[") depth += 1;
+      if (source[cursor] === "]") {
+        depth -= 1;
+        if (depth === 0) return cursor + 1;
+      }
+    }
+    return source.length;
+  }
+
+  function commandRange(source, matchIndex, includeBracedArgument = true) {
+    let cursor = skipLatexOptionalArgument(source, matchIndex);
+    if (!includeBracedArgument) return cursor;
+    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+    if (source[cursor] !== "{") return cursor;
+    const close = findBraceClose(source, cursor);
+    return close < 0 ? source.length : close + 1;
+  }
+
+  function maskCommandMatches(source, commandRegex, boundary = false) {
+    const ranges = [];
+    commandRegex.lastIndex = 0;
+    let match;
+    while ((match = commandRegex.exec(source)) !== null) {
+      const end = commandRange(source, match.index + match[0].length, true);
+      const safeEnd = Math.max(match.index + match[0].length, end);
+      ranges.push({ start: match.index, end: safeEnd });
+    }
+    return maskRanges(source, ranges, boundary);
+  }
+
+  function maskPreamble(source) {
+    const ranges = [];
+    const beginDocument = source.match(/\\begin\s*\{\s*document\s*\}/i);
+    if (beginDocument) ranges.push({ start: beginDocument.index, end: beginDocument.index + beginDocument[0].length });
+    const endDocument = source.match(/\\end\s*\{\s*document\s*\}/i);
+    if (endDocument) ranges.push({ start: endDocument.index, end: endDocument.index + endDocument[0].length });
+    const lines = source.split(/(?<=\n)/);
+    let offset = 0;
+    for (const line of lines) {
+      if (PREAMBLE_LINE_RE.test(line)) ranges.push({ start: offset, end: preambleLineEnd(source, offset, offset + line.length) });
+      offset += line.length;
+    }
+    return maskRanges(source, ranges, true);
+  }
+
+  function preambleLineEnd(source, start, initialEnd) {
+    let depth = 0;
+    for (let index = start; index < initialEnd; index += 1) {
+      if (source[index] === "{") depth += 1;
+      if (source[index] === "}") depth = Math.max(0, depth - 1);
+    }
+    if (depth === 0) return initialEnd;
+    const limit = Math.min(source.length, start + 4_096);
+    for (let index = initialEnd; index < limit; index += 1) {
+      if (source[index] === "{") depth += 1;
+      if (source[index] === "}") depth = Math.max(0, depth - 1);
+      if (depth === 0) return index + 1;
+      if (source[index] === "\n" && source[index + 1] === "\n") break;
+    }
+    return initialEnd;
+  }
+
+  function prepareContextSource(source, citationStart = null, citationEnd = null) {
+    let output = String(source ?? "");
+    output = maskComments(output);
+    output = maskPreamble(output);
+    output = maskCommandMatches(output, METADATA_COMMAND_RE, true);
+    output = maskCommandMatches(output, SECTION_COMMAND_RE, true);
+    output = maskCommandMatches(output, /\\par\b/gi, true);
+    if (Number.isFinite(citationStart) && Number.isFinite(citationEnd)) {
+      output = maskRange(output, citationStart, citationEnd);
+    }
+    return output;
+  }
+
+  function boundedCitationSource(source, citationStart, citationEnd) {
+    const text = String(source ?? "");
+    const start = Math.max(0, Math.min(text.length, Number(citationStart) || 0));
+    const end = Math.max(start, Math.min(text.length, Number(citationEnd) || start));
+    let windowStart = Math.max(0, start - CONTEXT_SCAN_RADIUS);
+    let windowEnd = Math.min(text.length, end + CONTEXT_SCAN_RADIUS);
+    const lineStart = text.lastIndexOf("\n", windowStart - 1) + 1;
+    if (windowStart - lineStart <= 512) windowStart = lineStart;
+    const lineEnd = text.indexOf("\n", windowEnd);
+    if (lineEnd >= 0 && lineEnd - windowEnd <= 512) windowEnd = lineEnd + 1;
+    return {
+      source: text.slice(windowStart, windowEnd),
+      citationStart: start - windowStart,
+      citationEnd: end - windowStart
+    };
+  }
+
+  const ABBREVIATIONS = new Set([
+    "al", "approx", "capt", "cf", "dept", "dr", "e.g", "eq", "eqs", "esp", "et al",
+    "fig", "figs", "i.e", "inc", "jr", "misc", "mr", "mrs", "ms", "no", "nos", "prof",
+    "ref", "refs", "rev", "sec", "secs", "sr", "st", "vs"
+  ]);
+
+  function previousWord(text, periodIndex) {
+    let end = periodIndex;
+    while (end > 0 && /\s/.test(text[end - 1])) end -= 1;
+    let start = end;
+    while (start > 0 && /[A-Za-z.'-]/.test(text[start - 1])) start -= 1;
+    return text.slice(start, end).toLowerCase();
+  }
+
+  function isSentencePeriod(text, index) {
+    const previous = text[index - 1] ?? "";
+    const next = text[index + 1] ?? "";
+    if (/\d/.test(previous) && /\d/.test(next)) return false;
+    if (previous === "." || next === ".") return false;
+    if (previous === "\\") return false;
+    const word = previousWord(text, index);
+    if (ABBREVIATIONS.has(word)) return false;
+    if (/[A-Z]/.test(previous) && /[A-Z]/.test(next) && text[index + 2] === ".") return false;
+    if (/^(?:[a-z]\.)+[a-z]?$/i.test(word)) return false;
+    if (/^[a-z]$/.test(word) && /[A-Za-z]/.test(next)) return false;
+    if (/^[A-Za-z]$/.test(word) && /\s+[A-Z][a-z]/.test(text.slice(index + 1, index + 8))) return false;
+    if (/^[a-z]$/.test(next)) return false;
+    return true;
+  }
+
+  function paragraphRanges(source) {
+    const ranges = [];
+    const boundary = /\n\s*\n/g;
+    let start = 0;
+    let match;
+    while ((match = boundary.exec(source)) !== null) {
+      ranges.push({ start, end: match.index });
+      start = match.index + match[0].length;
+    }
+    ranges.push({ start, end: source.length });
+    return ranges;
+  }
+
+  function sentenceRanges(source, paragraph) {
+    const ranges = [];
+    let start = paragraph.start;
+    for (let index = paragraph.start; index < paragraph.end; index += 1) {
+      const char = source[index];
+      if ((char === "!" || char === "?") || (char === "." && isSentencePeriod(source, index))) {
+        let end = index + 1;
+        while (/[!?\.]/.test(source[end] ?? "")) end += 1;
+        ranges.push({ start, end });
+        start = end;
+      }
+    }
+    ranges.push({ start, end: paragraph.end });
+    return ranges.filter((range) => source.slice(range.start, range.end).trim());
+  }
+
+  function sentenceAtCursor(source, cursorIndex) {
+    const safeCursor = Math.max(0, Math.min(source.length, Number(cursorIndex) || 0));
+    for (const paragraph of paragraphRanges(source)) {
+      if (safeCursor < paragraph.start || safeCursor > paragraph.end) continue;
+      const sentences = sentenceRanges(source, paragraph);
+      const index = sentences.findIndex((range) => safeCursor >= range.start && safeCursor <= range.end);
+      if (index >= 0) {
+        const range = sentences[index];
+        return {
+          paragraph,
+          sentences,
+          index,
+          range,
+          text: source.slice(range.start, range.end).replace(/\s+/g, " ").trim()
+        };
+      }
+    }
+    return null;
+  }
+
+  function extractContextualContext(source, cursorIndex) {
+    const prepared = prepareContextSource(source);
+    return extractPreparedContextualContext(prepared, cursorIndex);
+  }
+
+  function extractPreparedContextualContext(prepared, cursorIndex) {
+    const current = sentenceAtCursor(prepared, cursorIndex);
+    if (!current) return "";
+    const selected = [current.range];
+    for (let offset = 1; offset <= MAX_CONTEXTUAL_SENTENCES; offset += 1) {
+      const previous = current.sentences[current.index - offset];
+      if (!previous) break;
+      selected.unshift(previous);
+    }
+    const currentText = prepared.slice(current.range.start, current.range.end).replace(/\s+/g, " ").trim();
+    const allText = selected.map((range) => prepared.slice(range.start, range.end).replace(/\s+/g, " ").trim()).filter(Boolean).join(" ");
+    if (allText.length <= MAX_CONTEXTUAL_CONTEXT_CHARS) return allText;
+    if (currentText.length >= MAX_CONTEXTUAL_CONTEXT_CHARS) return currentText.slice(0, MAX_CONTEXTUAL_CONTEXT_CHARS).trim();
+    const prefixLimit = MAX_CONTEXTUAL_CONTEXT_CHARS - currentText.length - 1;
+    const prefix = allText.slice(Math.max(0, allText.length - currentText.length - prefixLimit), allText.length - currentText.length).trim();
+    return `${prefix} ${currentText}`.trim();
+  }
+
+  function extractCitationProximity(source, cursorIndex, beforeChars = 320, afterChars = 160) {
+    const safeCursor = Math.max(0, Math.min(String(source ?? "").length, cursorIndex));
+    const text = String(source ?? "");
+    const paragraph = paragraphRanges(text).find((range) => safeCursor >= range.start && safeCursor <= range.end) ?? { start: 0, end: text.length };
+    const left = text.slice(Math.max(paragraph.start, safeCursor - beforeChars), safeCursor);
+    const right = text.slice(safeCursor, Math.min(paragraph.end, safeCursor + afterChars));
+    return {
+      beforeText: left.replace(/\s+/g, " ").trim(),
+      afterText: right.replace(/\s+/g, " ").trim()
+    };
   }
 
   function removeRange(source, start, end) {
@@ -207,7 +482,7 @@
   }
 
   function findCitationAtCursor(source, cursorIndex, windowChars = 500) {
-    const citeCommandRegex = /\\cite[a-zA-Z*]*\s*(?:\[[^[\]]*]\s*){0,2}\{/g;
+    const citeCommandRegex = /\\(?:cite[a-zA-Z*]*|parencite\*?|textcite\*?|autocite\*?|footcite\*?|smartcite\*?)\s*(?:\[[^[\]]*]\s*){0,2}\{/g;
     let match;
     let active = null;
     while ((match = citeCommandRegex.exec(source)) !== null) {
@@ -242,8 +517,10 @@
     const tokenStartAbsolute = active.openBraceIndex + 1 + activeSegment.start;
     const tokenEndAbsolute = active.openBraceIndex + 1 + activeSegment.end;
     const tokens = segments.map((segment) => segment.value).filter(Boolean);
-    const sanitizedSource = removeRange(source, active.matchStart, active.closeBraceIndex + 1);
-    const sanitizedCursorIndex = active.matchStart;
+    const boundedSource = boundedCitationSource(source, active.matchStart, active.closeBraceIndex + 1);
+    const contextualSource = prepareContextSource(boundedSource.source, boundedSource.citationStart, boundedSource.citationEnd);
+    const sanitizedCursorIndex = boundedSource.citationStart;
+    const citationProximity = extractCitationProximity(contextualSource, sanitizedCursorIndex);
 
     return {
       command: active.command,
@@ -251,8 +528,13 @@
       tokenStart: tokenStartAbsolute,
       tokenEnd: tokenEndAbsolute,
       cursorIndex,
-      contextText: extractContextWindow(sanitizedSource, sanitizedCursorIndex, windowChars),
-      sentenceText: extractSentenceAroundCursor(sanitizedSource, sanitizedCursorIndex),
+      // Keep contextual input sentence-bounded and independent of the legacy
+      // contextWindowChars setting. Simple/Direct still receive the same token,
+      // command, and parsed-key fields above.
+      contextText: extractPreparedContextualContext(contextualSource, sanitizedCursorIndex),
+      sentenceText: sentenceAtCursor(contextualSource, sanitizedCursorIndex)?.text ?? "",
+      citationPrefixText: citationProximity.beforeText,
+      citationSuffixText: citationProximity.afterText,
       tokens,
       parsedKeyHint: parseCitationKeyHint(token)
     };
@@ -262,7 +544,9 @@
   const RESPONSE_EVENT = "EZCITE_PAGE_RESPONSE";
   let overlay = null;
   let overlayState = null;
+  let pendingSubjectAreaPrompt = null;
   let activeLookupGeneration = 0;
+  let activeSearchRequestId = null;
   let insertionInProgress = false;
   let insertionThemeMode = null;
   let queuedLookupAfterInsertion = null;
@@ -273,6 +557,11 @@
   installRuntimeHooks();
   installKeybinding();
   installUserFileNavigationTracking();
+  document.addEventListener("input", (event) => {
+    if (event.target instanceof Element && event.target.closest(".cm-editor, .CodeMirror, .ace_editor")) {
+      invalidateDisplayedSearch("Citation context changed", "Search again to use the updated text.");
+    }
+  }, true);
 
   function injectPageBridge() {
     if (document.querySelector("script[data-ezcite-page-bridge]")) {
@@ -291,7 +580,29 @@
   }
 
   function installRuntimeHooks() {
+    extensionApi.storage?.onChanged?.addListener?.((changes, areaName) => {
+      if (areaName !== "sync" && areaName !== "local") return;
+      const searchKeys = ["adsApiToken", "sourceApiTokens", "sourceProfile", "primarySource", "fallbackSources", "contextualSearchEngine", "defaultSearchMode", "citationKeyMode"];
+      if (searchKeys.some((key) => changes[key] && JSON.stringify(changes[key].oldValue) !== JSON.stringify(changes[key].newValue))) {
+        invalidateDisplayedSearch();
+      }
+    });
     extensionApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type === "ezcite:settingsChanged") {
+        invalidateDisplayedSearch();
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (message?.type === "ezcite:searchReady") {
+        receiveSearchReady(message);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (message?.type === "ezcite:searchProgress") {
+        receiveSearchProgress(message);
+        sendResponse({ ok: true });
+        return false;
+      }
       if (message?.type !== "ezcite:openOverlay") {
         return false;
       }
@@ -300,6 +611,19 @@
         sendResponse({ ok: false, error: error.message });
       });
       return true;
+    });
+  }
+
+  function invalidateDisplayedSearch(subtitle = "Search settings changed", status = "Search again to use your updated settings.") {
+    if (insertionInProgress || !overlayState || overlay?.hidden) return;
+    const searchMode = overlayState.searchMode;
+    cancelActiveSearch();
+    activeLookupGeneration += 1;
+    overlayState = null;
+    renderOverlay({
+      subtitle,
+      status,
+      actions: [{ label: "Search again", onClick: () => startLookup(searchMode).catch((error) => toast(error.message, "error")) }]
     });
   }
 
@@ -324,7 +648,7 @@
   }
 
   function recordUserFileNavigation(event) {
-    if (!event.isTrusted) {
+    if (!event.isTrusted || !insertionInProgress) {
       return;
     }
     const target = event.target;
@@ -344,48 +668,34 @@
   }
 
   function extractFileNameFromUserTarget(target) {
-    let element = target;
-    let depth = 0;
-    while (element instanceof Element && element !== document.body && depth < 8) {
-      const candidates = [
-        element.getAttribute("aria-label"),
-        element.getAttribute("title"),
-        element.getAttribute("data-path"),
-        element.textContent
-      ];
-      for (const candidate of candidates) {
-        const fileName = extractLikelyEditorFileName(candidate);
-        if (fileName && isLikelyUserFileNavigationElement(element, candidate)) {
-          return fileName;
-        }
+    const navigationElement = target.closest([
+      "[role='treeitem']",
+      "[role='tab']",
+      "[data-testid='editor-tab-active']",
+      "[data-testid*='editor-tab']",
+      "[data-testid*='file-tree'] [role='button']",
+      "[data-testid*='file-tree'] button",
+      "[data-testid*='file-tree'] a",
+      "[data-path]",
+      ".file-tab",
+      "[class~='entity']"
+    ].join(","));
+    if (!navigationElement || navigationElement.closest("#ezcite-root")) {
+      return "";
+    }
+    const candidates = [
+      navigationElement.getAttribute("data-path"),
+      navigationElement.getAttribute("aria-label"),
+      navigationElement.getAttribute("title"),
+      navigationElement.textContent
+    ];
+    for (const candidate of candidates) {
+      const fileName = extractLikelyEditorFileName(candidate);
+      if (fileName) {
+        return fileName;
       }
-      element = element.parentElement;
-      depth += 1;
     }
     return "";
-  }
-
-  function isLikelyUserFileNavigationElement(element, text) {
-    const value = String(text ?? "").replace(/\s+/g, " ").trim();
-    if (!value || value.length > 180) {
-      return false;
-    }
-    const role = element.getAttribute("role") || "";
-    const testId = element.getAttribute("data-testid") || "";
-    const className = typeof element.className === "string" ? element.className : "";
-    const tagName = element.tagName;
-    return (
-      role === "treeitem" ||
-      role === "tab" ||
-      role === "button" ||
-      tagName === "BUTTON" ||
-      tagName === "A" ||
-      testId.toLowerCase().includes("file") ||
-      className.toLowerCase().includes("file") ||
-      className.toLowerCase().includes("tab") ||
-      className.toLowerCase().includes("entity") ||
-      /\.(tex|bib)\b/i.test(value)
-    );
   }
 
   function getUserFileNavigationAfter(serial) {
@@ -441,6 +751,10 @@
         --ez-title-ink: #18212a;
         position: fixed;
         inset: auto 20px 20px auto;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 40px);
         z-index: 2147483647;
         width: min(470px, calc(100vw - 24px));
         border-radius: 22px;
@@ -482,6 +796,7 @@
       }
 
       .ezcite-header {
+        flex-shrink: 0;
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -507,7 +822,9 @@
         line-height: 1.35;
       }
 
-      .ezcite-close {
+      .ezcite-header-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+
+      .ezcite-close, .ezcite-settings {
         border: 0;
         background: transparent;
         color: var(--ez-muted);
@@ -521,15 +838,21 @@
       }
 
       .ezcite-close:hover,
-      .ezcite-close:focus-visible {
+      .ezcite-close:focus-visible,
+      .ezcite-settings:hover,
+      .ezcite-settings:focus-visible {
         background: var(--ez-close-hover);
         color: var(--ez-ink);
         outline: none;
       }
 
       .ezcite-body {
+        min-height: 0;
+        flex: 1 1 auto;
+        align-content: start;
         padding: 10px;
         display: grid;
+        grid-auto-rows: max-content;
         gap: 9px;
         max-height: 75vh;
         overflow: auto;
@@ -566,6 +889,31 @@
         gap: 10px;
         flex-wrap: wrap;
         justify-content: flex-end;
+      }
+
+      .ezcite-actions-subjects {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        justify-content: stretch;
+      }
+
+      .ezcite-actions-subjects .ezcite-action {
+        border-radius: 14px;
+        text-align: left;
+        padding: 11px 13px;
+      }
+
+      .ezcite-action-label,
+      .ezcite-action-description {
+        display: block;
+      }
+
+      .ezcite-action-description {
+        margin-top: 3px;
+        color: var(--ez-muted);
+        font-size: 0.76rem;
+        font-weight: 500;
+        line-height: 1.3;
       }
 
       .ezcite-action {
@@ -606,10 +954,18 @@
         border-color: rgba(241, 138, 98, 0.38);
       }
 
+      .ezcite-card {
+        border: 1px solid var(--ez-panel-border);
+        border-radius: 18px;
+        background: var(--ez-card-bg);
+        overflow: hidden;
+      }
+
       .ezcite-result {
         display: grid;
+        width: 100%;
         gap: 10px;
-        border: 1px solid var(--ez-panel-border);
+        border: 0;
         background: var(--ez-card-bg);
         border-radius: 18px;
         padding: 14px 15px;
@@ -659,7 +1015,15 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        min-height: 24px;
+      }
+
+      .ezcite-source-row .ezcite-source {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .ezcite-citation-count {
@@ -714,11 +1078,17 @@
       }
 
       .ezcite-abstract-wrap {
-        padding-top: 8px;
+        padding: 10px 15px 14px;
         border-top: 1px solid var(--ez-panel-border);
       }
 
+      .ezcite-abstract-details summary { cursor: pointer; color: var(--ez-meta); font-size: 0.78rem; padding: 8px 0 0; }
+      .ezcite-abstract-details[open] summary { padding: 0 0 8px; }
+      .ezcite-abstract-details summary:focus-visible { outline: 2px solid var(--ez-key-ink); outline-offset: 2px; }
+      .ezcite-abstract[hidden] { display: none; }
+
       .ezcite-footer {
+        flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -758,7 +1128,92 @@
         opacity: 1;
       }
 
+      #ezcite-toast.interactive {
+        display: grid;
+        gap: 12px;
+        text-align: left;
+        pointer-events: auto;
+      }
+
+      #ezcite-toast.card {
+        left: auto;
+        right: 20px;
+        bottom: 20px;
+        width: min(400px, calc(100vw - 40px));
+        max-width: none;
+        padding: 14px 15px 12px;
+        transform: none;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 14px;
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+      }
+
+      .ezcite-toast-message {
+        min-width: 0;
+      }
+
+      .ezcite-toast-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+      }
+
+      .ezcite-toast-action,
+      .ezcite-toast-dismiss {
+        border: 1px solid rgba(255, 255, 255, 0.34);
+        background: rgba(255, 255, 255, 0.12);
+        color: white;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .ezcite-toast-action {
+        padding: 6px 9px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        white-space: nowrap;
+      }
+
+      .ezcite-toast-action.primary {
+        border-color: rgba(255, 255, 255, 0.72);
+        background: rgba(255, 255, 255, 0.92);
+        color: #25364a;
+      }
+
+      .ezcite-toast-action.quiet {
+        padding-inline: 4px;
+        border-color: transparent;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.78);
+      }
+
+      .ezcite-toast-dismiss {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border-color: transparent;
+        border-radius: 50%;
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      .ezcite-toast-action:hover,
+      .ezcite-toast-dismiss:hover {
+        background: rgba(255, 255, 255, 0.22);
+      }
+
+      .ezcite-toast-action.primary:hover {
+        background: white;
+      }
+
       @media (max-width: 640px) {
+        #ezcite-toast.card {
+          right: 12px;
+          bottom: 12px;
+          width: calc(100vw - 24px);
+        }
+
         #ezcite-root {
           inset: auto 12px 12px 12px;
           width: auto;
@@ -771,6 +1226,10 @@
 
         .ezcite-footer {
           padding: 10px 16px 14px;
+        }
+
+        .ezcite-actions-subjects {
+          grid-template-columns: 1fr;
         }
       }
     `;
@@ -790,19 +1249,24 @@
           <p class="ezcite-kicker">OverCite</p>
           <p class="ezcite-subtitle"></p>
         </div>
-        <button type="button" class="ezcite-close" aria-label="Close OverCite">×</button>
+        <div class="ezcite-header-actions">
+          <button type="button" class="ezcite-settings" aria-label="Open OverCite settings" title="Settings">⚙</button>
+          <button type="button" class="ezcite-close" aria-label="Close OverCite">×</button>
+        </div>
       </div>
       <div class="ezcite-body"></div>
       <div class="ezcite-footer"></div>
     `;
     overlay.querySelector(".ezcite-close").addEventListener("click", closeOverlay);
+    overlay.querySelector(".ezcite-settings").addEventListener("click", openOverCiteOptions);
     applyOverlayTheme("auto");
     document.body.appendChild(overlay);
     return overlay;
   }
 
-  function renderOverlay({ subtitle, status, results = [], shortcutText = "Alt+Shift+E", error = false, actions = [] }) {
+  function renderOverlay({ subtitle, status, results = [], shortcutText = "Alt+Shift+E", error = false, actions = [], actionLayout = "", footerText = "Select a paper to insert its citation." }) {
     const root = ensureOverlay();
+    root.style.height = "";
     const subtitleNode = root.querySelector(".ezcite-subtitle");
     const body = root.querySelector(".ezcite-body");
     const footer = root.querySelector(".ezcite-footer");
@@ -819,12 +1283,15 @@
 
     if (actions.length) {
       const actionsNode = document.createElement("div");
-      actionsNode.className = "ezcite-actions";
+      actionsNode.className = `ezcite-actions${actionLayout ? ` ezcite-actions-${actionLayout}` : ""}`;
       for (const action of actions) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = `ezcite-action ezcite-action-${action.kind ?? "secondary"}`;
-        button.textContent = action.label;
+        button.appendChild(createTextElement("span", "ezcite-action-label", action.label));
+        if (action.description) {
+          button.appendChild(createTextElement("span", "ezcite-action-description", action.description));
+        }
         button.addEventListener("click", action.onClick);
         actionsNode.appendChild(button);
       }
@@ -832,35 +1299,75 @@
     }
 
     for (const candidate of results) {
+      const card = createTextElement("div", "ezcite-card", "");
       const button = document.createElement("button");
       const citationCountLabel = formatCitationCountBadge(candidate.citationCount);
       button.type = "button";
       button.className = "ezcite-result";
-      button.innerHTML = `
-        <div class="ezcite-result-topline">
-          <div class="ezcite-key">${escapeHtml(candidate.generatedKey || "citation")}</div>
-          <div class="ezcite-year">${escapeHtml(formatYear(candidate.year))}</div>
-        </div>
-        <div class="ezcite-source-row">
-          <div class="ezcite-source">${escapeHtml(candidate.sourceLabel || "Literature")}</div>
-          ${citationCountLabel ? `<div class="ezcite-citation-count">${escapeHtml(citationCountLabel)}</div>` : ""}
-        </div>
-        <div class="ezcite-paper-title">${escapeHtml(candidate.title)}</div>
-        <p class="ezcite-meta">${escapeHtml(formatCandidateMeta(candidate))}</p>
-        <div class="ezcite-abstract-wrap">
-          <p class="ezcite-abstract">${escapeHtml(truncate(candidate.abstract, 240))}</p>
-        </div>
-      `;
+      button.overciteCandidate = candidate;
+      const topLine = document.createElement("div");
+      topLine.className = "ezcite-result-topline";
+      topLine.append(
+        createTextElement("div", "ezcite-key", candidate.generatedKey || "citation"),
+        createTextElement("div", "ezcite-year", formatYear(candidate.year))
+      );
+      const sourceRow = document.createElement("div");
+      sourceRow.className = "ezcite-source-row";
+      sourceRow.append(createTextElement("div", "ezcite-source", candidate.sourceLabel || "Literature"));
+      const countBadge = createTextElement("div", "ezcite-citation-count", citationCountLabel || "Citations: 0");
+      countBadge.style.visibility = citationCountLabel ? "visible" : "hidden";
+      sourceRow.append(countBadge);
+      button.append(
+        topLine,
+        sourceRow,
+        createTextElement("div", "ezcite-paper-title", candidate.title),
+        createTextElement("p", "ezcite-meta", formatCandidateMeta(candidate))
+      );
       button.addEventListener("click", () => {
         selectCandidate(candidate).catch((error) => {
           console.error("[OverCite content] candidate selection failed", error);
           toast(error.message, "error", { durationMs: 5200 });
         });
       });
-      body.appendChild(button);
+      card.appendChild(button);
+      const abstract = String(candidate.abstract ?? "").trim();
+      if (abstract) {
+        const abstractWrap = createTextElement("div", "ezcite-abstract-wrap", "");
+        const preview = createTextElement("p", "ezcite-abstract", truncate(abstract, 240));
+        abstractWrap.appendChild(preview);
+        if (abstract.length > 240) {
+          const details = createTextElement("details", "ezcite-abstract-details", "");
+          const summary = createTextElement("summary", "", "Show full abstract");
+          details.append(summary, createTextElement("p", "ezcite-abstract", abstract));
+          details.addEventListener("toggle", () => {
+            preview.hidden = details.open;
+            summary.textContent = details.open ? "Show less" : "Show full abstract";
+          });
+          abstractWrap.appendChild(details);
+        }
+        card.appendChild(abstractWrap);
+      }
+      body.appendChild(card);
     }
 
-    footer.innerHTML = `<span>Pick a paper to rewrite the cite key and update your bibliography.</span><span><strong>Trigger:</strong> ${escapeHtml(shortcutText)}</span>`;
+    const footerInstruction = createTextElement(
+      "span",
+      "",
+      footerText
+    );
+    const footerTrigger = document.createElement("span");
+    const footerTriggerLabel = createTextElement("strong", "", "Trigger:");
+    footerTrigger.append(footerTriggerLabel, document.createTextNode(` ${shortcutText}`));
+    footer.replaceChildren(footerInstruction, footerTrigger);
+  }
+
+  function createTextElement(tagName, className, text) {
+    const element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    element.textContent = String(text ?? "");
+    return element;
   }
 
   async function startLookup(searchMode) {
@@ -868,13 +1375,20 @@
       queueLookupAfterInsertion(searchMode);
       return;
     }
+    cancelActiveSearch();
     const lookupGeneration = ++activeLookupGeneration;
+    overlayState = null;
+    if (overlay) renderOverlay({ subtitle: "", status: "Searching literature..." });
     debugTrace("lookup:start", {
       searchMode: normalizeSearchMode(searchMode),
       href: window.location.href
     });
-    const settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
+    let settings = await callRuntime({ type: MESSAGE_TYPES.GET_SETTINGS });
     if (!isCurrentLookup(lookupGeneration)) {
+      return;
+    }
+    settings = await ensureSubjectAreaSelected(settings, lookupGeneration);
+    if (!settings || !isCurrentLookup(lookupGeneration)) {
       return;
     }
     let resolvedSearchMode = normalizeSearchMode(searchMode, settings.defaultSearchMode);
@@ -886,7 +1400,9 @@
     if (!citationContext) {
       throw new Error("Place the cursor inside a \\cite{...} command before triggering OverCite.");
     }
-    if (resolvedSearchMode === "direct" && !citationContext.token.trim()) {
+    // Simple search intentionally ignores context, so an empty citation token
+    // must retain contextual mode even when Simple is the configured default.
+    if (resolvedSearchMode !== "contextual" && !citationContext.token.trim()) {
       resolvedSearchMode = "contextual";
     }
 
@@ -924,13 +1440,33 @@
     applyOverlayTheme(settings.themeMode ?? "auto");
 
     let results;
+    const requestId = crypto.randomUUID();
+    activeSearchRequestId = requestId;
+    overlayState.requestId = requestId;
     try {
       results = await callRuntime({
         type: MESSAGE_TYPES.SEARCH_ADS,
+        requestId,
         citationContext: { ...citationContext, searchMode: resolvedSearchMode }
       });
     } catch (error) {
       if (!isCurrentLookup(lookupGeneration)) {
+        return;
+      }
+      activeSearchRequestId = null;
+      if (overlayState?.readyResults) {
+        return;
+      }
+      if (overlayState?.previewResults?.length) {
+        const state = overlayState;
+        state.results = state.previewResults;
+        renderOverlay({
+          subtitle: `${citationContext.command}{${citationContext.token || "..."}}`,
+          status: "Search could not finish. These partial matches may be less relevant.",
+          results: state.results,
+          shortcutText: settings.shortcutHelpText,
+          actions: buildSearchModeActions(citationContext, resolvedSearchMode)
+        });
         return;
       }
       console.error("[OverCite content] lookup failed", error);
@@ -939,7 +1475,7 @@
         status: error.message || "OverCite could not complete this lookup.",
         shortcutText: settings.shortcutHelpText,
         error: true,
-        actions: buildLookupErrorActions(citationContext, resolvedSearchMode)
+        actions: buildLookupErrorActions(citationContext, resolvedSearchMode, error)
       });
       toast(error.message || "OverCite could not complete this lookup.", "error", { durationMs: 5200 });
       return;
@@ -948,6 +1484,11 @@
       return;
     }
 
+    activeSearchRequestId = null;
+    if (overlayState?.readyResults) {
+      updateReadyCitationCounts(results);
+      return;
+    }
     overlayState.results = results;
     debugTrace("lookup:results", {
       count: results.length,
@@ -977,6 +1518,142 @@
     });
   }
 
+  function cancelActiveSearch() {
+    const requestId = activeSearchRequestId;
+    activeSearchRequestId = null;
+    if (requestId) {
+      void extensionApi.runtime.sendMessage({ type: "cancelSearch", requestId }).catch(() => {});
+    }
+  }
+
+  function receiveSearchReady(message) {
+    const state = overlayState;
+    if (!state || insertionInProgress || message.requestId !== activeSearchRequestId ||
+        message.requestId !== state.requestId || !isCurrentLookup(state.lookupGeneration) ||
+        !Array.isArray(message.results) || !message.results.length || state.readyResults) return;
+    state.readyResults = message.results;
+    state.results = message.results;
+    renderOverlay({
+      subtitle: `${state.citationContext.command}{${state.citationContext.token || "..."}}`,
+      results: state.results,
+      shortcutText: state.settings.shortcutHelpText,
+      actions: buildSearchModeActions(state.citationContext, state.searchMode)
+    });
+  }
+
+  function updateReadyCitationCounts(results) {
+    const identity = (candidate) => String(candidate?.eprint || candidate?.bibcode || "").toLowerCase().replace(/v\d+$/, "");
+    const counts = new Map(results.filter((candidate) => identity(candidate) && Number(candidate.citationCount) > 0)
+      .map((candidate) => [identity(candidate), candidate.citationCount]));
+    for (const candidate of [...(overlayState?.readyResults ?? []), ...(overlayState?.results ?? [])]) {
+      if (counts.has(identity(candidate))) candidate.citationCount = counts.get(identity(candidate));
+    }
+    // Only replace badge text, never cards, click targets, ordering or focus.
+    for (const button of overlay?.querySelectorAll(".ezcite-result") ?? []) {
+      const count = counts.get(identity(button.overciteCandidate));
+      if (!count) continue;
+      let badge = button.querySelector(".ezcite-citation-count");
+      if (!badge) {
+        badge = createTextElement("div", "ezcite-citation-count", "");
+        button.querySelector(".ezcite-source-row")?.appendChild(badge);
+      }
+      badge.textContent = formatCitationCountBadge(count);
+      badge.style.visibility = "visible";
+    }
+  }
+
+  function receiveSearchProgress(message) {
+    const state = overlayState;
+    if (!state || insertionInProgress || message.requestId !== activeSearchRequestId ||
+        message.requestId !== state.requestId || !isCurrentLookup(state.lookupGeneration) ||
+        !Array.isArray(message.results) || !message.results.length || state.readyResults ||
+        message.revision <= (state.progressRevision ?? 0)) return;
+    state.progressRevision = message.revision;
+    // Hold preliminary matches off-screen. Publish one ranked list, not an
+    // early list that requires the user to choose whether to refine it.
+    state.previewResults = message.results;
+  }
+
+  async function ensureSubjectAreaSelected(settings, lookupGeneration) {
+    if (settings?.subjectAreaConfigured) {
+      return settings;
+    }
+
+    if (pendingSubjectAreaPrompt) {
+      pendingSubjectAreaPrompt.resolve(null);
+      pendingSubjectAreaPrompt = null;
+    }
+
+    return new Promise((resolve) => {
+      pendingSubjectAreaPrompt = { lookupGeneration, resolve };
+      let selectionInProgress = false;
+      const renderPrompt = (status, error = false) => {
+        renderOverlay({
+          subtitle: "Choose your subject area",
+          status,
+          error,
+          actionLayout: "subjects",
+          footerText: "You can change this later in OverCite settings.",
+          shortcutText: "Required once",
+          actions: SUBJECT_AREA_CHOICES.map((choice) => ({
+            label: choice.label,
+            description: choice.description,
+            kind: "secondary",
+            onClick: async () => {
+              if (selectionInProgress || !isCurrentLookup(lookupGeneration) || pendingSubjectAreaPrompt?.lookupGeneration !== lookupGeneration) {
+                return;
+              }
+              selectionInProgress = true;
+              const nextSettings = {
+                ...settings,
+                subjectAreaConfigured: true,
+                sourceProfile: choice.profile,
+                primarySource: choice.primarySource,
+                fallbackSources: choice.fallbackSources
+              };
+              try {
+                const granted = await callRuntime({
+                  type: MESSAGE_TYPES.REQUEST_SOURCE_PERMISSIONS,
+                  settings: nextSettings
+                });
+                if (!granted) {
+                  selectionInProgress = false;
+                  renderPrompt("OverCite needs permission to reach the databases for that subject. Choose it again and approve the browser request.", true);
+                  return;
+                }
+                const savedSettings = await callRuntime({
+                  type: MESSAGE_TYPES.SAVE_SETTINGS,
+                  settings: nextSettings
+                });
+                const pending = pendingSubjectAreaPrompt;
+                pendingSubjectAreaPrompt = null;
+                if (choice.profile === "astrophysics" && !hasAdsToken(savedSettings)) {
+                  pending?.resolve(null);
+                  await openOverCiteOptions();
+                  return;
+                }
+                pending?.resolve(savedSettings);
+              } catch (error) {
+                selectionInProgress = false;
+                // Firefox cannot always carry a content-script click's user
+                // gesture into permissions.request in the background process.
+                // The extension settings Save button can request it directly.
+                if (/user (?:input handler|gesture)/i.test(String(error?.message ?? ""))) {
+                  await openOverCiteOptions();
+                  return;
+                }
+                renderPrompt(error.message || "OverCite could not save that subject area. Please try again.", true);
+              }
+            }
+          }))
+        });
+        applyOverlayTheme(settings.themeMode ?? "auto");
+      };
+
+      renderPrompt("Select the field that best matches your work. OverCite will ask only once.");
+    });
+  }
+
   function normalizeSearchMode(...candidates) {
     for (const candidate of candidates) {
       const normalized = String(candidate ?? "").trim().toLowerCase();
@@ -984,7 +1661,7 @@
         return normalized;
       }
     }
-    return "contextual";
+    return "simple";
   }
 
   function buildSearchModeActions(citationContext, searchMode) {
@@ -994,7 +1671,7 @@
     if (searchMode === "simple") {
       return [
         {
-          label: "Back to contextual",
+          label: "Contextual search",
           kind: "tertiary",
           onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
         },
@@ -1008,7 +1685,7 @@
     if (searchMode === "direct") {
       return [
         {
-          label: "Back to contextual",
+          label: "Contextual search",
           kind: "tertiary",
           onClick: () => startLookup("contextual").catch((error) => toast(error.message, "error"))
         },
@@ -1033,7 +1710,16 @@
     ];
   }
 
-  function buildLookupErrorActions(citationContext, searchMode) {
+  function buildLookupErrorActions(citationContext, searchMode, error) {
+    if (isMissingAdsTokenError(error)) {
+      return [
+        {
+          label: "Open settings",
+          kind: "primary",
+          onClick: () => openOverCiteOptions()
+        }
+      ];
+    }
     return [
       {
         label: "Try again",
@@ -1044,15 +1730,34 @@
     ];
   }
 
+  function hasAdsToken(settings) {
+    return Boolean(String(settings?.sourceApiTokens?.ads || settings?.adsApiToken || "").trim());
+  }
+
+  function isMissingAdsTokenError(error) {
+    return /No ADS\/SciX API token is configured/i.test(String(error?.message ?? error ?? ""));
+  }
+
+  async function openOverCiteOptions() {
+    try {
+      await callRuntime({ type: MESSAGE_TYPES.OPEN_OPTIONS });
+      closeOverlay();
+    } catch (error) {
+      toast(error.message || "OverCite could not open its settings.", "error", { durationMs: 5200 });
+    }
+  }
+
   async function selectCandidate(candidate) {
     const state = snapshotOverlayState(overlayState);
-    if (!state) {
+    if (!state || !isCurrentLookup(state.lookupGeneration)) {
       return;
     }
     if (insertionInProgress) {
       return;
     }
     insertionInProgress = true;
+    cancelActiveSearch();
+    activeLookupGeneration += 1;
     state.userFileNavigationSerialAtSelection = userFileNavigationSerial;
     insertionThemeMode = state.settings?.themeMode ?? "auto";
     try {
@@ -1203,6 +1908,8 @@
       ? replaceTextRange(state.originalEditorState.text, originalRange.from, originalRange.to, optimisticKey)
       : null;
     const expectedOptimisticSourceDocument = buildDocumentExpectation(optimisticSourceText);
+    let manuallyConfirmedSourceEditorState = null;
+    let manuallyConfirmedBibEditorState = null;
     if (originalFileName) {
       diagnostics.step(`Returning to ${originalFileName}...`);
       if (matchesFileName(readActiveFileName(), originalFileName)) {
@@ -1223,7 +1930,7 @@
             await timed(`openProjectFile:${originalFileName}:project`, () => openProjectFile(originalFileName, { preferTabsOnly: false }), diagnostics);
             await sleep(250);
             const recoveredFileName = readActiveFileName();
-            if (recoveredFileName && recoveredFileName.includes(originalFileName)) {
+            if (matchesFileName(recoveredFileName, originalFileName)) {
               debugTrace("source:return-recovered", {
                 target: originalFileName,
                 activeAfter: recoveredFileName
@@ -1236,23 +1943,11 @@
               target: originalFileName,
               activeNow: readActiveFileName()
             });
-            await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText);
+            manuallyConfirmedSourceEditorState = await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText, {
+              expectedDocument: expectedSourceDocument
+            });
           }
         }
-      }
-    } else if (state.originalEditorState?.text) {
-      diagnostics.step("Recovering source file...");
-      try {
-        await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan(sourceRecoveryPayload), diagnostics);
-        await sleep(150);
-        debugTrace("source:scan-recovered", {
-          activeAfter: readActiveFileName()
-        });
-      } catch (error) {
-        debugTrace("source:scan-recovery-failed", {
-          message: error.message,
-          activeNow: readActiveFileName()
-        });
       }
     }
     diagnostics.step(`Writing cite key in ${originalFileName || "current file"}...`);
@@ -1269,8 +1964,9 @@
         to: originalRange.to,
         insert: optimisticKey,
         expectedFileName: originalFileName,
+        expectedEditorIdentity: manuallyConfirmedSourceEditorState?.editorIdentity || "",
         expectedDocument: expectedSourceDocument
-      }), diagnostics);
+      }, 3000), diagnostics);
       debugTrace("source:write-ok", {
         activeAfter: readActiveFileName(),
         key: optimisticKey
@@ -1280,14 +1976,30 @@
         message: error.message,
         activeNow: readActiveFileName()
       });
-      if (originalFileName) {
-        await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText);
+      const sourceWriteAlreadyApplied = optimisticSourceText != null && await editorAlreadyHasText({
+        fileName: originalFileName,
+        expectedText: optimisticSourceText,
+        allowUnknownFileName: !originalFileName,
+        expectedEditorIdentity: manuallyConfirmedSourceEditorState?.editorIdentity || "",
+        expectedNavigationSerial: manuallyConfirmedSourceEditorState?.manualConfirmationNavigationSerial
+      });
+      if (sourceWriteAlreadyApplied) {
+        debugTrace("source:write-late-ack", {
+          target: originalFileName || "(current)",
+          key: optimisticKey
+        });
+      } else if (originalFileName) {
+        manuallyConfirmedSourceEditorState = await waitForManualFileSwitch(originalFileName, candidate.title, state.settings.shortcutHelpText, {
+          expectedDocument: expectedSourceDocument
+        });
+        assertManualConfirmationCurrent(manuallyConfirmedSourceEditorState);
         diagnostics.step(`Retrying cite key in ${originalFileName}...`);
         await timed("replaceRange:optimisticKey:retry", () => pageRequest("replaceRange", {
           from: originalRange.from,
           to: originalRange.to,
           insert: optimisticKey,
           expectedFileName: originalFileName,
+          expectedEditorIdentity: manuallyConfirmedSourceEditorState.editorIdentity || "",
           expectedDocument: expectedSourceDocument
         }), diagnostics);
         debugTrace("source:write-retry-ok", {
@@ -1339,21 +2051,57 @@
             target: bibTarget.target,
             activeNow: readActiveFileName()
           });
-          await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText);
+          manuallyConfirmedBibEditorState = await waitForManualFileSwitch(
+            bibTarget.target,
+            candidate.title,
+            state.settings.shortcutHelpText,
+            {
+              validate: (candidateState) => !isLikelyWrongEditorForBib(
+                candidateState,
+                buildSourceTextMatcher(
+                  state.originalEditorState?.text ?? "",
+                  state.citationContext?.tokenStart ?? 0,
+                  state.citationContext?.tokenEnd ?? 0
+                )
+              )
+            }
+          );
         }
       }
     }
 
     diagnostics.step(`Reading ${bibTarget.target}...`);
-    const bibEditorState = switchedToBib
-      ? await getConfirmedBibEditorState({
-        fileName: bibTarget.target,
-        diagnostics,
-        originalText: state.originalEditorState?.text ?? "",
-        tokenStart: state.citationContext?.tokenStart ?? 0,
-        tokenEnd: state.citationContext?.tokenEnd ?? 0
-      })
-      : (state.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics));
+    let bibEditorState;
+    if (switchedToBib) {
+      if (manuallyConfirmedBibEditorState) {
+        bibEditorState = manuallyConfirmedBibEditorState;
+      } else {
+        try {
+          bibEditorState = await getConfirmedBibEditorState({
+            fileName: bibTarget.target,
+            diagnostics,
+            originalText: state.originalEditorState?.text ?? "",
+            tokenStart: state.citationContext?.tokenStart ?? 0,
+            tokenEnd: state.citationContext?.tokenEnd ?? 0
+          });
+        } catch {
+          const sourceMatcher = buildSourceTextMatcher(
+            state.originalEditorState?.text ?? "",
+            state.citationContext?.tokenStart ?? 0,
+            state.citationContext?.tokenEnd ?? 0
+          );
+          bibEditorState = await waitForManualFileSwitch(
+            bibTarget.target,
+            candidate.title,
+            state.settings.shortcutHelpText,
+            { validate: (candidateState) => !isLikelyWrongEditorForBib(candidateState, sourceMatcher) }
+          );
+          manuallyConfirmedBibEditorState = bibEditorState;
+        }
+      }
+    } else {
+      bibEditorState = state.originalEditorState ?? await timed("getEditorState:current", () => getEditorStateWithRetry(), diagnostics);
+    }
     diagnostics.step("Computing bibliography update...");
     const insertion = await timed("applyInsertion", () => callRuntime({
       type: MESSAGE_TYPES.APPLY_INSERTION,
@@ -1371,8 +2119,13 @@
 
     if (insertion.updatedBibText !== bibEditorState.text) {
       diagnostics.step(`Writing ${bibTarget.target}...`);
-      if (switchedToBib) {
-        await ensureProjectFileActive(bibTarget.target, diagnostics, "before-write");
+      if (switchedToBib && !manuallyConfirmedBibEditorState) {
+        await ensureProjectFileActive(
+          bibTarget.target,
+          diagnostics,
+          "before-write",
+          buildDocumentExpectation(bibEditorState.text)
+        );
       }
       debugTrace("bib:write-start", {
         target: bibTarget.target,
@@ -1380,28 +2133,45 @@
         finalKey: insertion.finalKey
       });
       try {
+        assertManualConfirmationCurrent(manuallyConfirmedBibEditorState);
         await timed(`replaceDocument:${bibTarget.target}`, () => pageRequest("replaceDocument", {
           text: insertion.updatedBibText,
           expectedFileName: bibTarget.target,
+          expectedEditorIdentity: manuallyConfirmedBibEditorState?.editorIdentity || "",
           expectedDocument: {
             length: bibEditorState.text.length,
             head: bibEditorState.text.slice(0, 200),
             tail: bibEditorState.text.slice(-200)
           }
-        }, 12000), diagnostics);
+        }, 5000), diagnostics);
       } catch (error) {
-        if (switchedToBib) {
-          await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText);
-          await ensureProjectFileActive(bibTarget.target, diagnostics, "after-manual-write");
+        const bibliographyWriteAlreadyApplied = await editorAlreadyHasText({
+          fileName: bibTarget.target,
+          expectedText: insertion.updatedBibText,
+          allowUnknownFileName: Boolean(manuallyConfirmedBibEditorState),
+          expectedEditorIdentity: manuallyConfirmedBibEditorState?.editorIdentity || "",
+          expectedNavigationSerial: manuallyConfirmedBibEditorState?.manualConfirmationNavigationSerial
+        });
+        if (bibliographyWriteAlreadyApplied) {
+          debugTrace("bib:write-late-ack", {
+            target: bibTarget.target,
+            finalKey: insertion.finalKey
+          });
+        } else if (switchedToBib) {
+          manuallyConfirmedBibEditorState = await waitForManualFileSwitch(bibTarget.target, candidate.title, state.settings.shortcutHelpText, {
+            expectedDocument: buildDocumentExpectation(bibEditorState.text)
+          });
+          assertManualConfirmationCurrent(manuallyConfirmedBibEditorState);
           await timed(`replaceDocument:${bibTarget.target}:retry`, () => pageRequest("replaceDocument", {
             text: insertion.updatedBibText,
             expectedFileName: bibTarget.target,
+            expectedEditorIdentity: manuallyConfirmedBibEditorState?.editorIdentity || "",
             expectedDocument: {
               length: bibEditorState.text.length,
               head: bibEditorState.text.slice(0, 200),
               tail: bibEditorState.text.slice(-200)
             }
-          }, 12000), diagnostics);
+          }, 5000), diagnostics);
         } else {
           throw error;
         }
@@ -1463,6 +2233,7 @@
       shouldOpenSourceForFinalKey = false;
     }
 
+    const sourceRecoveryDeadlineAt = Date.now() + 7000;
     if (shouldOpenSourceForFinalKey) {
       const returnTargetLabel = originalFileName || "source file";
       reportInsertionProgress(`Returning to ${returnTargetLabel}...`);
@@ -1470,6 +2241,7 @@
         if (originalFileName) {
           await timed(`openProjectFile:${originalFileName}`, () => openProjectFile(originalFileName, {
             preferTabsOnly: true,
+            deadlineAt: sourceRecoveryDeadlineAt,
             cancelOnUserFileNavigationAfterSerial: needsManualSourceUpdate ? null : userFileNavigationSerialAtSelection
           }), diagnostics);
           sourceReadyForFinalRewrite = true;
@@ -1490,7 +2262,8 @@
               preferredFileName: originalFileName,
               originalText: state.originalEditorState?.text ?? "",
               tokenStart: state.citationContext?.tokenStart ?? 0,
-              tokenEnd: state.citationContext?.tokenEnd ?? 0
+              tokenEnd: state.citationContext?.tokenEnd ?? 0,
+              deadlineAt: sourceRecoveryDeadlineAt
             }), diagnostics);
             sourceReadyForFinalRewrite = true;
           } catch {
@@ -1502,9 +2275,11 @@
                 await timed("openSourceFileByProjectScan", () => openSourceFileByProjectScan({
                   excludeFileName: bibTarget.target,
                   projectFiles: projectState.projectFiles,
+                  preferredFileName: originalFileName,
                   originalText: state.originalEditorState?.text ?? "",
                   tokenStart: state.citationContext?.tokenStart ?? 0,
-                  tokenEnd: state.citationContext?.tokenEnd ?? 0
+                  tokenEnd: state.citationContext?.tokenEnd ?? 0,
+                  deadlineAt: sourceRecoveryDeadlineAt
                 }), diagnostics);
                 sourceReadyForFinalRewrite = true;
               } catch {
@@ -1518,10 +2293,10 @@
 
     if (shouldOpenSourceForFinalKey && !sourceReadyForFinalRewrite) {
       try {
-        const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(3, 200), diagnostics);
+        const activeSourceState = await timed("getEditorState:sourceCheck", () => getEditorStateWithRetry(2, 125, 1200), diagnostics);
         const activeSourceName = activeSourceState.fileName || readActiveFileName();
         const looksLikeSourceFile = originalFileName
-          ? activeSourceName.includes(originalFileName)
+          ? matchesFileName(activeSourceName, originalFileName)
           : Boolean(activeSourceName && activeSourceName !== bibTarget.target && /\.tex$/i.test(activeSourceName));
         if (!looksLikeSourceFile) {
           try {
@@ -1530,15 +2305,18 @@
               preferredFileName: originalFileName,
               originalText: state.originalEditorState?.text ?? "",
               tokenStart: state.citationContext?.tokenStart ?? 0,
-              tokenEnd: state.citationContext?.tokenEnd ?? 0
+              tokenEnd: state.citationContext?.tokenEnd ?? 0,
+              deadlineAt: sourceRecoveryDeadlineAt
             }), diagnostics);
           } catch {
             await timed("openSourceFileByProjectScan:verify", () => openSourceFileByProjectScan({
               excludeFileName: bibTarget.target,
               projectFiles: projectState.projectFiles,
+              preferredFileName: originalFileName,
               originalText: state.originalEditorState?.text ?? "",
               tokenStart: state.citationContext?.tokenStart ?? 0,
-              tokenEnd: state.citationContext?.tokenEnd ?? 0
+              tokenEnd: state.citationContext?.tokenEnd ?? 0,
+              deadlineAt: sourceRecoveryDeadlineAt
             }), diagnostics);
           }
         }
@@ -1574,13 +2352,31 @@
     if (needsManualSourceUpdate && sourceReadyForFinalRewrite) {
       const finalizingLabel = `Finalizing cite key in ${originalFileName || "current file"}...`;
       reportInsertionProgress(finalizingLabel);
-      await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
-        from: optimisticRange.from,
-        to: optimisticRange.to,
-        insert: insertion.finalKey,
-        expectedFileName: originalFileName,
-        expectedDocument: expectedOptimisticSourceDocument
-      }), diagnostics);
+      const finalSourceText = optimisticSourceText != null
+        ? replaceTextRange(optimisticSourceText, optimisticRange.from, optimisticRange.to, insertion.finalKey)
+        : null;
+      try {
+        await timed("replaceRange:finalKey", () => pageRequest("replaceRange", {
+          from: optimisticRange.from,
+          to: optimisticRange.to,
+          insert: insertion.finalKey,
+          expectedFileName: originalFileName,
+          expectedDocument: expectedOptimisticSourceDocument
+        }), diagnostics);
+      } catch (error) {
+        const finalSourceWriteAlreadyApplied = finalSourceText != null && await editorAlreadyHasText({
+          fileName: originalFileName,
+          expectedText: finalSourceText,
+          allowUnknownFileName: !originalFileName
+        });
+        if (!finalSourceWriteAlreadyApplied) {
+          throw error;
+        }
+        debugTrace("source:final-write-late-ack", {
+          target: originalFileName || "(current)",
+          key: insertion.finalKey
+        });
+      }
     }
 
     let restoredManualFinalFile = false;
@@ -1627,6 +2423,7 @@
         { durationMs: SUCCESS_TOAST_DURATION_MS }
       );
     }
+    void maybeShowAcknowledgmentReminder();
   }
 
   async function buildProjectState() {
@@ -1671,15 +2468,21 @@
     const selectors = [
       "[role='tab'][aria-selected='true']",
       "[role='tab'][data-active='true']",
+      "[data-testid='editor-tab-active']",
       ".active[role='tab']",
       ".file-tab.active",
-      ".tab.active",
-      ".ol-cm-breadcrumbs",
-      ".ol-cm-toolbar-wrapper",
-      ".cm-panels-top"
+      ".tab.active"
     ];
     for (const selector of selectors) {
-      const fileName = extractLikelyEditorFileNameFromElement(document.querySelector(selector));
+      for (const element of document.querySelectorAll(selector)) {
+        const fileName = extractLikelyEditorFileNameFromElement(element);
+        if (fileName) {
+          return fileName;
+        }
+      }
+    }
+    for (const element of document.querySelectorAll(".ol-cm-breadcrumbs")) {
+      const fileName = extractLikelyEditorFileNameFromElement(element);
       if (fileName) {
         return fileName;
       }
@@ -1718,26 +2521,43 @@
       throw new Error(`Could not find ${fileName} in the current Overleaf project view.`);
     }
     let lastError = null;
+    const requestedDeadlineAt = Number(options.deadlineAt);
+    const deadlineAt = Number.isFinite(requestedDeadlineAt)
+      ? Math.min(Date.now() + 5500, requestedDeadlineAt)
+      : Date.now() + 5500;
     for (const candidate of candidates) {
+      let editorStateBeforeClick = null;
+      let requireEditorTransition = false;
       try {
+        const remainingBeforeClick = deadlineAt - Date.now();
+        if (remainingBeforeClick <= 0) {
+          break;
+        }
         if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
           throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
         }
+        editorStateBeforeClick = await getEditorStateWithRetry(
+          1,
+          0,
+          Math.min(700, Math.max(1, remainingBeforeClick))
+        ).catch(() => null);
+        const activeFileBeforeClick = editorStateBeforeClick?.fileName || readActiveFileName();
+        requireEditorTransition = Boolean(
+          editorStateBeforeClick && !matchesFileName(activeFileBeforeClick, fileName)
+        );
         candidate.scrollIntoView?.({ block: "center", inline: "nearest" });
         candidate.click();
-        await sleep(250);
-        await waitFor(async () => {
-          if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
-            throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
-          }
-          const activeTabName = readActiveFileName();
-          if (activeTabName.includes(fileName)) {
-            return true;
-          }
-          const state = await getEditorStateWithRetry(3, 250);
-          const activeFileName = state.fileName || activeTabName;
-          return activeFileName.includes(fileName);
-        }, 3500);
+        await sleep(Math.min(250, Math.max(0, deadlineAt - Date.now())));
+        await waitForTargetEditorState({
+          fileName,
+          timeoutMs: Math.min(1800, Math.max(1, deadlineAt - Date.now())),
+          beforeRead() {
+            if (hasUserFileNavigationAwayAfter(cancelOnUserFileNavigationAfterSerial, fileName)) {
+              throw createUserFileNavigationError(fileName, getUserFileNavigationAfter(cancelOnUserFileNavigationAfterSerial));
+            }
+          },
+          requireTransitionFrom: requireEditorTransition ? editorStateBeforeClick : null
+        });
         debugTrace("openProjectFile:ok", {
           fileName,
           activeAfter: readActiveFileName()
@@ -1752,8 +2572,15 @@
           throw error;
         }
         if (!preferTabsOnly && isLikelyFileTreeCandidate(candidate)) {
-          await sleep(450);
-          if (await isProjectFileActive(fileName)) {
+          const remainingForTree = Math.max(0, deadlineAt - Date.now());
+          await sleep(Math.min(450, remainingForTree));
+          const remainingForCheck = Math.max(0, deadlineAt - Date.now());
+          if (remainingForCheck > 0 && await isProjectFileActive(
+            fileName,
+            null,
+            remainingForCheck,
+            requireEditorTransition ? editorStateBeforeClick : null
+          )) {
             debugTrace("openProjectFile:file-tree-early-return", {
               fileName,
               activeAfter: readActiveFileName()
@@ -1767,7 +2594,7 @@
           message: error.message,
           activeNow: readActiveFileName()
         });
-        await sleep(200);
+        await sleep(Math.min(200, Math.max(0, deadlineAt - Date.now())));
       }
     }
     if (lastError) {
@@ -1778,19 +2605,28 @@
       });
       throw lastError;
     }
+    throw new Error(`Timed out confirming ${fileName} as the active editor.`);
   }
 
   function matchesFileName(activeFileName, targetFileName) {
-    const active = String(activeFileName ?? "").trim();
-    const target = String(targetFileName ?? "").trim();
+    const active = normalizeComparableFileName(activeFileName);
+    const target = normalizeComparableFileName(targetFileName);
     if (!active || !target) {
       return false;
     }
-    return active === target || active.includes(target);
+    return active === target || active.endsWith(`/${target}`) || target.endsWith(`/${active}`);
   }
 
-  async function ensureProjectFileActive(fileName, diagnostics, reasonLabel) {
-    if (await isProjectFileActive(fileName)) {
+  function normalizeComparableFileName(fileName) {
+    return String(fileName ?? "")
+      .replace(/\\\\/g, "/")
+      .replace(/^\.\//, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function ensureProjectFileActive(fileName, diagnostics, reasonLabel, expectedDocument = null) {
+    if (await isProjectFileActive(fileName, expectedDocument)) {
       return;
     }
     debugTrace("openProjectFile:ensure", {
@@ -1803,24 +2639,26 @@
       () => openProjectFile(fileName, { preferTabsOnly: false }),
       diagnostics
     );
-    await waitForProjectFileActive(fileName, 2500);
+    await waitForProjectFileActive(fileName, 2500, expectedDocument);
   }
 
-  async function isProjectFileActive(fileName) {
-    const activeNow = readActiveFileName();
-    if (matchesFileName(activeNow, fileName)) {
-      return true;
-    }
+  async function isProjectFileActive(
+    fileName,
+    expectedDocument = null,
+    requestTimeoutMs = 1000,
+    requireTransitionFrom = null
+  ) {
     try {
-      const state = await getEditorStateWithRetry(1, 0);
-      return matchesFileName(state.fileName || activeNow, fileName);
+      const state = await getEditorStateWithRetry(1, 0, Math.max(1, Math.min(1000, requestTimeoutMs)));
+      return editorStateMatchesTarget(state, fileName, expectedDocument) &&
+        editorStateTransitionedFrom(state, requireTransitionFrom);
     } catch {
       return false;
     }
   }
 
-  async function waitForProjectFileActive(fileName, timeoutMs = 3500) {
-    await waitFor(async () => isProjectFileActive(fileName), timeoutMs);
+  async function waitForProjectFileActive(fileName, timeoutMs = 3500, expectedDocument = null) {
+    await waitFor(async () => isProjectFileActive(fileName, expectedDocument), timeoutMs);
   }
 
   async function openLikelySourceTab({ excludeFileName = "", preferredFileName = "", requireTex = false } = {}) {
@@ -1862,7 +2700,14 @@
     throw lastError ?? new Error("Could not switch back to a likely source editor tab.");
   }
 
-  async function openSourceTabByContent({ excludeFileName = "", preferredFileName = "", originalText = "", tokenStart = 0, tokenEnd = 0 } = {}) {
+  async function openSourceTabByContent({
+    excludeFileName = "",
+    preferredFileName = "",
+    originalText = "",
+    tokenStart = 0,
+    tokenEnd = 0,
+    deadlineAt = Date.now() + 7000
+  } = {}) {
     const targetExclude = String(excludeFileName ?? "").trim();
     const targetPreferred = String(preferredFileName ?? "").trim();
     const candidates = collectOpenEditorTabs()
@@ -1876,34 +2721,49 @@
 
     const contextMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
     let lastError = null;
+    let previousRead = null;
     for (const candidate of candidates) {
+      if (Date.now() >= deadlineAt) {
+        break;
+      }
       try {
         candidate.element.scrollIntoView?.({ block: "center", inline: "nearest" });
         candidate.element.click();
-        await sleep(250);
-        await waitFor(async () => {
-          const state = await getEditorStateWithRetry(3, 200);
+        await sleep(Math.min(250, Math.max(0, deadlineAt - Date.now())));
+        while (Date.now() < deadlineAt) {
+          const remainingMs = deadlineAt - Date.now();
+          const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs), previousRead);
+          previousRead = state;
           const activeName = state.fileName || readActiveFileName();
-          if (!activeName || activeName === targetExclude || !/\.tex$/i.test(activeName)) {
-            return false;
+          if (activeName && activeName !== targetExclude && /\.tex$/i.test(activeName) && contextMatcher(state.text)) {
+            return;
           }
-          return contextMatcher(state.text);
-        }, 3500);
-        return;
+          await sleep(Math.min(120, Math.max(0, deadlineAt - Date.now())));
+        }
       } catch (error) {
         lastError = error;
-        await sleep(200);
+        await sleep(Math.min(120, Math.max(0, deadlineAt - Date.now())));
       }
     }
 
     throw lastError ?? new Error("Could not return to the source editor by content match.");
   }
 
-  async function openSourceFileByProjectScan({ excludeFileName = "", projectFiles = [], originalText = "", tokenStart = 0, tokenEnd = 0 } = {}) {
+  async function openSourceFileByProjectScan({
+    excludeFileName = "",
+    preferredFileName = "",
+    projectFiles = [],
+    originalText = "",
+    tokenStart = 0,
+    tokenEnd = 0,
+    deadlineAt = Date.now() + 7000
+  } = {}) {
     const targetExclude = String(excludeFileName ?? "").trim();
+    const targetPreferred = String(preferredFileName ?? "").trim();
     const texFiles = Array.from(new Set((projectFiles ?? [])
       .map((fileName) => String(fileName ?? "").trim())
-      .filter((fileName) => fileName && fileName !== targetExclude && /\.tex$/i.test(fileName))));
+      .filter((fileName) => fileName && fileName !== targetExclude && /\.tex$/i.test(fileName))))
+      .sort((left, right) => Number(matchesFileName(right, targetPreferred)) - Number(matchesFileName(left, targetPreferred)));
     if (!texFiles.length) {
       throw new Error("Could not find any candidate source .tex files in the project.");
     }
@@ -1911,9 +2771,16 @@
     const contextMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
     let lastError = null;
     for (const fileName of texFiles) {
+      if (Date.now() >= deadlineAt) {
+        break;
+      }
       try {
-        await openProjectFile(fileName, { preferTabsOnly: false });
-        const state = await getEditorStateWithRetry(3, 200);
+        await openProjectFile(fileName, { preferTabsOnly: false, deadlineAt });
+        const remainingMs = deadlineAt - Date.now();
+        if (remainingMs <= 0) {
+          break;
+        }
+        const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs));
         const activeName = state.fileName || readActiveFileName();
         if (activeName && activeName !== targetExclude && /\.tex$/i.test(activeName) && contextMatcher(state.text)) {
           return;
@@ -2042,6 +2909,83 @@
     return texMarkers.some((marker) => sample.includes(marker));
   }
 
+  function documentMatchesExpectation(text, expectedDocument) {
+    if (!expectedDocument || typeof expectedDocument !== "object") {
+      return false;
+    }
+    const value = String(text ?? "");
+    const expectedLength = Number(expectedDocument.length);
+    const expectedHead = String(expectedDocument.head ?? "");
+    const expectedTail = String(expectedDocument.tail ?? "");
+    return (!Number.isFinite(expectedLength) || value.length === expectedLength) &&
+      (!expectedHead || value.startsWith(expectedHead)) &&
+      (!expectedTail || value.endsWith(expectedTail));
+  }
+
+  function editorStateMatchesTarget(state, fileName, expectedDocument = null, options = {}) {
+    const target = String(fileName ?? "").trim();
+    const activeFileName = String(state?.fileName ?? "").trim();
+    const text = String(state?.text ?? "");
+    if (activeFileName) {
+      if (!matchesFileName(activeFileName, target)) {
+        return false;
+      }
+      if (state?.fileNameSource === "active-tab" &&
+          /\.bib$/i.test(target) &&
+          !text.trim() &&
+          !expectedDocument &&
+          !options.allowUnknownFileName) {
+        return false;
+      }
+      return !expectedDocument || documentMatchesExpectation(text, expectedDocument);
+    }
+    if (!options.allowUnknownFileName) {
+      return false;
+    }
+    if (expectedDocument && !documentMatchesExpectation(text, expectedDocument)) {
+      return false;
+    }
+    if (/\.bib$/i.test(target)) {
+      return !looksLikeTexSourceDocument(text);
+    }
+    if (/\.tex$/i.test(target)) {
+      return looksLikeTexSourceDocument(text) || documentMatchesExpectation(text, expectedDocument);
+    }
+    return Boolean(activeFileName || expectedDocument);
+  }
+
+  async function editorAlreadyHasText({
+    fileName,
+    expectedText,
+    allowUnknownFileName = false,
+    expectedEditorIdentity = "",
+    expectedNavigationSerial = null
+  }) {
+    try {
+      if (expectedNavigationSerial != null && expectedNavigationSerial !== userFileNavigationSerial) {
+        return false;
+      }
+      const state = await getEditorStateWithRetry(2, 100, 1200);
+      const expectedDocument = buildDocumentExpectation(expectedText);
+      return (!expectedEditorIdentity || state.editorIdentity === expectedEditorIdentity) &&
+        state.text === expectedText && editorStateMatchesTarget(
+        state,
+        fileName,
+        expectedDocument,
+        { allowUnknownFileName }
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function assertManualConfirmationCurrent(state) {
+    const confirmedSerial = state?.manualConfirmationNavigationSerial;
+    if (confirmedSerial != null && confirmedSerial !== userFileNavigationSerial) {
+      throw new Error("The active editor changed after manual confirmation.");
+    }
+  }
+
   function isLikelyWrongEditorForBib(state, sourceMatcher) {
     const text = String(state?.text ?? "");
     if (sourceMatcher(text)) {
@@ -2058,20 +3002,49 @@
     tokenEnd = 0
   }) {
     const sourceMatcher = buildSourceTextMatcher(originalText, tokenStart, tokenEnd);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await ensureProjectFileActive(fileName, diagnostics, `before-read-${attempt + 1}`);
-      const state = await timed("getEditorState:bib", () => getEditorStateWithRetry(), diagnostics);
-      if (!isLikelyWrongEditorForBib(state, sourceMatcher)) {
-        return state;
-      }
-      await timed(
-        `openProjectFile:${fileName}:reconfirm:${attempt + 1}`,
-        () => openProjectFile(fileName, { preferTabsOnly: false }),
-        diagnostics
-      );
-      await sleep(200);
+    return timed("getEditorState:bib", () => waitForTargetEditorState({
+      fileName,
+      timeoutMs: 5000,
+      validate: (state) => !isLikelyWrongEditorForBib(state, sourceMatcher)
+    }), diagnostics);
+  }
+
+  function editorStateTransitionedFrom(state, previousState) {
+    if (!previousState) {
+      return true;
     }
-    throw new Error(`Could not confirm that ${fileName} is the active bibliography editor.`);
+    return state.editorIdentity !== previousState.editorIdentity ||
+      state.text !== previousState.text;
+  }
+
+  async function waitForTargetEditorState({
+    fileName,
+    timeoutMs,
+    validate = () => true,
+    beforeRead = () => {},
+    allowUnknownFileName = false,
+    requireTransitionFrom = null
+  }) {
+    const startedAt = Date.now();
+    let lastError = null;
+    let previousRead = null;
+    while (Date.now() - startedAt < timeoutMs) {
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      try {
+        beforeRead();
+        const state = await getEditorStateWithRetry(1, 0, Math.min(900, remainingMs), previousRead);
+        previousRead = state;
+        if (editorStateMatchesTarget(state, fileName, null, { allowUnknownFileName }) &&
+            editorStateTransitionedFrom(state, requireTransitionFrom) &&
+            validate(state)) {
+          return state;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+      await sleep(Math.min(120, Math.max(0, remainingMs)));
+    }
+    throw lastError ?? new Error(`Could not confirm that ${fileName} is the active editor.`);
   }
 
   function collectExactMatches(targetText, selectors) {
@@ -2285,15 +3258,36 @@
   }
 
   async function callRuntime(message) {
+    const timeoutMs = runtimeTimeoutForMessage(message?.type);
     const response = await withTimeout(
       extensionApi.runtime.sendMessage(message),
-      15000,
-      "Timed out waiting for the OverCite background worker. Refresh the Overleaf page and try again."
+      timeoutMs,
+      runtimeTimeoutMessage(message?.type)
     );
     if (!response?.ok) {
       throw new Error(response?.error ?? "Unknown OverCite error");
     }
     return response.result;
+  }
+
+  function runtimeTimeoutForMessage(messageType) {
+    if (messageType === MESSAGE_TYPES.SEARCH_ADS) {
+      return 40000;
+    }
+    if (messageType === MESSAGE_TYPES.EXPORT_BIBTEX) {
+      return 16000;
+    }
+    return 10000;
+  }
+
+  function runtimeTimeoutMessage(messageType) {
+    if (messageType === MESSAGE_TYPES.SEARCH_ADS) {
+      return "The literature search took too long. Try again or use Simple search.";
+    }
+    if (messageType === MESSAGE_TYPES.EXPORT_BIBTEX) {
+      return "Timed out exporting BibTeX from the selected source. Try again.";
+    }
+    return "Timed out waiting for the OverCite background process. Refresh the Overleaf page and try again.";
   }
 
   function extractLikelyEditorFileName(text) {
@@ -2370,11 +3364,20 @@
     return detail;
   }
 
-  async function getEditorStateWithRetry(attempts = 5, delayMs = 150) {
+  async function getEditorStateWithRetry(attempts = 4, delayMs = 125, requestTimeoutMs = 1200, previousRead = null) {
     let lastError = null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const state = await pageRequest("getActiveEditorState", {}, 4000);
+        const state = await pageRequest("getActiveEditorState", {
+          knownDocumentRevision: previousRead?.documentRevision
+        }, requestTimeoutMs);
+        if (typeof state.text !== "string") {
+          if (!state.documentRevision || state.documentRevision !== previousRead?.documentRevision ||
+              typeof previousRead?.text !== "string") {
+            throw new Error("Could not verify the active editor document snapshot.");
+          }
+          state.text = previousRead.text;
+        }
         debugTrace("editorState:ok", {
           attempt: attempt + 1,
           fileName: state.fileName || "(none)",
@@ -2395,7 +3398,12 @@
   }
 
   function closeOverlay() {
+    cancelActiveSearch();
     activeLookupGeneration += 1;
+    if (pendingSubjectAreaPrompt) {
+      pendingSubjectAreaPrompt.resolve(null);
+      pendingSubjectAreaPrompt = null;
+    }
     if (overlay) {
       overlay.remove();
       overlay = null;
@@ -2429,8 +3437,45 @@
       toastNode.id = "ezcite-toast";
       document.body.appendChild(toastNode);
     }
-    toastNode.textContent = message;
-    toastNode.className = "visible";
+    toastNode.textContent = "";
+    const actions = Array.isArray(options?.actions)
+      ? options.actions
+      : options?.action
+        ? [options.action]
+        : [];
+    toastNode.className = `visible${actions.length || options?.dismissible ? " interactive" : ""}${options?.layout === "card" ? " card" : ""}`;
+    const messageNode = document.createElement("span");
+    messageNode.className = "ezcite-toast-message";
+    messageNode.textContent = message;
+    toastNode.appendChild(messageNode);
+    const actionsNode = actions.length ? document.createElement("div") : null;
+    if (actionsNode) {
+      actionsNode.className = "ezcite-toast-actions";
+    }
+    for (const action of actions) {
+      const actionButton = document.createElement("button");
+      actionButton.type = "button";
+      actionButton.className = `ezcite-toast-action${action.variant ? ` ${action.variant}` : ""}`;
+      actionButton.textContent = action.label;
+      actionButton.addEventListener("click", () => {
+        Promise.resolve(action.onClick?.(actionButton)).catch((error) => {
+          console.error("[OverCite content] toast action failed", error);
+        });
+      });
+      actionsNode.appendChild(actionButton);
+    }
+    if (actionsNode) {
+      toastNode.appendChild(actionsNode);
+    }
+    if (options?.dismissible) {
+      const dismissButton = document.createElement("button");
+      dismissButton.type = "button";
+      dismissButton.className = "ezcite-toast-dismiss";
+      dismissButton.setAttribute("aria-label", "Dismiss");
+      dismissButton.textContent = "×";
+      dismissButton.addEventListener("click", () => dismissToast(toastNode));
+      toastNode.appendChild(dismissButton);
+    }
     if (kind === "error") {
       toastNode.style.background = "rgba(146, 40, 22, 0.95)";
     } else if (kind === "notice") {
@@ -2452,6 +3497,88 @@
       }, 250);
     }, durationMs);
     toastNode._timeoutId = timeoutId;
+  }
+
+  function dismissToast(toastNode = document.querySelector("#ezcite-toast")) {
+    if (!toastNode) {
+      return;
+    }
+    window.clearTimeout(toastNode._timeoutId);
+    window.clearTimeout(toastNode._removeTimeoutId);
+    toastNode.classList.remove("visible");
+    toastNode._removeTimeoutId = window.setTimeout(() => toastNode.remove(), 250);
+  }
+
+  async function maybeShowAcknowledgmentReminder() {
+    try {
+      const reminder = await callRuntime({
+        type: MESSAGE_TYPES.CLAIM_ACKNOWLEDGMENT_REMINDER
+      });
+      if (!reminder?.show) {
+        return false;
+      }
+      toast(reminder.prompt, "notice", {
+        durationMs: 20000,
+        layout: "card",
+        actions: [
+          {
+            label: "Copy acknowledgment",
+            variant: "primary",
+            async onClick(button) {
+              const copied = await copyTextToClipboard(reminder.acknowledgmentText);
+              button.textContent = copied ? "Copied" : "Copy failed";
+              if (copied) {
+                window.setTimeout(() => dismissToast(), 900);
+              }
+            }
+          },
+          {
+            label: "Remind me later",
+            onClick() {
+              dismissToast();
+            }
+          },
+          {
+            label: "Never remind me",
+            variant: "quiet",
+            async onClick(button) {
+              const disabled = await callRuntime({
+                type: MESSAGE_TYPES.DISABLE_ACKNOWLEDGMENT_REMINDER
+              });
+              if (disabled) {
+                dismissToast();
+              } else {
+                button.textContent = "Could not save";
+              }
+            }
+          }
+        ]
+      });
+      return true;
+    } catch (error) {
+      console.warn("[OverCite content] acknowledgment reminder unavailable", error);
+      return false;
+    }
+  }
+
+  async function copyTextToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(String(text ?? ""));
+      return true;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = String(text ?? "");
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        return document.execCommand("copy");
+      } finally {
+        textarea.remove();
+      }
+    }
   }
 
   async function waitFor(check, timeoutMs) {
@@ -2481,7 +3608,7 @@
     }
   }
 
-  async function waitForManualFileSwitch(fileName, subtitle, shortcutText) {
+  async function waitForManualFileSwitch(fileName, subtitle, shortcutText, options = {}) {
     debugTrace("manual-switch:prompt", {
       fileName,
       activeNow: readActiveFileName()
@@ -2489,12 +3616,25 @@
     let continueHandler = null;
     const waitForContinue = new Promise((resolve) => {
       continueHandler = async () => {
-        toast(`Continuing with the current editor as ${fileName}.`);
-        debugTrace("manual-switch:continue", {
-          fileName,
-          activeNow: readActiveFileName()
-        });
-        resolve();
+        try {
+          const state = await getEditorStateWithRetry(2, 120, 1200);
+          if (!editorStateMatchesTarget(state, fileName, options.expectedDocument ?? null, { allowUnknownFileName: true }) ||
+              (typeof options.validate === "function" && !options.validate(state))) {
+            toast(`The current editor does not appear to be ${fileName}. Open it in Overleaf, then continue.`, "error", { durationMs: 4200 });
+            return;
+          }
+          toast(`Continuing with the current editor as ${fileName}.`);
+          debugTrace("manual-switch:continue", {
+            fileName,
+            activeNow: state.fileName || readActiveFileName()
+          });
+          resolve({
+            ...state,
+            manualConfirmationNavigationSerial: userFileNavigationSerial
+          });
+        } catch (error) {
+          toast(`Could not read the current editor: ${error.message}`, "error", { durationMs: 4200 });
+        }
       };
     });
 
@@ -2511,7 +3651,7 @@
       ]
     });
     applyOverlayTheme(insertionThemeMode ?? overlayState?.settings?.themeMode ?? "auto");
-    await waitForContinue;
+    return waitForContinue;
   }
 
   function createDiagnostics(subtitle, shortcutText) {
@@ -2552,13 +3692,6 @@
       return `${Math.round(value)} ms`;
     }
     return `${(value / 1000).toFixed(2)} s`;
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
   }
 
   function formatAuthors(authors, year) {

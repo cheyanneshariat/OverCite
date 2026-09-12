@@ -1,4 +1,6 @@
 <p align="center">
+
+Maintenance release: Classic is the default contextual engine; Context Beta requires an explicit selection and remains experimental. Explicit saved preferences are retained. Full literal titles in Simple Search now use Crossref title queries rather than author-name queries.
   <img src="docs/assets/overcite-logo-rounded.png" alt="OverCite logo" width="220">
 </p>
 
@@ -21,7 +23,7 @@
   <p>
     <img alt="Chrome users" src="https://img.shields.io/chrome-web-store/users/hmjojciemhnfkjnilakhehkgkhkplbdo?label=Chrome%20users&amp;color=34A853&amp;style=for-the-badge">
     <img alt="Firefox users" src="https://img.shields.io/amo/users/overcite?label=Firefox%20users&amp;color=FF7139&amp;style=for-the-badge">
-    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-105-007ACC?style=for-the-badge">
+    <img alt="VS Code installs" src="https://img.shields.io/badge/VS%20Code%20installs-125-007ACC?style=for-the-badge">
   </p>
 
   <h3>
@@ -49,6 +51,8 @@ This work made use of \texttt{OverCite} \citep{Shariat2026}, an in-editor citati
 
 > You can add the BibTeX by running OverCite on `\citep{Shariat2026}` or by copying it from [Acknowledge](#acknowledge).
 
+Chrome, Firefox, and VS Code can show this request after a successful insertion, at most once every 90 days. You can copy the text, snooze for 90 days, or disable reminders permanently. The schedule stays only in local extension state; OverCite does not report usage or manuscript activity.
+
 ## Get Started
 
 Install OverCite from the place where you write:
@@ -61,13 +65,12 @@ Install OverCite from the place where you write:
 | TeXstudio | [Local setup](texstudio/README.md) | Experimental local macro setup |
 | Safari | [Local build](safari/README.md) | Beta |
 
-Then:
+On the first citation lookup after installing or updating:
 
-1. Open the OverCite settings.
-2. Choose your subject area.
+1. Choose your subject area in the required OverCite prompt. Nothing is preselected.
    - Recommended for astrophysics: add a NASA ADS/SciX API token.
    - Get one from [NASA ADS](https://ui.adsabs.harvard.edu/) or [SciX](https://scixplorer.org/): sign in -> account settings -> API token -> copy into OverCite settings.
-3. Try a citation you know, such as one of your own papers or a colleague's paper.
+2. Try a citation you know, such as one of your own papers or a colleague's paper.
 
 ## How to Use
 
@@ -105,6 +108,10 @@ Try these:
 
 Note that you can set the `Default Search Mode` in settings.
 
+Browser v0.4.8 and VS Code v0.4.6 default unconfigured non-empty lookups to Simple Search and preserve explicit search preferences. Empty citations still use contextual search. Context Beta is experimental: common author-year names and ambiguous prose can return incorrect or missing papers, so review suggestions before insertion. The browser keeps one stable ranked list; settings changes and source edits invalidate old results. Optional citation counts do not block selection. Simple Search and Raw Query remain available, with Classic as an alternative contextual engine.
+
+New browser installs, including the Chrome, Firefox, and local Safari builds, start with `Simple search` for non-empty citation keys. Existing saved browser preferences are preserved, and an empty `\cite{}` still uses contextual search. The VS Code and TeXstudio defaults are unchanged.
+
 More rough keys:
 
 - `\citep{Higgs1964}`: Higgs mechanism
@@ -133,19 +140,20 @@ Current settings include:
 - Subject-area search coverage, primary source, and optional fallback sources. One database is usually enough; add 1-2 backups only for cross-field work.
 - Theme selection
 - Citation key style, including plain author-year keys like `Jumper2021`, underscore keys like `Jumper_2021`, colon keys like `Jumper:2021`, informative keys like `Jumper21_alphafold`, ADS bibcodes like `2025PASP..137i4201S`, or keeping the typed key
-- Bibliography entry order, including alphabetical insertion by citation key
+- Bibliography entry order. New entries are inserted alphabetically by citation key by default; Append remains available.
 - Browser return behavior, so OverCite can dismiss the popup immediately and switch back to the original `.tex` file after updating the `.bib` file
 - Default search mode, so OverCite can open in contextual mode, simple search mode, or raw query mode first
+- Contextual engine, with Context Beta and a Classic rollback
 - Project-specific bibliography file overrides (when a project contains multiple `.bib` files)
 
-For non-empty citation keys, OverCite also supports `Simple search` and `Raw query` fallbacks. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, while `Raw query` sends the typed token directly to the configured sources. In TeXstudio, these are available as optional imported macros.
+For non-empty citation keys, the browser popup exposes the two search modes not currently active. `Simple search` ignores local sentence context and reruns the lookup from the typed author/year hint alone, `Contextual` adds nearby sentence context, and `Raw query` sends the typed token directly to the configured sources. In TeXstudio, these are available as optional imported macros.
 
 ## Install
 
 For most users, installation is just:
 
 1. Install OverCite from [Chrome](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo), [Firefox](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search), or [VS Code](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode).
-2. Open OverCite settings and choose your subject area.
+2. Trigger OverCite once and choose your subject area. Nothing is preselected; closing the prompt cancels the lookup.
 3. Add a NASA ADS/SciX API token if you want ADS/SciX search.
 4. Get citing!
 
@@ -154,8 +162,8 @@ For most users, installation is just:
 
 1. Install OverCite from the [Chrome Web Store](https://chromewebstore.google.com/detail/overcite/hmjojciemhnfkjnilakhehkgkhkplbdo)
    - Click `Add to Chrome`
-2. Open the OverCite options page (`Details` --> `Extension options`)
-3. Choose your subject area
+2. Open an Overleaf project and trigger OverCite; choose your subject area in the one-time required prompt
+3. Open the OverCite options page (`Details` --> `Extension options`) if you want to change that choice
 4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save settings`
 5. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 6. Put the cursor inside the citation key and press `Alt+Shift+E`
@@ -168,8 +176,8 @@ For most users, installation is just:
 
 1. Install OverCite from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/overcite/?utm_source=addons.mozilla.org&utm_medium=referral&utm_content=search)
    - Click `Add to Firefox`
-2. Open the OverCite options page (`about:addons` -> `OverCite` -> `Preferences`)
-3. Choose your subject area
+2. Open an Overleaf project and trigger OverCite; choose your subject area in the one-time required prompt
+3. Open the OverCite options page (`about:addons` -> `OverCite` -> `Preferences`) if you want to change that choice
 4. Paste your NASA ADS or SciX API token* if you want ADS/SciX search, then click `Save settings`
 5. Open an Overleaf project and trigger OverCite inside `\cite{...}`
 6. Put the cursor inside the citation key and press `Alt+Shift+E`
@@ -183,7 +191,7 @@ For most users, installation is just:
 1. Install OverCite from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=CheyanneShariat.overcite-vscode)
    - Or open Extensions in VS Code and search for `OverCite`, then click `Install`
 2. Reload VS Code if needed
-3. Open a local LaTeX workspace with a `.tex` file and at least one `.bib` file
+3. Open a LaTeX workspace with a `.tex` file and at least one `.bib` file. Local folders and projects opened through Overleaf Workshop are supported.
 4. Open VS Code Settings:
    - Mac shortcut: `Command+,`
    - or open the Command Palette with `Command+Shift+P` and run `Preferences: Open Settings (UI)`
@@ -272,7 +280,8 @@ archivePrefix = {arXiv},
 ## Documentation
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Release notes: [v0.3.4](docs/releases/v0.3.4.md)
+- Context Beta notes: [v0.4.3 performance update](docs/releases/v0.4.3-beta.md), [v0.4.2 browser responsiveness](docs/releases/v0.4.2-beta.md), [v0.4.1 hardening update](docs/releases/v0.4.1-beta.md), and [v0.4.0 initial beta](docs/releases/v0.4.0-beta.md)
+- Previous release notes: [browser v0.3.12 / VS Code v0.3.7](docs/releases/v0.3.12.md)
 - TeXstudio setup: [texstudio/README.md](texstudio/README.md)
 - TeXstudio settings: [texstudio/SETTINGS.md](texstudio/SETTINGS.md)
 - Paper: [RNAAS article](https://iopscience.iop.org/article/10.3847/2515-5172/ae5dbc)

@@ -11,6 +11,24 @@ import {
   searchBroadCandidatesForSources,
   SOURCE_IDS
 } from "../src/core/sources.js";
+import { parseCitationKeyHint } from "../src/core/citation.js";
+
+test("Context Beta does not mistake punctuation-separated keys for literal titles", async () => {
+  for (const token of ["DBLP:journals/tois/TangCSL24", "llm-swe-survey", "Li-08-EntanglementSpectrum"]) {
+    const calls = [];
+    await searchBroadCandidatesForSources({
+      token, searchMode: "contextual", parsedKeyHint: parseCitationKeyHint(token),
+      sentenceText: "Quantum entanglement spectra characterize topological phases.",
+      contextText: "Quantum entanglement spectra characterize topological phases."
+    }, { contextualSearchEngine: "beta", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], async (input) => {
+      calls.push(new URL(String(input)));
+      return jsonResponse({ message: { items: [] } });
+    });
+    assert.ok(calls.length > 0 && calls.length <= 2);
+    assert.ok(calls.every(url => !url.searchParams.has("query.title")), token);
+    assert.match(calls[0].searchParams.get("query.bibliographic"), /entanglement/);
+  }
+});
 
 test("general source profile uses Crossref with a DOI-only DataCite fallback and no required token", () => {
   const plan = buildSourcePlan({ sourceProfile: "general", sourceApiTokens: {} });
@@ -719,6 +737,39 @@ test("arXiv author-year lookup starts with context-aware author-year query", asy
   assert.equal(candidates[0].title, "10,000 Resolved Triples from Gaia: Empirical Constraints on Triple Star Populations");
 });
 
+test("Context Beta searches a distinctive arXiv title without an over-constraining author clause", async () => {
+  const calls = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Schutt2017",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Schutt", year: 2017 },
+    sentenceText: "SchNet: A continuous-filter convolutional neural network for modeling quantum interactions is the target publication.",
+    citationPrefixText: "SchNet: A continuous-filter convolutional neural network for modeling quantum interactions",
+    contextText: "SchNet models quantum interactions."
+  }, {
+    sourceProfile: "chemistry",
+    sourceApiTokens: {},
+    contextualSearchEngine: "beta"
+  }, [SOURCE_IDS.ARXIV], async (url) => {
+    calls.push(new URL(url));
+    assert.equal(calls[0].searchParams.get("search_query"), 'ti:"SchNet: A continuous-filter convolutional neural network for modeling quantum interactions"');
+    return textResponse(`<?xml version="1.0" encoding="UTF-8"?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <entry>
+          <id>http://arxiv.org/abs/1706.08566v5</id>
+          <published>2017-06-26T00:00:00Z</published>
+          <title>SchNet: A continuous-filter convolutional neural network for modeling quantum interactions</title>
+          <summary>A neural network for quantum interactions.</summary>
+          <author><name>Kristof T. Schütt</name></author>
+          <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="stat.ML"/>
+        </entry>
+      </feed>`);
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(candidates[0].eprint, "1706.08566");
+});
+
 test("arXiv author-year lookup falls back to broad author-year when context is too narrow", async () => {
   const fetchCalls = [];
   const candidates = await searchBroadCandidatesForSources({
@@ -950,6 +1001,84 @@ test("PubMed source uses NCBI search and summary without requiring an API key", 
   assert.equal(candidates[0].year, 2021);
 });
 
+test("Context Beta starts with a clean PubMed author-year query and avoids unnecessary fallbacks", async () => {
+  const terms = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Kariko2005",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Kariko", year: 2005 },
+    sentenceText: "Modified nucleosides reduce innate immune recognition of RNA.",
+    contextText: "Messenger RNA vaccines use modified nucleosides."
+  }, {
+    sourceProfile: "life-sciences",
+    contextualSearchEngine: "beta",
+    sourceApiTokens: {}
+  }, [SOURCE_IDS.PUBMED], async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith("/esearch.fcgi")) {
+      const term = parsed.searchParams.get("term");
+      terms.push(term);
+      return jsonResponse({ esearchresult: { idlist: term === "Kariko[Author] AND 2005[dp]" ? ["16111635"] : [] } });
+    }
+    if (parsed.pathname.endsWith("/esummary.fcgi")) {
+      return jsonResponse({ result: { uids: ["16111635"], 16111635: {
+        uid: "16111635",
+        title: "Suppression of RNA recognition by Toll-like receptors",
+        pubdate: "2005 Aug",
+        fulljournalname: "Immunity",
+        authors: [{ name: "Kariko K" }],
+        articleids: [{ idtype: "doi", value: "10.1016/j.immuni.2005.06.008" }]
+      } } });
+    }
+    throw new Error(`Unexpected PubMed URL ${url}`);
+  });
+
+  assert.deepEqual(terms, ["Kariko[Author] AND 2005[dp]"]);
+  assert.equal(candidates[0].doi, "10.1016/j.immuni.2005.06.008");
+});
+
+test("Context Beta keeps bounded PubMed topic fallbacks when author-year has no records", async () => {
+  const queries = [];
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Example2020", searchMode: "contextual",
+    parsedKeyHint: { surname: "Example", year: 2020 },
+    sentenceText: "RNA vaccines reduce viral infection.",
+    citationPrefixText: "RNA vaccines reduce viral infection"
+  }, { contextualSearchEngine: "beta", sourceApiTokens: {} }, [SOURCE_IDS.PUBMED], async input => {
+    const url = new URL(String(input));
+    assert.ok(url.pathname.endsWith("/esearch.fcgi"));
+    assert.equal(url.searchParams.get("retmax"), "40");
+    queries.push(url.searchParams.get("term"));
+    return jsonResponse({ esearchresult: { idlist: [] } });
+  });
+  assert.deepEqual(candidates, []);
+  assert.equal(queries.length, 3);
+  assert.equal(queries[0], "Example[Author] AND 2020[dp]");
+  assert.match(queries[1], /\[Title\/Abstract\]/);
+  assert.match(queries[2], /vaccines/);
+});
+
+test("Context Beta adds a clean Crossref author-year fallback without changing Classic", async () => {
+  const betaUrls = [];
+  const classicUrls = [];
+  const context = {
+    token: "Kariko2005",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Kariko", year: 2005 },
+    sentenceText: "Modified nucleosides reduce innate immune recognition of RNA.",
+    contextText: "Messenger RNA vaccines use modified nucleosides."
+  };
+  const fetchFor = (seen) => async (url) => {
+    seen.push(new URL(url));
+    return jsonResponse({ message: { items: [] } });
+  };
+  await searchBroadCandidatesForSources(context, { sourceProfile: "chemistry", contextualSearchEngine: "beta", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], fetchFor(betaUrls));
+  await searchBroadCandidatesForSources(context, { sourceProfile: "chemistry", contextualSearchEngine: "classic", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], fetchFor(classicUrls));
+  const clean = (url) => url.searchParams.get("query.author") === "Kariko" && url.searchParams.get("filter")?.includes("2005-01-01") && !url.searchParams.has("query.bibliographic") && !url.searchParams.has("query.title");
+  assert.ok(betaUrls.some(clean));
+  assert.ok(!classicUrls.some(clean));
+});
+
 test("PubMed source keeps old no-author records and supports direct PMID lookup", async () => {
   const fetchCalls = [];
   const candidates = await searchBroadCandidatesForSources({
@@ -1044,6 +1173,21 @@ test("buildBroadSearchQuery combines citation hints with local context", () => {
   assert.equal(query, "Shariat 2025 resolved triples gaia provide empirical constraints");
 });
 
+test("contextual broad queries use citation proximity without LaTeX noise", () => {
+  const query = buildBroadSearchQuery({
+    token: "Strader2019",
+    searchMode: "contextual",
+    sentenceText: "09~{\\rm M_\\odot}$ .",
+    citationPrefixText: "Redback pulsars are massive at $1.78\\pm0.09~{\\rm M_\\odot}$ % ignored comment",
+    citationSuffixText: ". See \\citep{Other2020} and \\ref{sec:test}.",
+    contextText: "Redback pulsar demographics.",
+    parsedKeyHint: { surname: "Strader", year: 2019 }
+  });
+
+  assert.match(query, /Strader 2019 redback pulsars massive/);
+  assert.doesNotMatch(query, /odot|\brm\b|Other2020|ignored|comment|sec|test/);
+});
+
 test("buildBroadSearchQuery uses a title-like sentence lead in contextual mode", () => {
   const query = buildBroadSearchQuery({
     token: "Press1974",
@@ -1100,7 +1244,7 @@ test("duplicate broad records keep arXiv identity for preprints with registry-ye
           {
             DOI: "10.65215/2q58a426",
             title: ["Attention Is All You Need"],
-            issued: { "date-parts": [[2025]] },
+            issued: { "date-parts": [[2018]] },
             "is-referenced-by-count": 6530,
             author: [
               { family: "Vaswani", given: "Ashish" },
@@ -1208,6 +1352,312 @@ test("simple arXiv rate limits do not use the internal Crossref metadata fallbac
   });
 
   assert.deepEqual(candidates, []);
+});
+
+test("contextual arXiv rate limits fail fast without repeating Crossref", async () => {
+  const calls = [];
+  await assert.rejects(() => searchBroadCandidatesForSources({
+    token: "Vaswani2017",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Vaswani", year: 2017 },
+    sentenceText: "Attention Is All You Need introduced the Transformer architecture.",
+    contextText: "Attention Is All You Need introduced the Transformer architecture."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.ARXIV], async (url) => {
+    calls.push(String(url));
+    assert.ok(String(url).startsWith("https://export.arxiv.org/api/query"));
+    return statusResponse(429);
+  }), /arXiv is rate limiting searches/);
+
+  assert.equal(calls.length, 1);
+});
+
+test("contextual Crossref returns an exact compatible title without waiting for slower sibling queries", async () => {
+  const started = Date.now();
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Vaswani2017",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Vaswani", year: 2017 },
+    sentenceText: "Attention Is All You Need is the target publication.",
+    contextText: "Attention Is All You Need is the target publication."
+  }, { sourceProfile: "custom", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], async (input) => {
+    const url = new URL(String(input));
+    if (url.searchParams.has("query.title")) {
+      return jsonResponse({ message: { items: [{
+        DOI: "10.5555/attention",
+        title: ["Attention Is All You Need"],
+        author: [{ family: "Vaswani", given: "Ashish" }],
+        issued: { "date-parts": [[2017]] },
+        type: "proceedings-article"
+      }] } });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return jsonResponse({ message: { items: [] } });
+  });
+
+  assert.equal(candidates[0].title, "Attention Is All You Need");
+  assert.ok(Date.now() - started < 120);
+});
+
+test("Context Beta serializes and paces its runtime Crossref query ladder", async () => {
+  let active = 0;
+  let peak = 0;
+  let requestCount = 0;
+  const starts = [];
+  const fetchImpl = async () => {
+    active += 1;
+    peak = Math.max(peak, active);
+    requestCount += 1;
+    starts.push(Date.now());
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    active -= 1;
+    return {
+      ok: true,
+      headers: {
+        get(name) {
+          if (name === "x-rate-limit-limit") return "1";
+          if (name === "x-rate-limit-interval") return "1s";
+          return null;
+        }
+      },
+      async json() {
+        return { message: { items: [] } };
+      }
+    };
+  };
+  fetchImpl[Symbol.for("overcite.runtimeFetch")] = true;
+  const makeContext = (surname, year) => ({
+    token: `${surname}${year}`,
+    searchMode: "contextual",
+    parsedKeyHint: { surname, year },
+    sentenceText: `${surname} measurements constrain the target publication in this search.`,
+    contextText: `${surname} measurements constrain the target publication in this search.`
+  });
+
+  const results = await searchBroadCandidatesForSources(
+    makeContext("Alpha", 2020),
+    { sourceProfile: "custom", contextualSearchEngine: "beta", sourceApiTokens: {} },
+    [SOURCE_IDS.CROSSREF],
+    fetchImpl
+  );
+
+  assert.deepEqual(results, []);
+  assert.ok(requestCount >= 2);
+  assert.equal(peak, 1);
+  assert.ok(starts.slice(1).every((start, index) => start - starts[index] >= 1000));
+});
+
+test("Context Beta keeps simultaneous runtime Crossref searches provider-scoped", async () => {
+  let active = 0;
+  let peak = 0;
+  const starts = [];
+  const fetchImpl = async (input) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    starts.push(Date.now());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active -= 1;
+    const url = new URL(String(input));
+    const title = url.searchParams.get("query.title") || "Provider result";
+    const doi = title.startsWith("First") ? "10.5555/one" : "10.5555/two";
+    return {
+      ok: true,
+      headers: {
+        get(name) {
+          if (name === "x-rate-limit-limit") return "1";
+          if (name === "x-rate-limit-interval") return "1s";
+          return null;
+        }
+      },
+      async json() {
+        return { message: {
+          DOI: doi,
+          title: [title],
+          author: [{ family: "Example", given: "A" }],
+          issued: { "date-parts": [[2024]] },
+          type: "journal-article"
+        } };
+      }
+    };
+  };
+  fetchImpl[Symbol.for("overcite.runtimeFetch")] = true;
+  const settings = { sourceProfile: "custom", contextualSearchEngine: "beta", sourceApiTokens: {} };
+  const makeContext = (title) => ({
+    token: "Example2024",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Example", year: 2024 },
+    sentenceText: `${title} is the target publication.`,
+    contextText: `${title} is the target publication.`
+  });
+
+  const results = await Promise.all([
+    searchBroadCandidatesForSources(makeContext("First Exact Provider Title"), settings, [SOURCE_IDS.CROSSREF], fetchImpl),
+    searchBroadCandidatesForSources(makeContext("Second Exact Provider Title"), settings, [SOURCE_IDS.CROSSREF], fetchImpl)
+  ]);
+
+  assert.deepEqual(results, [[], []]);
+  assert.equal(peak, 1);
+  assert.ok(starts[1] - starts[0] >= 1000);
+});
+
+test("serial Crossref scheduling preserves Classic and Simple result order", async () => {
+  const runOrdered = async (prefix, citationContext, settings) => {
+    const calls = [];
+    const candidates = await searchBroadCandidatesForSources(citationContext, settings, [SOURCE_IDS.CROSSREF], async (input) => {
+      const index = calls.push(new URL(String(input))) - 1;
+      return jsonResponse({ message: { items: [{
+        DOI: `10.5555/${prefix.toLowerCase()}-${index}`,
+        title: [`${prefix} result ${index}`],
+        author: [{ family: `${prefix}Author${index}`, given: "Test" }],
+        issued: { "date-parts": [[2020]] },
+        type: "journal-article"
+      }] } });
+    });
+    return { calls, candidates };
+  };
+
+  const classic = await runOrdered("Classic", {
+    token: "Doe2020",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Doe", year: 2020 },
+    sentenceText: "Models explain the measured signal in this target publication.",
+    contextText: "Models explain the measured signal in this target publication."
+  }, { sourceProfile: "custom", contextualSearchEngine: "classic", sourceApiTokens: {} });
+  const simple = await runOrdered("Simple", {
+    token: "A Simple Ordered Search Title",
+    searchMode: "simple"
+  }, { sourceProfile: "custom", sourceApiTokens: {} });
+
+  assert.ok(classic.calls.length >= 2);
+  assert.deepEqual(classic.candidates.map((candidate) => candidate.title), classic.calls.map((_, index) => `Classic result ${index}`));
+  assert.equal(simple.calls.length, 1);
+  assert.deepEqual(simple.candidates.map((candidate) => candidate.title), ["Simple result 0"]);
+});
+
+test("Context Beta suppresses unrelated Crossref records for a distinctive literal title", async () => {
+  const citationContext = {
+    token: "Schutt2017",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Schutt", year: 2017 },
+    sentenceText: "SchNet A continuous-filter convolutional neural network for modeling quantum interactions is the target publication.",
+    contextText: "SchNet models quantum interactions."
+  };
+  const fetchImpl = async () => jsonResponse({ message: { items: [{
+    DOI: "10.23919/epe17ecceeurope.2017.8099183",
+    title: ["Design and analysis of complex vector current regulators for modular multilevel converters"],
+    author: [{ family: "Schutt", given: "Michael" }],
+    issued: { "date-parts": [[2017]] },
+    type: "proceedings-article"
+  }] } });
+
+  const betaCandidates = await searchBroadCandidatesForSources(
+    citationContext,
+    { sourceProfile: "custom", sourceApiTokens: {}, contextualSearchEngine: "beta" },
+    [SOURCE_IDS.CROSSREF],
+    fetchImpl
+  );
+  const classicCandidates = await searchBroadCandidatesForSources(
+    citationContext,
+    { sourceProfile: "custom", sourceApiTokens: {}, contextualSearchEngine: "classic" },
+    [SOURCE_IDS.CROSSREF],
+    fetchImpl
+  );
+
+  assert.deepEqual(betaCandidates, []);
+  assert.equal(classicCandidates.length, 1);
+});
+
+test("Context Beta uses bounded scientific evidence rather than prose-as-title queries", async () => {
+  const calls = [];
+  await searchBroadCandidatesForSources({
+    token: "Example1990sign",
+    searchMode: "contextual",
+    parsedKeyHint: { surname: "Example", year: 1990, suffix: "sign" },
+    sentenceText: "With a large Hilbert space, the calculation suffers a sign problem \\cite{Other2020}.",
+    citationPrefixText: "The calculation suffers a sign problem",
+    contextText: "\\label{sec:test} This is a study of many electron systems."
+  }, { contextualSearchEngine: "beta" }, [SOURCE_IDS.CROSSREF], async input => {
+    calls.push(new URL(String(input)));
+    return jsonResponse({ message: { items: [] } });
+  });
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(url => !url.searchParams.has("query.title")));
+  assert.ok(calls.every(url => url.searchParams.get("rows") === "40"));
+  const query = calls[0].searchParams.get("query.bibliographic");
+  assert.match(query, /\bsign\b/);
+  assert.match(query, /\bproblem\b/);
+  assert.doesNotMatch(query, /Other2020|cite|label|sec:test/i);
+  assert.equal(calls[0].searchParams.get("query.author"), "Example");
+  assert.equal(calls[0].searchParams.get("filter"), "from-pub-date:1988-01-01,until-pub-date:1992-12-31");
+  assert.equal(calls[1].searchParams.get("query.bibliographic"), null);
+  assert.match(calls[1].searchParams.get("filter"), /1990/);
+});
+
+test("Context Beta spaces compound author hints only in its existing identity fallback", async () => {
+  for (const [surname, fallback] of [["ExampleOther", "Example Other"], ["McDonald", "McDonald"], ["ATLAS", "ATLAS"]]) {
+    const calls = [];
+    await searchBroadCandidatesForSources({
+      token: `${surname}2022`, searchMode: "contextual",
+      parsedKeyHint: { surname, year: 2022 }, sentenceText: "We investigate causal policy effects."
+    }, { contextualSearchEngine: "beta" }, [SOURCE_IDS.CROSSREF], async input => {
+      calls.push(new URL(String(input))); return jsonResponse({ message: { items: [] } });
+    });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].searchParams.get("query.author"), surname);
+    assert.equal(calls[1].searchParams.get("query.author"), fallback);
+    assert.equal(calls[1].searchParams.get("query.bibliographic"), null);
+    assert.equal(calls[1].searchParams.get("filter"), "from-pub-date:2022-01-01,until-pub-date:2022-12-31");
+  }
+  for (const [searchMode, engine] of [["simple", "beta"], ["direct", "beta"], ["contextual", "classic"]]) {
+    const calls = [];
+    await searchBroadCandidatesForSources({
+      token: "ExampleOther2022", searchMode,
+      parsedKeyHint: { surname: "ExampleOther", year: 2022 }, sentenceText: "We investigate causal policy effects."
+    }, { contextualSearchEngine: engine }, [SOURCE_IDS.CROSSREF], async input => {
+      calls.push(new URL(String(input))); return jsonResponse({ message: { items: [] } });
+    });
+    assert.ok(calls.every(url => url.searchParams.get("query.author") !== "Example Other"));
+  }
+});
+
+test("Context Beta queries the containing claim before generic citation-window tails", async () => {
+  const calls = [];
+  await searchBroadCandidatesForSources({
+    token: "Example2020", searchMode: "contextual",
+    parsedKeyHint: { surname: "Example", year: 2020 },
+    sentenceText: "A smart contract is self-executing software, with terms of agreement directly written into code lines.",
+    citationPrefixText: "terms of agreement directly written into code lines",
+    citationSuffixText: "Beyond mere implementation, other claims follow."
+  }, { contextualSearchEngine: "beta" }, [SOURCE_IDS.CROSSREF], async input => {
+    calls.push(new URL(String(input)));
+    return jsonResponse({ message: { items: [] } });
+  });
+  assert.match(calls[0].searchParams.get("query.bibliographic"), /smart contract/);
+  assert.doesNotMatch(calls[0].searchParams.get("query.bibliographic"), /beyond mere/);
+});
+
+test("Context Beta never drops author-year records merely because ordinary prose has a title-shaped lead", async () => {
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Example1956", searchMode: "contextual", parsedKeyHint: {surname:"Example", year:1956},
+    sentenceText: "Parity violation in nuclear weak interactions was first suggested in this work."
+  }, {contextualSearchEngine:"beta"}, [SOURCE_IDS.CROSSREF], async () => jsonResponse({message:{items:[{
+    DOI:"10.5555/parity", title:["Question of parity conservation"], author:[{family:"Example"}],
+    issued:{"date-parts":[[1956]]}, type:"journal-article"
+  }]}}));
+  assert.equal(candidates.length, 1);
+});
+
+test("Context Beta recognizes embedded arXiv identifiers but avoids impossible historical date searches", async () => {
+  for (const token of ["Example1711.04800:2017abc", "abs-2410-05229"]) {
+    const calls=[];
+    await searchBroadCandidatesForSources({token:"",typedToken:token,searchMode:"contextual",sentenceText:"A scientific context for this paper."},
+      {contextualSearchEngine:"beta"}, [SOURCE_IDS.ARXIV], async input => {
+        calls.push(new URL(String(input))); return textResponse('<feed xmlns="http://www.w3.org/2005/Atom"></feed>');
+      });
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].searchParams.get("id_list"),token.startsWith("abs")?"2410.05229":"1711.04800");
+  }
+  await searchBroadCandidatesForSources({token:"Example1956",searchMode:"contextual",parsedKeyHint:{surname:"Example",year:1956},sentenceText:"Parity conservation."},
+    {contextualSearchEngine:"beta"}, [SOURCE_IDS.ARXIV], async()=>{throw new Error("Impossible historical arXiv query");});
 });
 
 test("fielded raw ADS queries skip broad providers", async () => {
@@ -1425,6 +1875,10 @@ test("exportCandidateBibtex creates a usable BibTeX entry for broad candidates",
     authors: ["Doe, Jane", "Roe, Richard"],
     year: 2024,
     journal: "Journal of Tests",
+    volume: "12",
+    issue: "3",
+    pages: "45-61",
+    articleNumber: "e123",
     doi: "10.1234/example",
     url: "https://example.test/paper",
     type: "journal-article"
@@ -1433,6 +1887,47 @@ test("exportCandidateBibtex creates a usable BibTeX entry for broad candidates",
   assert.match(bibtex, /^@article\{Doe2024,/);
   assert.match(bibtex, /author = \{Doe, Jane and Roe, Richard\}/);
   assert.match(bibtex, /doi = \{10.1234\/example\}/);
+  assert.match(bibtex, /volume = \{12\}/);
+  assert.match(bibtex, /number = \{3\}/);
+  assert.match(bibtex, /pages = \{45-61\}/);
+  assert.match(bibtex, /eid = \{e123\}/);
+});
+
+test("Crossref lookup retains publication details through normalization and export", async () => {
+  const candidates = await searchBroadCandidatesForSources({
+    token: "Example2024", searchMode: "contextual", parsedKeyHint: { surname: "Example", year: 2024 },
+    sentenceText: "Quantum spectra measure entanglement."
+  }, { contextualSearchEngine: "beta", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], async input => {
+    const url = new URL(String(input));
+    for (const field of ["volume", "issue", "page", "article-number"]) assert.ok(url.searchParams.get("select").split(",").includes(field));
+    return jsonResponse({ message: { items: [{
+      DOI: "10.5555/complete", title: ["Quantum Spectra"], author: [{ family: "Example", given: "A" }],
+      issued: { "date-parts": [[2024]] }, "container-title": ["Journal of Tests"], type: "journal-article",
+      volume: "42", issue: "6", page: "100-120", "article-number": "e42"
+    }] } });
+  });
+  assert.equal(candidates.length, 1);
+  const bibtex = exportCandidateBibtex(candidates[0]);
+  assert.match(bibtex, /volume = \{42\}/);
+  assert.match(bibtex, /number = \{6\}/);
+  assert.match(bibtex, /pages = \{100-120\}/);
+  assert.match(bibtex, /eid = \{e42\}/);
+});
+
+test("Context Beta query budget prioritizes local science over academic narration", async () => {
+  const calls = [];
+  const sentence = "They are highly valuable for many applications such as event prediction and recommendation systems.";
+  await searchBroadCandidatesForSources({
+    token: "ref-topic-key", searchMode: "contextual", parsedKeyHint: null,
+    sentenceText: sentence, contextText: "Temporal knowledge graphs organize dynamic knowledge. " + sentence,
+    citationPrefixText: "They are highly valuable for many applications such as event prediction"
+  }, { contextualSearchEngine: "beta", sourceApiTokens: {} }, [SOURCE_IDS.CROSSREF], async input => {
+    calls.push(new URL(String(input)));
+    return jsonResponse({ message: { items: [] } });
+  });
+  const query = calls[0].searchParams.get("query.bibliographic");
+  assert.match(query, /event prediction/);
+  assert.doesNotMatch(query, /\b(they|highly|valuable|many|such)\b/);
 });
 
 test("exportCandidateBibtex creates misc entries for datasets and software", () => {

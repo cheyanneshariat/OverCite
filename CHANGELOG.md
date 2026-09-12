@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+### Browser 0.4.8 / VS Code 0.4.6 maintenance candidate
+
+- Default unconfigured non-empty lookups to Simple Search; preserve explicit preferences. Empty citations remain contextual.
+- Label Context Beta experimental; common author-year names and ambiguous prose can return incorrect or missing papers.
+- Keep result cards stable, make citation counts non-blocking, and reject stale results after source or settings changes.
+- Improve bibliography insertion safeguards and preserve available volume, issue, and page metadata.
+- Correct citation-key/title interpretation, broad-source year/collaboration scoring, and VS Code initial keyboard selection.
+- Safari 0.4.8 and TeXstudio 0.4.6 remain preview builds pending native-platform release checks.
+
+## 0.3.12 (Chrome and Firefox) / 0.3.7 (VS Code)
+
+- Restore citation-proximal contextual retrieval when decimal values, abbreviations, or LaTeX sentence structure confuse sentence extraction.
+- Strip math, comments, references, and neighboring citation commands from contextual search evidence while keeping Simple search unchanged.
+- Start contextual ADS/SciX lookup with broad exact-author recall plus focused context, then continue through the time-bounded query ladder instead of stopping on an early result count or fixed query count.
+- Require author identity, year, contextual support, and a clear ranking margin before progressively returning a contextual result; strengthen wrong-author and wrong-year penalties.
+- Bound VS Code ADS/SciX requests and the overall query ladder so a stalled provider cannot leave contextual search hanging indefinitely.
+- Add common BibLaTeX citation commands to browser and VS Code parsing.
+- Add a frozen adversarial accuracy corpus, late-correct-result coverage, and a browser/VS Code parity gate for contextual query generation and ranking.
+- Keep Safari and TeXstudio unchanged in this release.
+
+## 0.3.11 (Chrome and Firefox) / 0.3.6 (VS Code)
+
+- Require a one-time subject-area choice before the first citation lookup after this update; no field is preselected or silently assumed.
+- Apply the choice consistently across Chrome, Firefox, and VS Code, and cancel the lookup without saving when the prompt is dismissed.
+- Preserve explicitly configured VS Code subject or custom-routing settings; browser users receive the one-time prompt because older browser releases did not record whether Astrophysics was chosen or inherited.
+- Request only the optional browser permissions needed by the selected literature sources and keep the choice editable in settings.
+- Open the browser or VS Code settings directly when an ADS-only subject choice has no API token, and replace the ineffective missing-token `Try again` action with `Open settings`.
+- Explain which subject presets use API keys and add expandable, direct setup links for ADS/SciX and NCBI in browser settings; add the same official links to VS Code setting descriptions.
+- Replace the one-time acknowledgment notice with a compact, local-only reminder shown at most once every 90 days after a successful insertion, with copy, snooze, and permanent opt-out actions.
+- Keep TeXstudio and Safari unchanged in this release.
+
+## 0.3.10 (Chrome and Firefox) / 0.3.5 (VS Code)
+
+- Show a dismissible acknowledgment reminder once, after the first successful citation insertion following this update, for both new and existing users.
+- Add a one-click action that copies the preferred `Shariat2026` acknowledgment text.
+- Store only a versioned local shown-receipt, with no usage telemetry; storage or clipboard failures never affect citation insertion.
+- Keep Safari and TeXstudio unchanged in this release.
+- VS Code also includes the virtual-workspace fix below.
+
+- VS Code: fixed indefinite citation-resolution hangs in virtual projects opened through Overleaf Workshop by using its supported filesystem API instead of unsupported workspace glob search.
+- VS Code: added bounded virtual-workspace discovery, an open-`.bib` fallback, URI-safe bibliography handling, and end-to-end virtual-filesystem coverage while retaining the local-folder fast path.
+
+## 0.3.8
+
+- Restored automatic file switching for Overleaf's current single persistent CodeMirror editor, whose selected file tabs do not expose `aria-controls`.
+- Kept delayed-transition and wrong-editor protections by requiring the editor document or identity to change after an automatic file switch and rechecking the expected document before every write.
+- New browser installs without a saved or synced preference now return to the original source file after bibliography insertion by default; existing saved preferences remain unchanged.
+
+## 0.3.7
+
+- Bounded contextual ADS/SciX search with progressive high-confidence returns, request/body cancellation, an overall search budget, and truthful timeout messages.
+- Fixed delayed Overleaf file switches by pairing each CodeMirror editor with its controlling filename, requiring verified target identity for automatic switching, and bounding file and source-recovery candidates under shared deadlines.
+- Bound manual source and bibliography confirmation to the confirmed editor identity and user-navigation state, and made all source/bibliography writes idempotent when Overleaf applies a write before its response arrives.
+- New browser installs now start in Simple search for non-empty citation keys. Existing saved browser preferences are preserved, and empty `\cite{}` lookups remain contextual.
+- Added packaged Chrome and Firefox regressions for delayed transitions, missing filenames, wrong blank editors, manual-navigation races, collision-key late acknowledgments, empty-token mode selection, and the prior large-DOM pointer slowdown.
+
+## 0.3.6
+
+- Fixed severe Overleaf slowdowns by keeping file-navigation tracking dormant outside citation insertion and avoiding broad ancestor text scans for PDF, editor, and grammar-tool clicks.
+- Added a packaged-browser regression that verifies unrelated clicks do not inspect large DOM subtrees.
+
+## 0.3.5
+
+- Fixed active-editor detection for Overleaf's current multi-panel UI, where the sidebar and source editor can both expose selected tabs.
+- Prevented stale or hidden CodeMirror editors from redirecting citation insertion to unrelated files such as `old_text.tex`.
+- Replaced partial filename checks with exact path-aware matching before source or bibliography writes.
+- Raised the Firefox minimum version to 142, matching the manifest's data-collection permission metadata.
+- Replaced dynamic result-card HTML with explicit DOM construction so the Firefox package lints without warnings.
+- Added end-to-end Chrome coverage for `Rice2021`, bibliography insertion, stale-editor isolation, and both return-to-source settings.
+
 ## 0.3.4
 
 - Fixed a browser runtime error that could show `preferredCitationCount is not defined` when duplicate search results were merged across sources.

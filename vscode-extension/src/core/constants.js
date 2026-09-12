@@ -19,8 +19,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   themeMode: "auto",
   returnToSourceAfterInsert: false,
   citationKeyMode: "authoryear",
-  bibliographyInsertMode: "append",
-  defaultSearchMode: "contextual"
+  bibliographyInsertMode: "alphabetical",
+  defaultSearchMode: "simple",
+  contextualSearchEngine: "classic"
 });
 
 export const TITLE_STOPWORDS = new Set([
@@ -74,6 +75,7 @@ export const CONTEXT_STOPWORDS = new Set([
   "paper",
   "people",
   "recent",
+  "recently",
   "result",
   "results",
   "show",

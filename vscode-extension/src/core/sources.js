@@ -49,8 +49,11 @@ const ROUTABLE_SOURCES = new Set([
 
 const ARXIV_CACHE_TTL_MS = 10 * 60 * 1000;
 const ARXIV_MIN_REQUEST_SPACING_MS = 3200;
+const CROSSREF_MIN_REQUEST_SPACING_MS = 210;
+const RUNTIME_FETCH_MARKER = Symbol.for("overcite.runtimeFetch");
 const arxivTextCache = new Map();
 let lastArxivRequestAt = 0;
+const crossrefRuntimeScheduler = createRateLimitedScheduler(CROSSREF_MIN_REQUEST_SPACING_MS);
 
 const SOURCE_ROUTING_PRESETS = Object.freeze({
   "ads-only": {
@@ -327,9 +330,9 @@ export function buildBroadSearchQuery(citationContext = {}) {
   }
 
   if (citationContext?.searchMode !== "simple") {
-    parts.push(...keywordList(citationContext?.sentenceText ?? "").slice(0, 7));
+    parts.push(...citationProximityKeywords(citationContext).slice(0, 7));
     if (parts.length < 6) {
-      parts.push(...keywordList(citationContext?.contextText ?? "").slice(0, 6 - parts.length));
+      parts.push(...contextKeywordList(citationContext?.contextText ?? "").slice(0, 6 - parts.length));
     }
   }
 
@@ -341,13 +344,63 @@ export function buildBroadSearchQuery(citationContext = {}) {
 
 function buildContextOnlySearchQuery(citationContext = {}) {
   const parts = [
-    ...keywordList(citationContext?.sentenceText ?? "").slice(0, 8),
-    ...keywordList(citationContext?.contextText ?? "").slice(0, 8)
+    ...citationProximityKeywords(citationContext).slice(0, 8),
+    ...contextKeywordList(citationContext?.contextText ?? "").slice(0, 8)
   ];
   return uniqueStrings(parts).slice(0, 9).join(" ").trim();
 }
 
-function buildArxivSearchQuery(citationContext = {}) {
+// Query evidence is not a literal title. Prefer terms next to the citation,
+// remove TeX scaffolding, and keep the provider query short enough to be useful.
+function contextualEvidenceTerms(context = {}) {
+  const clean = (value) => String(value ?? "")
+    .replace(/\\IEEEPARstart\{([^{}]*)\}\{([^{}]*)\}/g, "$1$2")
+    .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+    .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*|ref|eqref|pageref|label)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+    .replace(/\$[^$]*\$/g, " ")
+    .replace(/\\[a-zA-Z]+\*?/g, " ");
+  const generic = new Set("is was are were when because etc gains gain great interest can could would should also such many more most few recent recently years study studies work works known mainly help latter used use using shows shown show proposed presents provides paper publication target suggest suggested however thus hence include includes including involves have has been being their these those where which through within between before after first second compared comparison approach approaches method methods result results technique techniques theory theoretically experimentally generally usually relevant research context sentence following see potentiates determine determines extended remain whether factor factors perhaps dramatically found even commonly suffer".split(" "));
+  // Function words and general academic narration must not consume the
+  // provider's small term budget ahead of the actual scientific subject.
+  const narration = new Set("a an the not only but they them we our you your he she it its there here about into onto out up down very highly much less than then now still just both either neither each every all any some one two three four five six seven eight nine ten new old true false other different various several another again along among across around toward towards without while since although despite therefore otherwise moreover furthermore namely e.g i.e become becomes became becoming emerge emerged emerging lead leads leading introduce introduced introducing aim aims aimed aiming establish established establishing apply applied applying enable enabled enabling allow allowed allowing improve improved improving develop developed developing stimulate stimulated stimulating rapid rapidly success successful successfully important importance significant significance considerable tremendous great rich wide range plethora myriad number people million billion role part aspects aspect capabilities capability concerns concern valuable originally stated intensively studied common commonly generally general practical fundamental perhaps increasingly growing recognition markedly adapted figure table tikzpicture book arxiv".split(" "));
+  const terms = (value) => contextKeywordList(clean(value)).filter((term) => !generic.has(term) && !narration.has(term) && !/^\d+$/.test(term));
+  const prefix = terms(context.citationPrefixText).slice(-6);
+  const suffix = terms(context.citationSuffixText).slice(0, 3);
+  const sentence = terms(context.sentenceText);
+  const hint = context.parsedKeyHint;
+  const keyWords = String(hint?.suffix ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").split(/[_:\-\s]+/)
+    .flatMap(terms).filter((term) => !/^\d+$/.test(term));
+  // The containing sentence is a coherent claim. A raw prefix/suffix window
+  // can instead land in the preceding claim or in generic trailing prose.
+  // The last few words before the citation identify its local clause (for
+  // example one item in a long list); fill the rest from coherent prose.
+  return uniqueStrings([...keyWords.slice(0, 2), ...prefix.slice(-4), ...sentence, ...suffix, ...terms(context.contextText)])
+    .filter((term) => !hint?.surname || term !== normalizeText(hint.surname))
+    .slice(0, 8);
+}
+
+function explicitContextTitle(context = {}) {
+  const token = String(context.token ?? "").trim();
+  // Punctuation-separated bibliography keys are not literal paper titles.
+  // Require actual word boundaries in user-entered title text; do not turn
+  // DBLP paths, slug keys, or author-number-topic keys into title queries.
+  if (token.split(/\s+/).length >= 3 && isTitleLikeToken(token, context.parsedKeyHint)) return token;
+  const sentence = String(context.sentenceText ?? "").trim();
+  const quoted = sentence.match(/(?:\b(?:paper|article|work)\s+(?:titled|entitled|called)|\btitle\s*:)\s*[“"]([^“”"\n]{12,220})[”"]/i);
+  if (quoted && isTitleLikeToken(quoted[1])) return quoted[1];
+  // Retain deliberate title fixtures/user input without classifying every
+  // three-word subject preceding "is" or "was" as a publication title.
+  return sentence.match(/^(.{12,220}?)\s+is\s+(?:the\s+)?(?:target\s+)?(?:publication|paper)\b/i)?.[1]?.trim() ?? "";
+}
+
+export function contextualArxivId(context = {}) {
+  const token = String(context.token || context.typedToken || "").trim();
+  return token.match(/(?:^|[A-Za-z:_-])(\d{2}(?:0[1-9]|1[0-2])\.\d{4,5})(?:v\d+)?(?=$|[:_-])/i)?.[1]
+    ?? token.match(/^abs[-:](\d{2}(?:0[1-9]|1[0-2]))[-:](\d{4,5})(?:v\d+)?$/i)?.slice(1).join(".")
+    ?? "";
+}
+
+function buildArxivSearchQuery(citationContext = {}, settings = {}) {
   const hint = citationContext?.parsedKeyHint;
   const token = String(citationContext?.token ?? "").trim();
   if (citationContext?.searchMode === "direct" && token) {
@@ -358,13 +411,32 @@ function buildArxivSearchQuery(citationContext = {}) {
     return `ti:${quoteArxivTerm(token)}`;
   }
 
+  const distinctiveIdentifier = distinctiveContextIdentifier(citationContext);
+  if (citationContext?.searchMode === "contextual" && distinctiveIdentifier) {
+    const identifierClauses = [];
+    if (hint?.surname) {
+      identifierClauses.push(`au:${quoteArxivTerm(hint.surname)}`);
+    }
+    identifierClauses.push(`all:${quoteArxivTerm(distinctiveIdentifier)}`);
+    if (hint?.year) {
+      identifierClauses.push(`submittedDate:[${hint.year}01010000 TO ${hint.year}12312359]`);
+    }
+    return identifierClauses.join(" AND ");
+  }
+
   const clauses = [];
   if (hint?.surname && !isGenericAuthorFamily(hint.surname)) {
     clauses.push(`au:${quoteArxivTerm(hint.surname)}`);
   }
 
-  const titleClause = buildArxivContextTitleClause(citationContext);
+  const literalTitle = isContextBeta(citationContext, settings) ? explicitContextTitle(citationContext) : "";
+  const titleClause = isContextBeta(citationContext, settings)
+    ? (literalTitle ? `ti:${quoteArxivTerm(literalTitle)}` : "")
+    : buildArxivContextTitleClause(citationContext);
   if (titleClause) {
+    if (citationContext?.searchMode === "contextual" && settings?.contextualSearchEngine === "beta") {
+      return titleClause;
+    }
     clauses.push(titleClause);
     return clauses.join(" AND ");
   }
@@ -373,7 +445,10 @@ function buildArxivSearchQuery(citationContext = {}) {
     clauses.push(`submittedDate:[${hint.year}01010000 TO ${hint.year}12312359]`);
   }
 
-  const contextTokens = keywordList(`${citationContext?.sentenceText ?? ""} ${citationContext?.contextText ?? ""}`)
+  const contextTokens = (isContextBeta(citationContext, settings) ? contextualEvidenceTerms(citationContext) : uniqueStrings([
+    ...citationProximityKeywords(citationContext),
+    ...contextKeywordList(citationContext?.contextText ?? "")
+  ]))
     .filter((term) => !hint?.surname || term !== String(hint.surname).toLowerCase())
     .slice(0, 5);
   if (contextTokens.length) {
@@ -385,10 +460,27 @@ function buildArxivSearchQuery(citationContext = {}) {
   return clauses.join(" AND ");
 }
 
+function distinctiveContextIdentifier(citationContext = {}) {
+  const context = [
+    citationContext?.citationPrefixText,
+    citationContext?.sentenceText,
+    citationContext?.contextText,
+    citationContext?.citationSuffixText
+  ].filter(Boolean).join(" ");
+  return context.match(/\b(?:[A-Z]{2,}\s+)?[A-Z]\d{3,5}[+-]\d{3,5}\b/i)?.[0] ?? "";
+}
+
 function directTitleSearchToken(token) {
   const normalized = String(token ?? "").trim();
   const withoutYear = normalized.replace(/\s+\d{4}\s*$/, "").trim();
   return isTitleLikeToken(withoutYear, null) ? withoutYear : "";
+}
+
+function citationProximityKeywords(citationContext = {}) {
+  const before = contextKeywordList(citationContext?.citationPrefixText ?? "").slice(-10);
+  const after = contextKeywordList(citationContext?.citationSuffixText ?? "").slice(0, 3);
+  const proximal = uniqueStrings([...before, ...after]);
+  return proximal.length >= 2 ? proximal : contextKeywordList(citationContext?.sentenceText ?? "");
 }
 
 function buildArxivAuthorYearFallbackQuery(citationContext = {}) {
@@ -526,6 +618,10 @@ export function exportCandidateBibtex(candidate = {}) {
     ["author", formatAuthorsForBibtex(candidate.authors)],
     ["title", candidate.title],
     ["journal", candidate.journal],
+    ["volume", candidate.volume],
+    ["number", candidate.issue],
+    ["pages", candidate.pages],
+    ["eid", candidate.articleNumber],
     ["booktitle", candidate.booktitle],
     ["publisher", candidate.publisher],
     ["year", candidate.year ? String(candidate.year) : ""],
@@ -548,7 +644,7 @@ async function searchSource(sourceId, citationContext, settings, fetchImpl) {
     return [];
   }
   if (sourceId === SOURCE_IDS.CROSSREF) {
-    return searchCrossref(query, citationContext, fetchImpl);
+    return searchCrossref(query, citationContext, fetchImpl, settings);
   }
   if (sourceId === SOURCE_IDS.DATACITE) {
     return searchDataCite(query, citationContext, fetchImpl);
@@ -557,7 +653,7 @@ async function searchSource(sourceId, citationContext, settings, fetchImpl) {
     return searchPubMed(query, citationContext, settings, fetchImpl);
   }
   if (sourceId === SOURCE_IDS.ARXIV) {
-    return searchArxiv(citationContext, fetchImpl);
+    return searchArxiv(citationContext, settings, fetchImpl);
   }
   if (sourceId === SOURCE_IDS.INSPIRE) {
     return searchInspire(query, citationContext, fetchImpl);
@@ -584,25 +680,95 @@ function isLikelyDataCiteLookup(citationContext = {}) {
   return /\b(data|dataset|datasets|software|code|repository|repositories|zenodo|figshare|archive|catalog|catalogue|supplement|supplementary)\b/.test(text);
 }
 
-async function searchCrossref(query, citationContext, fetchImpl) {
+async function searchCrossref(query, citationContext, fetchImpl, settings = {}) {
+  return searchCrossrefUnqueued(query, citationContext, fetchImpl, settings);
+}
+
+async function searchCrossrefUnqueued(query, citationContext, fetchImpl, settings = {}) {
+  const serialContextBeta = isContextBeta(citationContext, settings) && shouldUseArxivRuntimeGuards(fetchImpl);
+  const retryOptions = {
+    ...crossrefSearchRetryOptions(citationContext, serialContextBeta),
+    scheduler: serialContextBeta ? crossrefRuntimeScheduler : null,
+    retryOnAbort: !serialContextBeta
+  };
   const directDoi = directDoiFromContext(citationContext);
   if (directDoi) {
     const url = new URL(`https://api.crossref.org/works/${encodeURIComponent(directDoi)}`);
-    const payload = await fetchJsonAllowNotFound(url, fetchImpl, "Crossref DOI lookup", {}, { retries: 1, fallbackDelayMs: 750 });
+    const payload = await fetchJsonAllowNotFound(url, fetchImpl, "Crossref DOI lookup", {}, retryOptions);
     if (!payload) {
       return [];
     }
     return [mapCrossrefWork(payload?.message)].filter(isUsableCandidate);
   }
-  const urls = buildCrossrefUrls(query, citationContext);
-  const payloads = await fetchJsonBatches(urls, fetchImpl, "Crossref search", {}, crossrefSearchRetryOptions(citationContext));
-  return payloads.flatMap((payload) => payload?.message?.items ?? []).map(mapCrossrefWork).filter(isUsableCandidate);
+  const urls = buildCrossrefUrls(query, citationContext, settings);
+  const payloads = await fetchJsonBatches(
+    urls,
+    fetchImpl,
+    "Crossref search",
+    {},
+    retryOptions,
+    (payload) => crossrefPayloadHasExactContextMatch(payload, citationContext),
+    serialContextBeta ? 1 : urls.length
+  );
+  const candidates = payloads.flatMap((payload) => payload?.message?.items ?? []).map(mapCrossrefWork).filter(isUsableCandidate);
+  return filterCrossrefDistinctiveTitleMismatches(candidates, citationContext, settings);
 }
 
-function crossrefSearchRetryOptions(citationContext = {}) {
+function filterCrossrefDistinctiveTitleMismatches(candidates, citationContext = {}, settings = {}) {
+  if (citationContext?.searchMode !== "contextual" || settings?.contextualSearchEngine !== "beta") {
+    return candidates;
+  }
+  const lead = explicitContextTitle(citationContext);
+  const normalizedLead = normalizeText(lead);
+  if (!normalizedLead || normalizedLead.split(" ").length < 4) {
+    return candidates;
+  }
+  const matching = candidates.filter((candidate) => titlesStronglyOverlap(normalizedLead, normalizeText(candidate?.title)));
+  if (matching.length) {
+    return matching;
+  }
+  // A title-shaped sentence lead is strong evidence that the user supplied a
+  // literal title. When Crossref cannot match it, returning same-author/year
+  // records is more misleading than allowing another provider—or a clear
+  // no-results state—to win.
+  return lead ? [] : candidates;
+}
+
+function titlesStronglyOverlap(expectedTitle, candidateTitle) {
+  if (!expectedTitle || !candidateTitle) {
+    return false;
+  }
+  if (expectedTitle === candidateTitle || expectedTitle.startsWith(candidateTitle) || candidateTitle.startsWith(expectedTitle)) {
+    return true;
+  }
+  const expectedTerms = uniqueStrings(expectedTitle.split(" ").filter((term) => term.length >= 3));
+  const candidateTerms = new Set(candidateTitle.split(" "));
+  const matched = expectedTerms.filter((term) => candidateTerms.has(term)).length;
+  return matched >= 4 && matched / expectedTerms.length >= 0.7;
+}
+
+function crossrefPayloadHasExactContextMatch(payload, citationContext) {
+  const titleQuery = normalizeText(buildCrossrefTitleQuery(buildBroadSearchQuery(citationContext), citationContext));
+  if (!titleQuery) return false;
+  const hint = citationContext?.parsedKeyHint;
+  return (payload?.message?.items ?? []).some((work) => {
+    if (normalizeText(first(work?.title)) !== titleQuery) return false;
+    const candidateYear = Number(extractCrossrefYear(work));
+    const expectedYear = Number(hint?.year);
+    if (hint?.year && (!Number.isFinite(candidateYear) || Math.abs(candidateYear - expectedYear) > 1)) return false;
+    if (!hint?.surname) return true;
+    const firstAuthor = formatCrossrefAuthor(work?.author?.[0]);
+    const normalizedAuthor = normalizeText(firstAuthor);
+    const normalizedHint = normalizeText(hint.surname);
+    return authorFamilyMatches(hint.surname, firstAuthor) ||
+      (normalizedAuthor.startsWith(`${normalizedHint} `) && /\b(?:collaboration|consortium|team|group)\b/.test(normalizedAuthor));
+  });
+}
+
+function crossrefSearchRetryOptions(citationContext = {}, serialContextBeta = false) {
   return {
     retries: 1,
-    fallbackDelayMs: 750,
+    fallbackDelayMs: serialContextBeta ? 1100 : 750,
     timeoutMs: isPreArxivCitation(citationContext) ? 9000 : (hasCrossrefTitleQuery(citationContext) ? 7000 : 3500)
   };
 }
@@ -660,8 +826,16 @@ function quoteDataCiteTerm(value) {
 }
 
 async function searchPubMed(query, citationContext, settings, fetchImpl) {
-  const searchTerms = uniqueStrings([
+  const beta = isContextBeta(citationContext, settings);
+  const searchTerms = uniqueStrings(beta && !directDoiFromContext(citationContext) && !directPubMedIdFromContext(citationContext) ? [
+    buildPubMedAuthorYearSearchTerm(citationContext),
+    explicitContextTitle(citationContext)
+      ? `${quotePubMedTerm(explicitContextTitle(citationContext))}[Title]`
+      : contextualEvidenceTerms(citationContext).slice(0, 4).map(term => `${term}[Title/Abstract]`).join(" AND "),
+    contextualEvidenceTerms(citationContext).slice(0, 6).join(" ")
+  ] : [
     buildPubMedSearchTerm(query, citationContext),
+    isContextBeta(citationContext, settings) ? buildPubMedAuthorYearSearchTerm(citationContext) : "",
     buildPubMedTitleYearSearchTerm(query, citationContext),
     buildPubMedFallbackSearchTerm(query, citationContext)
   ]).filter(Boolean);
@@ -670,7 +844,7 @@ async function searchPubMed(query, citationContext, settings, fetchImpl) {
     const searchUrl = new URL("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi");
     searchUrl.searchParams.set("db", "pubmed");
     searchUrl.searchParams.set("retmode", "json");
-    searchUrl.searchParams.set("retmax", "12");
+    searchUrl.searchParams.set("retmax", beta ? "40" : "12");
     searchUrl.searchParams.set("sort", "relevance");
     searchUrl.searchParams.set("term", term);
     appendNcbiApiKey(searchUrl, settings);
@@ -697,22 +871,26 @@ async function searchPubMed(query, citationContext, settings, fetchImpl) {
     .filter(isUsableCandidate);
 }
 
-async function searchArxiv(citationContext, fetchImpl) {
-  const searchQuery = buildArxivSearchQuery(citationContext);
-  const directArxivId = directArxivIdFromContext(citationContext);
+async function searchArxiv(citationContext, settings, fetchImpl) {
+  const searchQuery = buildArxivSearchQuery(citationContext, settings);
+  const directArxivId = directArxivIdFromContext(citationContext) ||
+    (isContextBeta(citationContext, settings) ? contextualArxivId(citationContext) : "");
+  // A pre-1991 submittedDate range cannot retrieve an arXiv submission.
+  // Explicit identifiers still take precedence; Simple/Raw remain unchanged.
+  if (isContextBeta(citationContext, settings) && isPreArxivCitation(citationContext) && !directArxivId) return [];
   if (!searchQuery && !directArxivId) {
     return [];
   }
   const authorYearQuery = buildArxivAuthorYearFallbackQuery(citationContext);
   const preprintYearQuery = buildArxivPreprintYearFallbackQuery(citationContext);
   try {
-    const firstBatch = await fetchArxivQuery({ searchQuery, directArxivId, fetchImpl });
+    const firstBatch = await fetchArxivQuery({ searchQuery, directArxivId, fetchImpl, citationContext });
     let candidates = firstBatch;
     if (!candidates.length && !directArxivId && authorYearQuery && authorYearQuery !== searchQuery) {
-      candidates = await fetchArxivQuery({ searchQuery: authorYearQuery, fetchImpl });
+      candidates = await fetchArxivQuery({ searchQuery: authorYearQuery, fetchImpl, citationContext });
     }
-    if (preprintYearQuery && preprintYearQuery !== searchQuery && preprintYearQuery !== authorYearQuery && shouldTryArxivPreprintYearFallback(candidates, citationContext)) {
-      const fallbackBatch = await fetchArxivQuery({ searchQuery: preprintYearQuery, fetchImpl });
+    if ((!isContextBeta(citationContext, settings) || !directArxivId) && preprintYearQuery && preprintYearQuery !== searchQuery && preprintYearQuery !== authorYearQuery && shouldTryArxivPreprintYearFallback(candidates, citationContext)) {
+      const fallbackBatch = await fetchArxivQuery({ searchQuery: preprintYearQuery, fetchImpl, citationContext });
       return mergeDuplicateCandidates([...candidates, ...fallbackBatch]);
     }
     if (candidates.length || directArxivId) {
@@ -720,7 +898,13 @@ async function searchArxiv(citationContext, fetchImpl) {
     }
     return [];
   } catch (error) {
+    if (error?.name === "AbortError") {
+      throw error;
+    }
     if (!isArxivRecoverableError(error) || directArxivId) {
+      throw error;
+    }
+    if (citationContext?.searchMode === "contextual") {
       throw error;
     }
     if (citationContext?.searchMode === "simple") {
@@ -748,7 +932,7 @@ async function searchInspire(query, citationContext, fetchImpl) {
     .filter(isUsableCandidate);
 }
 
-async function fetchArxivQuery({ searchQuery = "", directArxivId = "", fetchImpl }) {
+async function fetchArxivQuery({ searchQuery = "", directArxivId = "", fetchImpl, citationContext = {} }) {
   const url = new URL("https://export.arxiv.org/api/query");
   if (directArxivId) {
     url.searchParams.set("id_list", directArxivId);
@@ -757,11 +941,13 @@ async function fetchArxivQuery({ searchQuery = "", directArxivId = "", fetchImpl
   }
   url.searchParams.set("start", "0");
   url.searchParams.set("max_results", "12");
-  const text = await fetchArxivText(url, fetchImpl);
+  const text = await fetchArxivText(url, fetchImpl, {
+    retryRateLimit: citationContext?.searchMode !== "contextual"
+  });
   return parseArxivEntries(text).map(mapArxivWork).filter(isUsableCandidate);
 }
 
-async function fetchArxivText(url, fetchImpl) {
+async function fetchArxivText(url, fetchImpl, { retryRateLimit = true } = {}) {
   const cacheKey = url.toString();
   const useCache = shouldUseArxivRuntimeGuards(fetchImpl);
   if (useCache) {
@@ -781,6 +967,9 @@ async function fetchArxivText(url, fetchImpl) {
     return text;
   }
   if (firstResponse.status === 429) {
+    if (!retryRateLimit) {
+      throw new Error("arXiv is rate limiting searches. Wait a few seconds and try again.");
+    }
     await sleep(retryDelayMs(firstResponse));
     const retryResponse = await fetchTextResponse(url, fetchImpl);
     if (retryResponse.ok) {
@@ -842,7 +1031,7 @@ async function searchArxivMetadataFallback(citationContext, fetchImpl) {
 }
 
 function shouldUseArxivRuntimeGuards(fetchImpl) {
-  return fetchImpl === globalThis.fetch;
+  return fetchImpl === globalThis.fetch || fetchImpl?.[RUNTIME_FETCH_MARKER] === true;
 }
 
 async function waitForArxivTurn() {
@@ -893,14 +1082,21 @@ async function fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers = {}, 
   }
   let response;
   try {
-    response = await fetchWithTimeout(fetchImpl, url.toString(), {
-      headers: {
-        Accept: "application/json",
-        ...headers
-      }
-    }, retryOptions.timeoutMs);
+    const request = async () => {
+      const result = await fetchWithTimeout(fetchImpl, url.toString(), {
+        headers: {
+          Accept: "application/json",
+          ...headers
+        }
+      }, retryOptions.timeoutMs);
+      retryOptions.scheduler?.observeResponse(result);
+      return result;
+    };
+    response = retryOptions.scheduler
+      ? await retryOptions.scheduler.run(request)
+      : await request();
   } catch (error) {
-    if (isAbortLikeError(error) && retryOptions.retries > 0) {
+    if (isAbortLikeError(error) && retryOptions.retries > 0 && retryOptions.retryOnAbort !== false) {
       await sleep(Number(retryOptions.fallbackDelayMs ?? 0) || 0);
       return fetchJsonWithRateLimitRetry(url, fetchImpl, label, headers, {
         ...retryOptions,
@@ -968,13 +1164,41 @@ async function fetchWithTimeout(fetchImpl, url, options = {}, timeoutMs = 3500) 
   }
 }
 
-async function fetchJsonBatches(urls, fetchImpl, label, headers = {}, retryOptions = {}) {
-  const batches = await Promise.allSettled(urls.map((url) => fetchJson(url, fetchImpl, label, headers, retryOptions)));
+async function fetchJsonBatches(urls, fetchImpl, label, headers = {}, retryOptions = {}, shouldStop = () => false, maxInFlight = urls.length) {
+  if (maxInFlight <= 1) {
+    const payloads = [];
+    const errors = [];
+    for (const url of urls) {
+      try {
+        const payload = await fetchJson(url, fetchImpl, label, headers, retryOptions);
+        payloads.push(payload);
+        if (shouldStop(payload)) return payloads;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (!payloads.length && errors.length) {
+      throw errors[0];
+    }
+    return payloads;
+  }
+  const pending = urls.map((url) => {
+    let promise;
+    promise = fetchJson(url, fetchImpl, label, headers, retryOptions).then(
+      (value) => ({ status: "fulfilled", value, promise }),
+      (reason) => ({ status: "rejected", reason, promise })
+    );
+    return promise;
+  });
+  const unsettled = new Set(pending);
   const payloads = [];
   const errors = [];
-  for (const batch of batches) {
+  while (unsettled.size) {
+    const batch = await Promise.race(unsettled);
+    unsettled.delete(batch.promise);
     if (batch.status === "fulfilled") {
       payloads.push(batch.value);
+      if (shouldStop(batch.value)) return payloads;
     } else {
       errors.push(batch.reason);
     }
@@ -985,11 +1209,84 @@ async function fetchJsonBatches(urls, fetchImpl, label, headers = {}, retryOptio
   return payloads;
 }
 
-function buildCrossrefUrls(query, citationContext) {
+function createRateLimitedScheduler(initialSpacingMs) {
+  let tail = Promise.resolve();
+  let minimumSpacingMs = initialSpacingMs;
+  let lastRequestAt = 0;
+  return {
+    run: (task) => {
+      const run = tail.then(async () => {
+        const waitMs = minimumSpacingMs - (Date.now() - lastRequestAt);
+        if (waitMs > 0) {
+          await sleep(waitMs);
+        }
+        lastRequestAt = Date.now();
+        return task();
+      });
+      tail = run.catch(() => {});
+      return run;
+    },
+    observeResponse: (response) => {
+      const limit = Number(response?.headers?.get?.("x-rate-limit-limit"));
+      const intervalMs = parseRateLimitIntervalMs(response?.headers?.get?.("x-rate-limit-interval"));
+      if (Number.isFinite(limit) && limit > 0 && Number.isFinite(intervalMs) && intervalMs > 0) {
+        minimumSpacingMs = Math.max(
+          CROSSREF_MIN_REQUEST_SPACING_MS,
+          Math.ceil(intervalMs / limit) + 50
+        );
+      }
+    }
+  };
+}
+
+function parseRateLimitIntervalMs(value) {
+  const match = String(value ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|m)$/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  return amount * (unit === "ms" ? 1 : unit === "s" ? 1000 : 60000);
+}
+
+function contextualCrossrefAuthorFallback(surname) {
+  const raw = String(surname ?? "").trim();
+  const parts = raw.replace(/([a-z])([A-Z])/g, "$1 $2").split(/\s+/);
+  // Citation keys can concatenate surnames. Try natural spacing only in
+  // the existing fallback; never expand abbreviations or infer new names.
+  return parts.length >= 2 && parts.length <= 3 && parts.every(part => /^[A-Za-z]{3,}$/.test(part))
+    ? parts.join(" ")
+    : raw;
+}
+
+function buildCrossrefUrls(query, citationContext, settings = {}) {
+  if (isContextBeta(citationContext, settings)) {
+    const hint = citationContext.parsedKeyHint;
+    const title = explicitContextTitle(citationContext);
+    const evidence = contextualEvidenceTerms(citationContext).join(" ");
+    const urls = [];
+    if (title) urls.push(crossrefUrl({ title, rows: 40 }));
+    if (hint?.surname) {
+      // Online-first and issue years can differ. Use a small date tolerance
+      // for semantic recall, then an exact-year author-only fallback.
+      urls.push(crossrefUrl({ bibliographic: evidence, author: hint.surname, year: hint.year, yearTolerance: 2, rows: 40 }));
+      // A broad identity fallback protects sparse/atypical context and keeps
+      // the successful author/year path available to the contextual ranker.
+      urls.push(crossrefUrl({ author: contextualCrossrefAuthorFallback(hint.surname), year: hint.year, rows: 40 }));
+    } else if (!title) {
+      urls.push(crossrefUrl({ bibliographic: evidence || query, rows: 40 }));
+    }
+    return dedupeUrls(urls).slice(0, 2);
+  }
   const hint = citationContext?.parsedKeyHint;
   const urls = [];
   const contextQuery = buildContextOnlySearchQuery(citationContext);
   const titleQuery = buildCrossrefTitleQuery(query, citationContext);
+  // The parser may provisionally label a yearless full title as a surname.
+  // In explicit token-only modes, do not send that entire title as an author.
+  if ((citationContext.searchMode === "simple" || citationContext.searchMode === "direct")
+    && !hint?.year && String(citationContext.token ?? "").trim().split(/\s+/).length >= 3
+    && titleQuery === String(citationContext.token ?? "").trim()) {
+    return [crossrefUrl({ title: titleQuery })];
+  }
   for (const canonicalTitleQuery of canonicalCrossrefTitleQueries(citationContext)) {
     urls.push(crossrefUrl({
       title: canonicalTitleQuery,
@@ -1013,6 +1310,12 @@ function buildCrossrefUrls(query, citationContext) {
       author: hint.surname,
       year: hint.year
     }));
+    if (isContextBeta(citationContext, settings)) {
+      urls.push(crossrefUrl({
+        author: hint.surname,
+        year: hint.year
+      }));
+    }
   } else if (hint?.surname) {
     urls.push(crossrefUrl({
       bibliographic: [hint.surname, contextQuery].filter(Boolean).join(" "),
@@ -1102,6 +1405,18 @@ function buildPubMedFallbackSearchTerm(query, citationContext) {
   }
   const text = buildContextOnlySearchQuery(citationContext) || query;
   return keywordList(text).slice(0, 8).join(" ");
+}
+
+function buildPubMedAuthorYearSearchTerm(citationContext = {}) {
+  const hint = citationContext?.parsedKeyHint;
+  if (!hint?.surname || !hint?.year) {
+    return "";
+  }
+  return `${pubMedAuthorTerm(hint.surname)}[Author] AND ${hint.year}[dp]`;
+}
+
+function isContextBeta(citationContext = {}, settings = {}) {
+  return citationContext?.searchMode === "contextual" && settings?.contextualSearchEngine === "beta";
 }
 
 function buildPubMedTitleYearSearchTerm(query, citationContext = {}) {
@@ -1226,10 +1541,10 @@ function appendNcbiApiKey(url, settings) {
   }
 }
 
-function crossrefUrl({ bibliographic = "", title = "", author = "", year = null } = {}) {
+function crossrefUrl({ bibliographic = "", title = "", author = "", year = null, yearTolerance = 0, rows = 12 } = {}) {
   const url = new URL("https://api.crossref.org/works");
-  url.searchParams.set("rows", "12");
-  url.searchParams.set("select", "DOI,title,author,published-print,published-online,published,issued,container-title,abstract,is-referenced-by-count,type,URL,publisher");
+  url.searchParams.set("rows", String(rows));
+  url.searchParams.set("select", "DOI,title,author,published-print,published-online,published,issued,container-title,abstract,is-referenced-by-count,type,URL,publisher,volume,issue,page,article-number");
   if (title) {
     url.searchParams.set("query.title", title);
   }
@@ -1240,7 +1555,9 @@ function crossrefUrl({ bibliographic = "", title = "", author = "", year = null 
     url.searchParams.set("query.author", author);
   }
   if (year) {
-    url.searchParams.set("filter", `from-pub-date:${year}-01-01,until-pub-date:${year}-12-31`);
+    const startYear = Number(year) - yearTolerance;
+    const endYear = Number(year) + yearTolerance;
+    url.searchParams.set("filter", `from-pub-date:${startYear}-01-01,until-pub-date:${endYear}-12-31`);
   }
   return url;
 }
@@ -1262,6 +1579,10 @@ function mapCrossrefWork(work) {
     doi: normalizeDoi(work?.DOI),
     citationCount: work?.["is-referenced-by-count"],
     journal: first(work?.["container-title"]),
+    volume: work?.volume,
+    issue: work?.issue,
+    pages: work?.page,
+    articleNumber: work?.["article-number"],
     booktitle: type.includes("proceedings") ? first(work?.["container-title"]) : "",
     publisher: work?.publisher,
     type,
@@ -1309,6 +1630,9 @@ function mapPubMedSummary(record) {
     doi,
     citationCount: 0,
     journal: record?.fulljournalname || record?.source,
+    volume: record?.volume,
+    issue: record?.issue,
+    pages: record?.pages,
     type: "journal-article",
     url: record?.uid ? `https://pubmed.ncbi.nlm.nih.gov/${record.uid}/` : "",
     bibtexExportId: doi || record?.uid,
@@ -1424,6 +1748,10 @@ function normalizeCandidate(candidate) {
     doi,
     citationCount: Number(candidate.citationCount ?? 0) || 0,
     journal: String(candidate.journal ?? "").trim(),
+    volume: String(candidate.volume ?? "").trim(),
+    issue: String(candidate.issue ?? "").trim(),
+    pages: String(candidate.pages ?? "").trim(),
+    articleNumber: String(candidate.articleNumber ?? "").trim(),
     booktitle: String(candidate.booktitle ?? "").trim(),
     publisher: String(candidate.publisher ?? "").trim(),
     type: String(candidate.type ?? "").trim(),
@@ -1479,9 +1807,11 @@ function duplicateKeys(candidate) {
     keys.push(arxivKey);
   }
   const title = normalizeText(candidate?.title);
-  const firstAuthor = firstAuthorFamilyKey(candidate?.authors?.[0]);
-  if (title && firstAuthor) {
-    keys.push(`work:${title}:${firstAuthor}`);
+  const firstAuthor = firstAuthorIdentityKey(candidate?.authors?.[0]);
+  const workYear = Number(candidate?.year);
+  if (title && firstAuthor && Number.isInteger(workYear)) {
+    keys.push(`work:${title}:${firstAuthor}:${workYear}`);
+    keys.push(`work:${title}:${firstAuthor}:${workYear - 1}`);
   }
   if (candidate?.doi) {
     keys.push(`doi:${candidate.doi.toLowerCase()}`);
@@ -1524,6 +1854,18 @@ function firstAuthorFamilyKey(author) {
   return tokens.slice(familyStart).join(" ");
 }
 
+function firstAuthorIdentityKey(author) {
+  const family = firstAuthorFamilyKey(author);
+  if (!family) {
+    return "";
+  }
+  const raw = String(author ?? "").trim();
+  const given = raw.includes(",")
+    ? normalizeText(raw.split(",").slice(1).join(" "))
+    : normalizeText(raw).split(" ").slice(0, -family.split(" ").length).join(" ");
+  return `${family}:${given.slice(0, 1) || "_"}`;
+}
+
 function preferCandidate(left, right) {
   const leftAuthority = sourceAuthorityScore(left);
   const rightAuthority = sourceAuthorityScore(right);
@@ -1563,6 +1905,10 @@ function mergeCandidateRecords(primary, secondary) {
     doi: preferredDoi(primary, secondary),
     year: preferredYear(primary, secondary),
     journal: primary.journal || secondary.journal,
+    volume: primary.volume || secondary.volume,
+    issue: primary.issue || secondary.issue,
+    pages: primary.pages || secondary.pages,
+    articleNumber: primary.articleNumber || secondary.articleNumber,
     booktitle: primary.booktitle || secondary.booktitle,
     publisher: primary.publisher || secondary.publisher,
     url: preferredUrl(primary, secondary),
@@ -1711,7 +2057,9 @@ function directArxivIdFromContext(citationContext = {}) {
 }
 
 function arxivIdFromText(value) {
-  const match = String(value ?? "").trim().match(/(?:arxiv:|arxiv\.org\/abs\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?/i);
+  const match = String(value ?? "").trim().match(
+    /^(?:arxiv:\s*|https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/)?(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?(?:\.pdf)?\/?$/i
+  );
   return stripArxivVersion(match?.[1] ?? "");
 }
 
@@ -1800,6 +2148,10 @@ function normalizeText(value) {
   return String(value ?? "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[ŁłØøĐđÐðÞþÆæŒœıß]/g, (letter) => ({
+      Ł: "L", ł: "l", Ø: "O", ø: "o", Đ: "D", đ: "d", Ð: "D", ð: "d",
+      Þ: "Th", þ: "th", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", ı: "i", ß: "ss"
+    })[letter] ?? letter)
     .replace(/[^A-Za-z0-9\s]/g, " ")
     .toLowerCase()
     .replace(/\s+/g, " ")
@@ -1820,6 +2172,15 @@ function keywordList(value) {
       .split(" ")
       .filter((token) => token.length >= 3 && !SOURCE_STOPWORDS.has(token))
   );
+}
+
+function contextKeywordList(value) {
+  return keywordList(String(value ?? "")
+    .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+    .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+    .replace(/\\(?:ref|eqref|pageref|label)\s*\{[^{}]*\}/g, " ")
+    .replace(/\$[^$]*\$/g, " ")
+    .replace(/\\\([^]*?\\\)|\\\[[^]*?\\\]/g, " "));
 }
 
 function uniqueStrings(values) {

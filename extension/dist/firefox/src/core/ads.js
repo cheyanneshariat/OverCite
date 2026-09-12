@@ -4,6 +4,10 @@ function normalizeText(value) {
   return String(value ?? "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[ŁłØøĐđÐðÞþÆæŒœıß]/g, (letter) => ({
+      Ł: "L", ł: "l", Ø: "O", ø: "o", Đ: "D", đ: "d", Ð: "D", ð: "d",
+      Þ: "Th", þ: "th", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", ı: "i", ß: "ss"
+    })[letter] ?? letter)
     .replace(/\\[A-Za-z]+/g, " ")
     .replace(/[^A-Za-z0-9\s]/g, " ")
     .toLowerCase()
@@ -11,16 +15,66 @@ function normalizeText(value) {
     .trim();
 }
 
-function keywordSet(value) {
-  return new Set(
-    normalizeText(value)
-      .split(" ")
-      .filter((token) => token.length >= 3 && !CONTEXT_STOPWORDS.has(token))
-  );
+function sanitizeContextText(value) {
+  return String(value ?? "")
+    .replace(/(^|[^\\])%[^\n]*/g, "$1 ")
+    .replace(/\\(?:cite[a-zA-Z*]*|parencite[a-zA-Z*]*|textcite[a-zA-Z*]*|autocite[a-zA-Z*]*|footcite[a-zA-Z*]*)\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}]*\}/g, " ")
+    .replace(/\\(?:ref|eqref|pageref|label)\s*\{[^{}]*\}/g, " ")
+    .replace(/\$[^$]*\$/g, " ")
+    .replace(/\\\([^]*?\\\)|\\\[[^]*?\\\]/g, " ");
+}
+
+function keywordSequence(value) {
+  return normalizeText(sanitizeContextText(value))
+    .split(" ")
+    .filter((token) => token.length >= 3 && !CONTEXT_STOPWORDS.has(token));
 }
 
 function keywordList(value) {
-  return [...keywordSet(value)];
+  return [...new Set(keywordSequence(value))];
+}
+
+function contextualKeywordList(citationContext) {
+  const before = keywordSequence(citationContext?.citationPrefixText ?? "").slice(-10);
+  const after = keywordSequence(citationContext?.citationSuffixText ?? "").slice(0, 3);
+  const proximal = [...new Set([...before, ...after])];
+  return proximal.length >= 2 ? proximal : keywordList(citationContext?.sentenceText ?? "");
+}
+
+function contextualKeywordConcepts(citationContext) {
+  return contextualKeywordList(citationContext).map((token) => expandKeywordVariants(token));
+}
+
+function distinctiveContextIdentifier(citationContext) {
+  const context = [
+    citationContext?.citationPrefixText,
+    citationContext?.sentenceText,
+    citationContext?.contextText,
+    citationContext?.citationSuffixText
+  ].filter(Boolean).join(" ");
+  return context.match(/\b(?:[A-Z]{2,}\s+)?[A-Z]\d{3,5}[+-]\d{3,5}\b/i)?.[0] ?? "";
+}
+
+export function hasDistinctiveContextIdentifier(citationContext) {
+  return Boolean(distinctiveContextIdentifier(citationContext));
+}
+
+function buildDistinctiveContextQuery(citationContext) {
+  const identifier = distinctiveContextIdentifier(citationContext);
+  if (!identifier) {
+    return null;
+  }
+  const identifierTerms = new Set(normalizeText(identifier).split(" ").filter(Boolean));
+  const topicTerms = [...new Set(contextualKeywordConcepts(citationContext).flat())]
+    .filter((token) => token.length >= 5 && !identifierTerms.has(token))
+    .reverse()
+    .slice(0, 6);
+  const identifierQuery = `full:"${escapeQueryValue(identifier)}"`;
+  if (!topicTerms.length) {
+    return identifierQuery;
+  }
+  const topicQuery = topicTerms.map((token) => `full:"${escapeQueryValue(token)}"`).join(" OR ");
+  return `${identifierQuery} AND (${topicQuery})`;
 }
 
 function expandKeywordVariants(token) {
@@ -62,6 +116,76 @@ function escapeQueryValue(value) {
   return String(value ?? "").replace(/"/g, '\\"');
 }
 
+function plausibleCitationYear(value) {
+  const year = Number(value);
+  return Number.isInteger(year) && year >= 1800 && year <= new Date().getFullYear() + 3;
+}
+
+function splitContextualKeyTerms(value) {
+  return [...new Set(String(value ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .map((term) => normalizeText(term))
+    .filter((term) => term.length >= 4 && !CONTEXT_STOPWORDS.has(term)))];
+}
+
+function contextualKeyHint(citationContext) {
+  const original = citationContext?.parsedKeyHint;
+  const token = String(citationContext?.token ?? "").trim();
+  if (!token) {
+    return original;
+  }
+
+  if (original?.surname && plausibleCitationYear(original.year)) {
+    return { ...original, keyTerms: splitContextualKeyTerms(original.suffix) };
+  }
+
+  const trailingYear = token.match(/^([^_]+)_(.+)_(\d{4})$/)
+    ?? token.match(/^(.*?)[_:](\d{4})$/)
+    ?? token.match(/^([^-]+)-(.*)-(\d{4})$/);
+  if (trailingYear && plausibleCitationYear(trailingYear.at(-1))) {
+    const prefix = String(trailingYear[1] ?? "").trim();
+    const middle = trailingYear.length === 4 ? String(trailingYear[2] ?? "") : "";
+    const surname = prefix.replace(/[{}]/g, "").trim();
+    if (surname && /^[A-Za-z][A-Za-z'`.-]*$/.test(surname)) {
+      return {
+        raw: token,
+        normalized: token.replace(/[{}\s]/g, ""),
+        surname,
+        firstInitial: null,
+        year: Number(trailingYear.at(-1)),
+        suffix: middle,
+        keyTerms: splitContextualKeyTerms(middle)
+      };
+    }
+  }
+
+  if (original?.year && !plausibleCitationYear(original.year)) {
+    return { ...original, surname: null, firstInitial: null, year: null, suffix: "", keyTerms: [] };
+  }
+  return { ...original, keyTerms: splitContextualKeyTerms(original?.suffix) };
+}
+
+function withContextualKeyHint(citationContext) {
+  return { ...citationContext, parsedKeyHint: contextualKeyHint(citationContext) };
+}
+
+function directAdsBibcodeToken(token) {
+  const value = String(token ?? "").trim();
+  return value.length === 19 && /^\d{4}[A-Za-z&.]{5}/.test(value) ? value : "";
+}
+
+function buildAuthorYearKeyTermsQuery(surname, year, keyTerms) {
+  if (!surname || !year || !keyTerms?.length) {
+    return null;
+  }
+  const terms = keyTerms.slice(0, 4)
+    .map((term) => `(title:"${escapeQueryValue(term)}" OR abstract:"${escapeQueryValue(term)}")`)
+    .join(" AND ");
+  return `first_author:"${escapeQueryValue(surname)}" year:${year} AND ${terms}`;
+}
+
 function isAuthorLikeToken(token) {
   const trimmed = String(token ?? "").trim();
   if (/\s/.test(trimmed)) {
@@ -85,6 +209,10 @@ function buildSurnameVariants(surname) {
     }
   }
   variants.add(raw);
+  const leadingCamelSegment = raw.match(/^([A-Z][a-z]{3,})[A-Z]/)?.[1];
+  if (leadingCamelSegment) {
+    variants.add(leadingCamelSegment);
+  }
   const withoutPunctuation = raw.replace(/['`.\s]/g, "");
   if (withoutPunctuation) {
     variants.add(withoutPunctuation);
@@ -96,7 +224,7 @@ function buildSurnameVariants(surname) {
 }
 
 function buildContextKeywordQuery(citationContext) {
-  const sentenceConcepts = keywordConcepts(citationContext?.sentenceText ?? "").slice(0, 5);
+  const sentenceConcepts = contextualKeywordConcepts(citationContext).slice(0, 5);
   const concepts = [...sentenceConcepts];
   if (concepts.length < 2) {
     const contextConcepts = keywordConcepts(citationContext?.contextText ?? "")
@@ -114,7 +242,7 @@ function buildContextKeywordQuery(citationContext) {
 }
 
 function buildTitleAbstractKeywordQuery(citationContext) {
-  const sentenceConcepts = keywordConcepts(citationContext?.sentenceText ?? "").slice(0, 5);
+  const sentenceConcepts = contextualKeywordConcepts(citationContext).slice(0, 5);
   const concepts = [...sentenceConcepts];
   if (concepts.length < 2) {
     const contextConcepts = keywordConcepts(citationContext?.contextText ?? "")
@@ -140,7 +268,7 @@ function conceptNeedsParens(groupQuery) {
 }
 
 function buildSentencePhrase(citationContext) {
-  const tokens = keywordList(citationContext?.sentenceText ?? "");
+  const tokens = contextualKeywordList(citationContext);
   if (tokens.length < 2) {
     return null;
   }
@@ -148,7 +276,7 @@ function buildSentencePhrase(citationContext) {
 }
 
 function buildLeadingKeywordPhrase(citationContext) {
-  const tokens = keywordList(citationContext?.sentenceText ?? "");
+  const tokens = contextualKeywordList(citationContext);
   if (tokens.length < 2) {
     return null;
   }
@@ -156,7 +284,7 @@ function buildLeadingKeywordPhrase(citationContext) {
 }
 
 function buildTrailingKeywordPhrase(citationContext) {
-  const tokens = keywordList(citationContext?.sentenceText ?? "");
+  const tokens = contextualKeywordList(citationContext);
   if (tokens.length < 2) {
     return null;
   }
@@ -215,6 +343,14 @@ function buildFirstAuthorYearTitleAbstractKeywordQuery(surname, year, citationCo
     return null;
   }
   return `first_author:"${escapeQueryValue(surname)}" year:${year} AND ${keywordQuery}`;
+}
+
+function buildAuthorYearDistinctiveContextQuery(surname, year, citationContext) {
+  const distinctiveQuery = buildDistinctiveContextQuery(citationContext);
+  if (!surname || !year || !distinctiveQuery) {
+    return null;
+  }
+  return `((first_author:"${escapeQueryValue(surname)}") OR (author:"${escapeQueryValue(surname)}")) year:${year} AND ${distinctiveQuery}`;
 }
 
 function buildFirstAuthorYearInitialTitleAbstractKeywordQuery(surname, firstInitial, year, citationContext) {
@@ -305,7 +441,7 @@ function buildHintSurnameMatchVariants(surname) {
   const raw = normalizeText(surname);
   const hint = parseCollaborationHint(surname);
   if (!hint) {
-    return raw ? [raw] : [];
+    return [...new Set(buildSurnameVariants(surname).map((variant) => normalizeText(variant)).filter(Boolean))];
   }
   return [...new Set([
     raw,
@@ -602,10 +738,15 @@ export function buildAdsQueries(citationContext) {
   if (citationContext?.searchMode === "simple") {
     return buildSimpleAdsQueries(citationContext);
   }
+  citationContext = withContextualKeyHint(citationContext);
   const queries = new Set();
   const hint = citationContext?.parsedKeyHint;
-  const primarySurname = hint?.surname
-    ? (buildSurnameVariants(hint.surname)[0] ?? hint.surname)
+  // Keep the surname exactly as typed for the first contextual queries. Some
+  // compact family names (for example VanRoestel) are valid ADS author forms;
+  // punctuation variants remain available later as fallbacks.
+  const primarySurname = hint?.surname ?? null;
+  const inferredSurname = primarySurname
+    ? buildSurnameVariants(primarySurname).find((surname) => surname !== primarySurname) ?? null
     : null;
   const token = String(citationContext?.token ?? "").trim();
   const isEmptyTokenLookup = !token;
@@ -652,6 +793,12 @@ export function buildAdsQueries(citationContext) {
   const primaryFirstAuthorYearTitleAbstractKeywordQuery = primarySurname && hint?.year
     ? buildFirstAuthorYearTitleAbstractKeywordQuery(primarySurname, hint.year, citationContext)
     : null;
+  const primaryAuthorYearDistinctiveContextQuery = primarySurname && hint?.year
+    ? buildAuthorYearDistinctiveContextQuery(primarySurname, hint.year, citationContext)
+    : null;
+  const primaryAuthorYearKeyTermsQuery = primarySurname && hint?.year
+    ? buildAuthorYearKeyTermsQuery(primarySurname, hint.year, hint.keyTerms)
+    : null;
   const primaryFirstAuthorYearInitialTitleAbstractKeywordQuery = primarySurname && hint?.firstInitial && hint?.year
     ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(primarySurname, hint.firstInitial, hint.year, citationContext)
     : null;
@@ -678,6 +825,35 @@ export function buildAdsQueries(citationContext) {
     : null;
   const titleAbstractKeywordQuery = buildTitleAbstractKeywordQuery(citationContext);
 
+  function preferredSurnameQuery(surname) {
+    if (!surname) {
+      return null;
+    }
+    if (hint?.year) {
+      return (hint.firstInitial
+        ? buildFirstAuthorYearInitialTitleAbstractPhraseQuery(surname, hint.firstInitial, hint.year, citationContext)
+        : null)
+        ?? buildFirstAuthorYearTitleAbstractPhraseQuery(surname, hint.year, citationContext)
+        ?? (hint.firstInitial
+          ? buildFirstAuthorYearInitialTitleAbstractKeywordQuery(surname, hint.firstInitial, hint.year, citationContext)
+          : null)
+        ?? buildFirstAuthorYearTitleAbstractKeywordQuery(surname, hint.year, citationContext)
+        ?? (hint.firstInitial
+          ? buildFirstAuthorYearInitialSentencePhraseQuery(surname, hint.firstInitial, hint.year, citationContext)
+          : null)
+        ?? buildFirstAuthorYearSentencePhraseQuery(surname, hint.year, citationContext)
+        ?? (hint.firstInitial
+          ? buildFirstAuthorYearInitialQuery(surname, hint.firstInitial, hint.year)
+          : null)
+        ?? buildFirstAuthorOrCollaborationYearQuery(surname, hint.year);
+    }
+    return buildFirstAuthorLeadingTitleAbstractPhraseQuery(surname, citationContext)
+      ?? buildFirstAuthorTitleAbstractPhraseQuery(surname, citationContext)
+      ?? buildFirstAuthorTitleAbstractKeywordQuery(surname, citationContext)
+      ?? buildFirstAuthorSentencePhraseQuery(surname, citationContext)
+      ?? buildFirstAuthorOrCollaborationQuery(surname);
+  }
+
   if (isEmptyTokenLookup) {
     if (leadTrailTitleAbstractQuery) {
       queries.add(leadTrailTitleAbstractQuery);
@@ -702,6 +878,15 @@ export function buildAdsQueries(citationContext) {
     }
     queries.add(primaryQuery);
   } else if (hint?.surname && hint?.year) {
+    // Run the strongest raw and inferred surname forms as the progressive
+    // opening pair. This covers both compact ADS names (VanRoestel) and
+    // punctuation-normalized names (El-Badry) without serially walking the
+    // full contextual query expansion.
+    queries.add(primaryFirstAuthorYearInitialQuery ?? primaryFirstAuthorYearQuery);
+    queries.add(primaryAuthorYearDistinctiveContextQuery ?? primaryAuthorYearKeyTermsQuery);
+    queries.add(preferredSurnameQuery(primarySurname));
+    queries.add(inferredSurname ? buildFirstAuthorOrCollaborationYearQuery(inferredSurname, hint.year) : null);
+    queries.add(preferredSurnameQuery(inferredSurname));
     if (primaryFirstAuthorYearInitialTitleAbstractPhraseQuery) {
       queries.add(primaryFirstAuthorYearInitialTitleAbstractPhraseQuery);
     }
@@ -758,6 +943,7 @@ export function buildAdsQueries(citationContext) {
       queries.add(contextQuery);
     }
   } else if (hint?.surname && !hint?.year && primaryAuthorPhraseQuery) {
+    queries.add(primaryFirstAuthorQuery);
     if (primaryFirstAuthorLeadingTitleAbstractPhraseQuery) {
       queries.add(primaryFirstAuthorLeadingTitleAbstractPhraseQuery);
     }
@@ -800,6 +986,10 @@ export function buildAdsQueries(citationContext) {
     }
     queries.add(primaryQuery);
   } else {
+    const bibcode = directAdsBibcodeToken(token);
+    if (bibcode) {
+      queries.add(`bibcode:"${escapeQueryValue(bibcode)}"`);
+    }
     queries.add(primaryQuery);
     if (sentencePhraseQuery) {
       queries.add(sentencePhraseQuery);
@@ -960,16 +1150,22 @@ export function rerankAdsCandidates(citationContext, candidates) {
   if (citationContext?.searchMode === "simple") {
     return rerankSimpleAdsCandidates(citationContext, candidates);
   }
+  citationContext = withContextualKeyHint(citationContext);
   const hint = citationContext?.parsedKeyHint;
   const token = String(citationContext?.token ?? "").trim();
+  const directBibcode = directAdsBibcodeToken(token);
   const normalizedToken = normalizeText(token);
   const tokenLooksLikeTitle = !hint?.year && normalizedToken.split(" ").filter(Boolean).length >= 3;
   const isEmptyTokenLookup = !token;
   const contextKeywordConcepts = keywordConcepts(citationContext?.contextText ?? "");
-  const sentenceKeywordConcepts = keywordConcepts(citationContext?.sentenceText ?? "");
+  const sentenceKeywordConcepts = contextualKeywordConcepts(citationContext);
   const sentencePhrase = normalizeText(buildSentencePhrase(citationContext) ?? "");
   const leadingPhrase = normalizeText(buildLeadingKeywordPhrase(citationContext) ?? "");
   const trailingPhrase = normalizeText(buildTrailingKeywordPhrase(citationContext) ?? "");
+  const distinctiveIdentifier = normalizeText(distinctiveContextIdentifier(citationContext));
+  const distinctiveIdentifierTerms = new Set(distinctiveIdentifier.split(" ").filter(Boolean));
+  const distinctiveTopicConcepts = contextualKeywordConcepts(citationContext)
+    .filter((concept) => concept.some((term) => term.length >= 5 && !distinctiveIdentifierTerms.has(term)));
 
   return candidates
     .map((candidate) => {
@@ -979,6 +1175,15 @@ export function rerankAdsCandidates(citationContext, candidates) {
       const firstAuthor = normalizeText(candidate.authors[0] ?? "");
       const allAuthors = normalizeText(candidate.authors.join(" "));
       const collaborationFirstAuthor = /collaboration/.test(firstAuthor);
+      const identifierMatches = Boolean(distinctiveIdentifier && (
+        titleText.includes(distinctiveIdentifier) || abstractText.includes(distinctiveIdentifier)
+      ));
+      let matchesFirstAuthor = false;
+      let matchesAnyAuthor = false;
+
+      if (directBibcode && normalizeText(candidate.bibcode) === normalizeText(directBibcode)) {
+        score += 5000;
+      }
 
       if (tokenLooksLikeTitle) {
         score += computeTitleTokenScore(normalizedToken, titleText);
@@ -986,13 +1191,16 @@ export function rerankAdsCandidates(citationContext, candidates) {
 
       if (hint?.surname) {
         const surnameVariants = buildHintSurnameMatchVariants(hint.surname);
+        if (hint.firstInitial) {
+          surnameVariants.push(normalizeText(`${hint.firstInitial} ${hint.surname}`));
+        }
         const baseSurname = normalizeText(parseCollaborationHint(hint.surname)?.base ?? hint.surname);
-        const matchesFirstAuthor = authorNameMatchesSurnameVariants(firstAuthor, surnameVariants);
-        const matchesAnyAuthor = candidate.authors.some((author) => authorNameMatchesSurnameVariants(author, surnameVariants));
+        matchesFirstAuthor = authorNameMatchesSurnameVariants(firstAuthor, surnameVariants);
+        matchesAnyAuthor = candidate.authors.some((author) => authorNameMatchesSurnameVariants(author, surnameVariants));
         if (matchesFirstAuthor) {
-          score += 80;
+          score += 180;
         } else if (matchesAnyAuthor) {
-          score += 40;
+          score += 55;
         }
         if (collaborationFirstAuthor && baseSurname && firstAuthor.startsWith(baseSurname)) {
           score += 36;
@@ -1009,9 +1217,8 @@ export function rerankAdsCandidates(citationContext, candidates) {
       }
 
       if (citationContext?.parsedKeyHint?.surname && citationContext?.parsedKeyHint?.year) {
-        const surnameVariants = buildHintSurnameMatchVariants(citationContext.parsedKeyHint.surname);
-        if (!authorNameMatchesSurnameVariants(firstAuthor, surnameVariants)) {
-          score -= 25;
+        if (!matchesFirstAuthor) {
+          score -= 240;
         }
       }
 
@@ -1020,19 +1227,29 @@ export function rerankAdsCandidates(citationContext, candidates) {
       }
 
       if (hint?.year && candidate.year === hint.year) {
-        score += 60;
-      } else if (hint?.year && candidate.year && String(candidate.year).endsWith(String(hint.year).slice(-2))) {
-        score += 20;
+        score += 240;
+      } else if (hint?.year && candidate.year && Math.abs(Number(candidate.year) - Number(hint.year)) === 1) {
+        score += 30;
+      } else if (hint?.year && candidate.year) {
+        score -= 220;
       }
 
-      if (hint?.year && candidate.year === hint.year && contextualTitleLeadMatches(titleText, leadingPhrase)) {
-        score += 420;
+      if (hint?.year && candidate.year === hint.year && matchesFirstAuthor && contextualTitleLeadMatches(titleText, leadingPhrase)) {
+        score += 260;
       }
 
       if (hint?.suffix) {
         const suffix = normalizeText(hint.suffix);
         if (suffix && titleText.includes(suffix)) {
           score += 18;
+        }
+      }
+
+      for (const keyTerm of hint?.keyTerms ?? []) {
+        if (titleText.includes(keyTerm)) {
+          score += 70;
+        } else if (abstractText.includes(keyTerm)) {
+          score += 12;
         }
       }
 
@@ -1076,10 +1293,35 @@ export function rerankAdsCandidates(citationContext, candidates) {
         }
       }
 
-      score += adsPublicationQualityScore(candidate);
-      return { ...candidate, score };
+      if (identifierMatches) {
+        score += 35;
+        let topicMatches = 0;
+        for (const concept of distinctiveTopicConcepts) {
+          if (concept.some((term) => titleText.includes(term))) {
+            score += 14;
+            topicMatches += 1;
+          } else if (concept.some((term) => abstractText.includes(term))) {
+            score += 4;
+            topicMatches += 1;
+          }
+        }
+        if (topicMatches >= 2) {
+          score += 30;
+        }
+      }
+
+      score += contextualPublicationQualityScore(candidate);
+      const primaryMatchTier = hint?.surname && hint?.year
+        ? (matchesFirstAuthor && candidate.year === hint.year
+          ? 3
+          : (matchesFirstAuthor && candidate.year && Math.abs(Number(candidate.year) - Number(hint.year)) === 1
+            ? 2
+            : (matchesAnyAuthor && candidate.year === hint.year ? 1 : 0)))
+        : 0;
+      return { ...candidate, score, primaryMatchTier };
     })
     .sort((left, right) =>
+      right.primaryMatchTier - left.primaryMatchTier ||
       right.score - left.score ||
       (right.citationCount || 0) - (left.citationCount || 0) ||
       compareYears(right.year, left.year)
@@ -1259,4 +1501,9 @@ function adsPublicationQualityScore(candidate) {
   }
 
   return score;
+}
+
+function contextualPublicationQualityScore(candidate) {
+  const score = adsPublicationQualityScore(candidate);
+  return score > 0 ? Math.min(score, 120) : score;
 }
